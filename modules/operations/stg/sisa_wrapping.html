@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -495,4 +496,503 @@
     <script src="../../../js/supabase.js"></script>
     <script src="../../../js/module/operations/stg/sisa_wrapping.js"></script>
 </body>
+=======
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Sisa Wrapping - DMB ERP</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="../css/base.css" rel="stylesheet">
+    <link href="../css/components.css" rel="stylesheet">
+    <link href="../css/layout.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --wr-primary: #2b6cb0;
+            --wr-primary-dark: #1e4e8c;
+            --wr-bg-soft: #e1ecf5;
+            --wr-border: #d3dfea;
+            --wr-text-main: #1f2d3d;
+            --wr-text-muted: #6b7c93;
+            --wr-radius: 8px;
+        }
+
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--wr-text-main);
+        }
+
+        /* --- Header --- */
+        .wr-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--wr-border);
+            flex-shrink: 0;
+        }
+        .btn-back {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--wr-border);
+            background: var(--wr-bg-soft);
+            color: var(--wr-primary-dark);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--wr-primary); color: #fff; }
+        .wr-header-title { font-size: 18px; font-weight: 600; margin: 0; }
+
+        /* --- Tabs --- */
+        .wr-tabs-wrapper {
+            padding: 16px 24px 0;
+            background: #fff;
+            border-bottom: 1px solid var(--wr-border);
+            flex-shrink: 0;
+        }
+        .nav-tabs { border-bottom: none; }
+        .nav-tabs .nav-link {
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--wr-text-muted);
+            font-weight: 600;
+            font-size: 14px;
+            padding: 10px 18px;
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--wr-primary-dark);
+            border-bottom-color: var(--wr-primary);
+            background: none;
+        }
+
+        /* --- Main --- */
+        .wr-main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            padding: 20px 24px;
+            overflow: hidden;
+        }
+        .tab-content { flex: 1; min-height: 0; display: flex; }
+        .tab-pane { display: none; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+        .tab-pane.active { display: flex; }
+
+        /* --- Toolbar --- */
+        .wr-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+        .wr-filter-wrapper { position: relative; }
+        .btn-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid var(--wr-border);
+            border-radius: var(--wr-radius);
+            padding: 8px 16px;
+            font-size: 14px;
+            color: var(--wr-text-main);
+            cursor: pointer;
+        }
+        .btn-filter:hover { border-color: var(--wr-primary); }
+        .filter-count-badge {
+            background: var(--wr-primary);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 1px 7px;
+        }
+
+        .wr-filter-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            width: 320px;
+            background: #fff;
+            border: 1px solid var(--wr-border);
+            border-radius: var(--wr-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+            z-index: 60;
+            max-height: 460px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-group { border-bottom: 1px solid var(--wr-border); padding: 12px 14px; }
+        .filter-group:last-of-type { border-bottom: none; }
+        .filter-group-label {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--wr-text-main);
+            margin-bottom: 8px;
+            display: block;
+        }
+        .filter-group-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: none;
+    border: none;
+    padding: 10px 0;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--wr-text-main);
+    cursor: pointer;
+}
+.filter-group-header i {
+    font-size: 11px;
+    color: var(--wr-text-muted);
+    transition: transform 0.15s ease;
+}
+.filter-group-header.expanded i { transform: rotate(180deg); }
+
+.filter-group-body-collapsible {
+    display: none;
+    flex-direction: column;
+    padding-bottom: 10px;
+}
+.filter-group-body-collapsible.expanded { display: flex; }
+
+.filter-inline-search {
+    width: 100%;
+    border: 1px solid var(--wr-border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12.5px;
+    outline: none;
+    margin-bottom: 8px;
+}
+.filter-inline-search:focus { border-color: var(--wr-primary); }
+
+.filter-checkbox-list {
+    max-height: 160px;
+    overflow-y: auto;
+}
+        .filter-text-input, .filter-date-input {
+            width: 100%;
+            border: 1px solid var(--wr-border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+        .filter-text-input:focus, .filter-date-input:focus { border-color: var(--wr-primary); }
+        .filter-date-range { display: flex; align-items: center; gap: 6px; }
+        .filter-date-range span { font-size: 12px; color: var(--wr-text-muted); }
+
+        .filter-checkbox-body { max-height: 140px; overflow-y: auto; }
+        .filter-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            font-size: 13px;
+        }
+        .filter-checkbox-item input[type="checkbox"] { accent-color: var(--wr-primary); cursor: pointer; }
+
+        .filter-panel-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-top: 1px solid var(--wr-border);
+            background: var(--wr-bg-soft);
+            border-radius: 0 0 var(--wr-radius) var(--wr-radius);
+            position: sticky;
+            bottom: 0;
+        }
+        .btn-filter-reset { background: none; border: none; font-size: 13px; color: var(--wr-text-muted); cursor: pointer; }
+        .btn-filter-reset:hover { color: #d64545; }
+        .btn-filter-apply {
+            background: var(--wr-primary);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-filter-apply:hover { background: var(--wr-primary-dark); }
+
+        /* --- Tabel --- */
+        .wr-table-wrapper {
+            background: #fff;
+            border: 1px solid var(--wr-border);
+            border-radius: var(--wr-radius);
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .wr-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .wr-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--wr-bg-soft);
+            color: var(--wr-text-main);
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 2px solid var(--wr-border);
+            white-space: nowrap;
+        }
+        .wr-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--wr-border);
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .wr-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center; }
+        .col-aksi { width: 100px; text-align: center; }
+        .row-loading td, .row-empty td { text-align: center; padding: 30px; color: var(--wr-text-muted); white-space: normal; }
+        .data-empty-cell { color: var(--wr-text-muted); font-style: italic; }
+
+        .btn-download-label {
+            border: 1px solid var(--wr-primary);
+            background: #fff;
+            color: var(--wr-primary);
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .btn-download-label:hover { background: var(--wr-primary); color: #fff; }
+
+        /* --- Pagination --- */
+        .wr-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            flex-shrink: 0;
+        }
+        .pagination-btn {
+            min-width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--wr-border);
+            background: #fff;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--wr-text-main);
+            cursor: pointer;
+        }
+        .pagination-btn:hover { border-color: var(--wr-primary); }
+        .pagination-btn.active { background: var(--wr-primary); border-color: var(--wr-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        @media (max-width: 640px) {
+            .wr-filter-panel { width: 100%; left: 0; right: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="wr-header">
+        <a href="../../operations/stg/dashboard_stg.html" class="btn-back" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h1 class="wr-header-title">Laporan Sisa Wrapping</h1>
+    </header>
+
+    <!-- =============================================== -->
+    <!-- TABS: Laporan / History                           -->
+    <!-- =============================================== -->
+    <div class="wr-tabs-wrapper">
+        <ul class="nav nav-tabs" id="wrTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabLaporan" type="button">
+                    Laporan
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabHistory" type="button">
+                    History
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <main class="wr-main">
+        <div class="tab-content">
+
+            <!-- =============================================== -->
+            <!-- TAB: LAPORAN (data aktif)                        -->
+            <!-- =============================================== -->
+            <div class="tab-pane active" id="tabLaporan">
+
+                <div class="wr-toolbar">
+                    <div class="wr-filter-wrapper">
+                        <button type="button" class="btn-filter" id="btnFilterToggleLaporan">
+                            <i class="fa-solid fa-filter"></i>
+                            <span>Filter</span>
+                            <span class="filter-count-badge d-none" id="filterCountBadgeLaporan">0</span>
+                        </button>
+
+                        <div class="wr-filter-panel d-none" id="filterPanelLaporan">
+
+                        <div id="filterFieldGroupsLaporan"></div>
+
+                            <div class="filter-group">
+                                <label class="filter-group-label">Tanggal Masuk</label>
+                                <div class="filter-date-range">
+                                    <input type="date" class="filter-date-input" id="filterTglMasukDariLaporan">
+                                    <span>s/d</span>
+                                    <input type="date" class="filter-date-input" id="filterTglMasukSampaiLaporan">
+                                </div>
+                            </div>
+                            <div class="filter-panel-footer">
+                                <button type="button" class="btn-filter-reset" id="btnFilterResetLaporan">Reset</button>
+                                <button type="button" class="btn-filter-apply" id="btnFilterApplyLaporan">Terapkan</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-filter" id="btnDownloadLaporan">
+                        <i class="fa-solid fa-file-arrow-down"></i>
+                        <span>Download Excel</span>
+                    </button>
+                </div>
+
+                <div class="wr-table-wrapper">
+                    <table class="wr-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th>
+                                <th class="col-aksi">Aksi</th>
+                                <th>Kode Artikel</th>
+                                <th>Nama Barang</th>
+                                <th>Customer</th>
+                                <th>Batch Number</th>
+                                <th>Tanggal Masuk</th>
+                                <th>Qty</th>
+                                <th>Petugas</th>
+                                <th>Shift</th>
+                                
+                            </tr>
+                        </thead>
+                        <tbody id="laporanTableBody">
+                            <tr class="row-loading">
+                                <td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="wr-pagination" id="laporanPagination"></div>
+            </div>
+
+            <!-- =============================================== -->
+            <!-- TAB: HISTORY (data non-aktif)                    -->
+            <!-- =============================================== -->
+            <div class="tab-pane" id="tabHistory">
+
+                <div class="wr-toolbar">
+                    <div class="wr-filter-wrapper">
+                        <button type="button" class="btn-filter" id="btnFilterToggleHistory">
+                            <i class="fa-solid fa-filter"></i>
+                            <span>Filter</span>
+                            <span class="filter-count-badge d-none" id="filterCountBadgeHistory">0</span>
+                        </button>
+
+                        <div class="wr-filter-panel d-none" id="filterPanelHistory">
+            
+                        <div id="filterFieldGroupsHistory"></div>
+
+                            <div class="filter-group">
+                                <label class="filter-group-label">Tanggal Masuk</label>
+                                <div class="filter-date-range">
+                                    <input type="date" class="filter-date-input" id="filterTglMasukDariHistory">
+                                    <span>s/d</span>
+                                    <input type="date" class="filter-date-input" id="filterTglMasukSampaiHistory">
+                                </div>
+                            </div>
+                            <div class="filter-group">
+                                <label class="filter-group-label">Tanggal Keluar</label>
+                                <div class="filter-date-range">
+                                    <input type="date" class="filter-date-input" id="filterTglKeluarDariHistory">
+                                    <span>s/d</span>
+                                    <input type="date" class="filter-date-input" id="filterTglKeluarSampaiHistory">
+                                </div>
+                            </div>
+                            <div class="filter-panel-footer">
+                                <button type="button" class="btn-filter-reset" id="btnFilterResetHistory">Reset</button>
+                                <button type="button" class="btn-filter-apply" id="btnFilterApplyHistory">Terapkan</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="wr-table-wrapper">
+                    <table class="wr-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th>
+                                <th>Kode Artikel</th>
+                                <th>Nama Barang</th>
+                                <th>Customer</th>
+                                <th>Batch Number</th>
+                                <th>Tanggal Masuk</th>
+                                <th>Qty</th>
+                                <th>Petugas IN</th>
+                                <th>Shift IN</th>
+                                <th>Tanggal Keluar</th>
+                                <th>Petugas OUT</th>
+                                <th>Shift OUT</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody">
+                            <tr class="row-loading">
+                                <td colspan="12"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="wr-pagination" id="historyPagination"></div>
+            </div>
+
+        </div>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode/1.4.4/qrcode.min.js"></script>
+    <script src="../../../js/supabase.js"></script>
+    <script src="../../../js/module/operations/stg/sisa_wrapping.js"></script>
+</body>
+>>>>>>> 3d00068 (Initial commit Web ERP)
 </html>

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -692,4 +693,700 @@
     <script src="../../../js/module/operations/stg/artikel_bulk.js"></script>
     <script src="../../../js/module/operations/stg/artikel.js"></script>
 </body>
+=======
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Artikel - DMB ERP</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS Global Project -->
+    <link href="../css/base.css" rel="stylesheet">
+    <link href="../css/components.css" rel="stylesheet">
+    <link href="../css/layout.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --art-primary: #2b6cb0;
+            --art-primary-dark: #1e4e8c;
+            --art-bg-soft: #e1ecf5;
+            --art-border: #d3dfea;
+            --art-text-main: #1f2d3d;
+            --art-text-muted: #6b7c93;
+            --art-radius: 8px;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--art-text-main);
+        }
+
+        /* --- Header --- */
+        .art-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--art-border);
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+        .btn-back {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--art-border);
+            background: var(--art-bg-soft);
+            color: var(--art-primary-dark);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--art-primary); color: #fff; }
+
+        .art-header-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+            flex: 1;
+        }
+
+        .btn-header-action {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--art-border);
+            background: #fff;
+            color: var(--art-text-main);
+            border-radius: var(--art-radius);
+            padding: 8px 16px;
+            font-size: 13.5px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .btn-header-action:hover {
+            border-color: var(--art-primary);
+            color: var(--art-primary-dark);
+        }
+        .btn-header-action.btn-primary-fill {
+            background: var(--art-primary);
+            border-color: var(--art-primary);
+            color: #fff;
+        }
+        .btn-header-action.btn-primary-fill:hover {
+            background: var(--art-primary-dark);
+            border-color: var(--art-primary-dark);
+        }
+
+        /* --- Main --- */
+        .art-main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            padding: 20px 24px;
+            overflow: hidden;
+        }
+
+        /* --- Toolbar: Search + Filter --- */
+        .art-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+
+        .art-search-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid var(--art-border);
+            border-radius: var(--art-radius);
+            padding: 8px 14px;
+            flex: 1;
+            min-width: 240px;
+            max-width: 380px;
+        }
+        .art-search-box i {
+            color: var(--art-text-muted);
+            font-size: 14px;
+        }
+        .art-search-box input {
+            border: none;
+            outline: none;
+            flex: 1;
+            font-size: 14px;
+            color: var(--art-text-main);
+            background: transparent;
+        }
+
+        /* --- Filter Dropdown --- */
+        .art-filter-wrapper {
+            position: relative;
+        }
+        .btn-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid var(--art-border);
+            border-radius: var(--art-radius);
+            padding: 8px 16px;
+            font-size: 14px;
+            color: var(--art-text-main);
+            cursor: pointer;
+            transition: border-color 0.15s ease;
+        }
+        .btn-filter:hover { border-color: var(--art-primary); }
+
+        .filter-count-badge {
+            background: var(--art-primary);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 1px 7px;
+            line-height: 1.5;
+        }
+
+        .art-filter-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            width: 300px;
+            background: #fff;
+            border: 1px solid var(--art-border);
+            border-radius: var(--art-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+            z-index: 60;
+            max-height: 440px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group {
+            border-bottom: 1px solid var(--art-border);
+        }
+        .filter-group:last-of-type { border-bottom: none; }
+
+        .filter-group-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: none;
+            border: none;
+            padding: 10px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--art-text-main);
+            cursor: pointer;
+        }
+        .filter-group-header i {
+            font-size: 11px;
+            color: var(--art-text-muted);
+            transition: transform 0.15s ease;
+        }
+        .filter-group-header.expanded i { transform: rotate(180deg); }
+
+        .filter-group-body {
+            display: none;
+            flex-direction: column;
+            padding: 0 14px 10px 14px;
+            max-height: 160px;
+            overflow-y: auto;
+        }
+        .filter-group-body.expanded { display: flex; }
+
+        .filter-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            font-size: 13px;
+            color: var(--art-text-main);
+        }
+        .filter-checkbox-item input[type="checkbox"] {
+            accent-color: var(--art-primary);
+            cursor: pointer;
+        }
+
+        .filter-panel-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-top: 1px solid var(--art-border);
+            background: var(--art-bg-soft);
+            border-radius: 0 0 var(--art-radius) var(--art-radius);
+            position: sticky;
+            bottom: 0;
+        }
+        .btn-filter-reset {
+            background: none;
+            border: none;
+            font-size: 13px;
+            color: var(--art-text-muted);
+            cursor: pointer;
+        }
+        .btn-filter-reset:hover { color: #d64545; }
+
+        .btn-filter-apply {
+            background: var(--art-primary);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-filter-apply:hover { background: var(--art-primary-dark); }
+
+        /* --- Tabel --- */
+        .art-table-wrapper {
+            background: #fff;
+            border: 1px solid var(--art-border);
+            border-radius: var(--art-radius);
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .art-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13.5px;
+        }
+        .art-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--art-bg-soft);
+            color: var(--art-text-main);
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 2px solid var(--art-border);
+            white-space: nowrap;
+        }
+        .art-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--art-border);
+            color: var(--art-text-main);
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .art-table tbody tr:hover { background: #f7fafc; }
+
+        .col-no { width: 50px; text-align: center; }
+
+        .row-loading td, .row-empty td {
+            text-align: center;
+            padding: 30px;
+            color: var(--art-text-muted);
+            white-space: normal;
+        }
+
+        .data-empty-cell {
+            color: var(--art-text-muted);
+            font-style: italic;
+        }
+
+        /* --- Kolom Aksi (Edit / Delete) --- */
+        .col-aksi {
+            width: 90px;
+            text-align: center;
+        }
+        .btn-row-action {
+            border: none;
+            background: none;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-row-edit {
+            color: var(--art-primary);
+        }
+        .btn-row-edit:hover {
+            background: var(--art-bg-soft);
+        }
+        .btn-row-delete {
+            color: #d64545;
+        }
+        .btn-row-delete:hover {
+            background: #fbe6e6;
+        }
+
+        /* --- Tombol & Panel "Atur Kolom" (pola sama dengan Filter) --- */
+        .art-column-wrapper {
+            position: relative;
+        }
+        .art-column-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            width: 240px;
+            background: #fff;
+            border: 1px solid var(--art-border);
+            border-radius: var(--art-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+            z-index: 60;
+            max-height: 400px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .column-panel-body {
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+        }
+        .column-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            font-size: 13px;
+            color: var(--art-text-main);
+        }
+        .column-checkbox-item input[type="checkbox"] {
+            accent-color: var(--art-primary);
+            cursor: pointer;
+        }
+        .column-panel-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 14px;
+            border-top: 1px solid var(--art-border);
+            background: var(--art-bg-soft);
+            border-radius: 0 0 var(--art-radius) var(--art-radius);
+            position: sticky;
+            bottom: 0;
+        }
+
+        /* --- Pagination --- */
+        .art-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            flex-shrink: 0;
+        }
+        .pagination-btn {
+            min-width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--art-border);
+            background: #fff;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--art-text-main);
+            cursor: pointer;
+        }
+        .pagination-btn:hover { border-color: var(--art-primary); }
+        .pagination-btn.active {
+            background: var(--art-primary);
+            border-color: var(--art-primary);
+            color: #fff;
+        }
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 640px) {
+            .art-toolbar { flex-direction: column; align-items: stretch; }
+            .art-search-box { max-width: 100%; }
+            .art-filter-panel { width: 100%; left: 0; right: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- =============================================== -->
+    <!-- HEADER                                            -->
+    <!-- =============================================== -->
+    <header class="art-header">
+        <a href="../../operations/stg/dashboard_stg.html" class="btn-back" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h1 class="art-header-title">Database Artikel</h1>
+
+        <button type="button" class="btn-header-action" id="btnDownloadTemplate">
+        <i class="fa-solid fa-file-arrow-down"></i> Template Upload
+        </button>
+        <!-- PERBAIKAN: Modal trigger digabungkan ke tombol utama di dalam header -->
+        <button type="button" class="btn-header-action btn-primary-fill" id="btnUploadData" data-bs-toggle="modal" data-bs-target="#modalUploadArtikel">
+            <i class="fa-solid fa-file-arrow-up"></i> Upload Data
+        </button>
+    </header>
+
+    <!-- =============================================== -->
+    <!-- MAIN CONTENT                                      -->
+    <!-- =============================================== -->
+    <main class="art-main">
+
+        <!-- Toolbar: Search + Filter -->
+        <div class="art-toolbar">
+            <div class="art-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="inputSearch" placeholder="Cari Artikel">
+            </div>
+
+            <div class="art-filter-wrapper">
+                <button type="button" class="btn-filter" id="btnFilterToggle">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filter</span>
+                    <span class="filter-count-badge d-none" id="filterCountBadge">0</span>
+                </button>
+
+                <div class="art-filter-panel d-none" id="filterPanel">
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterCustomer">
+                            <span>Customer</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterCustomer"></div>
+                    </div>
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterFlute">
+                            <span>Flute</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterFlute"></div>
+                    </div>
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterTipePartisi">
+                            <span>Tipe Partisi</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterTipePartisi"></div>
+                    </div>
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterJoint">
+                            <span>Joint</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterJoint"></div>
+                    </div>
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterItemType">
+                            <span>Item Tipe</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterItemType"></div>
+                    </div>
+
+                    <div class="filter-panel-footer">
+                        <button type="button" class="btn-filter-reset" id="btnFilterReset">Reset</button>
+                        <button type="button" class="btn-filter-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="art-column-wrapper">
+                <button type="button" class="btn-filter" id="btnColumnToggle">
+                    <i class="fa-solid fa-table-columns"></i>
+                    <span>Atur Kolom</span>
+                </button>
+
+                <div class="art-column-panel d-none" id="columnPanel">
+                    <div class="column-panel-body" id="columnPanelBody">
+                        <!-- Diisi otomatis oleh artikel.js -->
+                    </div>
+                    <div class="column-panel-footer">
+                        <button type="button" class="btn-filter-apply" id="btnColumnApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabel -->
+        <div class="art-table-wrapper">
+            <table class="art-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th data-col="kode_artikel">Kode Artikel</th>
+                        <th data-col="nama_barang">Nama Barang</th>
+                        <th data-col="customer">Customer</th>
+                        <th data-col="flute">Flute</th>
+                        <th data-col="width">Width</th>
+                        <th data-col="length">Length</th>
+                        <th data-col="panjang_box">Panjang Box</th>
+                        <th data-col="lebar_box">Lebar Box</th>
+                        <th data-col="tinggi_box">Tinggi Box</th>
+                        <th data-col="tipe_partisi">Tipe Partisi</th>
+                        <th data-col="joint">Joint</th>
+                        <th data-col="pcs_pallet">Jumlah Pcs per Palet</th>
+                        <th data-col="item_type">Item Tipe</th>
+                        <th data-col="wrapping_ml">Wrapping (ml)</th>
+                        <th class="col-aksi">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="artikelTableBody">
+                    <tr class="row-loading">
+                        <td colspan="16">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Memuat data...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </main>
+
+    <!-- =============================================== -->
+    <!-- MODAL EDIT ARTIKEL                                -->
+    <!-- =============================================== -->
+    <div class="modal fade" id="modalEditArtikel" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">Edit Artikel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="editArtikelId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Kode Artikel</label>
+                            <input type="text" class="form-control" id="editKodeArtikel">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Nama Barang</label>
+                            <input type="text" class="form-control" id="editNamaBarang">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Customer</label>
+                            <input type="text" class="form-control" id="editCustomer">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Flute</label>
+                            <input type="text" class="form-control" id="editFlute">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Width</label>
+                            <input type="number" class="form-control" id="editWidth">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Length</label>
+                            <input type="number" class="form-control" id="editLength">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Wrapping (ml)</label>
+                            <input type="number" class="form-control" id="editWrappingMl">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Panjang Box</label>
+                            <input type="number" class="form-control" id="editPanjangBox">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Lebar Box</label>
+                            <input type="number" class="form-control" id="editLebarBox">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Tinggi Box</label>
+                            <input type="number" class="form-control" id="editTinggiBox">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Tipe Partisi</label>
+                            <input type="text" class="form-control" id="editTipePartisi">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Joint</label>
+                            <input type="text" class="form-control" id="editJoint">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Jumlah Pcs per Palet</label>
+                            <input type="number" class="form-control" id="editPcsPallet">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Item Tipe</label>
+                            <input type="text" class="form-control" id="editItemType">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btnSaveEditArtikel">
+                        <i class="fa-solid fa-floppy-disk me-1"></i> Simpan Perubahan
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============================================== -->
+    <!-- MODAL UPLOAD DATA ARTIKEL                       -->
+    <!-- =============================================== -->
+    <div class="modal fade" id="modalUploadArtikel" tabindex="-1" aria-labelledby="modalUploadArtikelLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="modalUploadArtikelLabel">Upload Data Artikel (.xlsx)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Pastikan file yang di-upload menggunakan format <b>.xlsx</b> sesuai template. 
+                    </p>
+                    <div class="mb-3">
+                        <label for="uploadArtikelFileInput" class="form-label fw-semibold">Pilih File Excel</label>
+                        <input class="form-control" type="file" id="uploadArtikelFileInput" accept=".xlsx">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btnProcessUpload">
+                        <i class="fa-solid fa-file-arrow-up me-1"></i> Proses Upload
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../../js/supabase.js"></script>
+    <script src="../../../js/module/operations/stg/artikel_bulk.js"></script>
+    <script src="../../../js/module/operations/stg/artikel.js"></script>
+</body>
+>>>>>>> 3d00068 (Initial commit Web ERP)
 </html>

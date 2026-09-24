@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /* ==============================================================================
    FILE: css/base.css
    DESKRIPSI: Variabel Tema Utama (Design Tokens), Reset CSS, dan Typography
@@ -82,4 +83,90 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+=======
+/* ==============================================================================
+   FILE: css/base.css
+   DESKRIPSI: Variabel Tema Utama (Design Tokens), Reset CSS, dan Typography
+   TEMA: Simply & Professional (Bersih, Kontras Nyaman, & Sangat Ringan)
+   ============================================================================== */
+
+/* ------------------------------------------------------------------------------
+   1. VARIABEL TEMA (DESIGN TOKENS)
+   Mengatur warna, ukuran font, dan tata letak secara terpusat.
+   Jika kelak ingin mengubah warna tema ERP, cukup ubah di variabel ini.
+------------------------------------------------------------------------------ */
+:root {
+  /* Warna Utama (Primary & Secondary) */
+  --primary-color: #1e293b;        /* Slate Dark (Memberi kesan profesional & tegas) */
+  --primary-hover: #0f172a;        /* Slate Lebih Gelap saat tombol diklik/hover */
+  --accent-color: #2563eb;         /* Royal Blue untuk Aksi Utama / Link */
+  --accent-hover: #1d4ed8;
+
+  /* Warna Status (Alert & Badges) */
+  --success-color: #16a34a;       /* Hijau (Aktif / Disetujui) */
+  --warning-color: #d97706;       /* Kuning (Pending / Menunggu ACC) */
+  --danger-color: #dc2626;        /* Merah (Ditolak / Rusak / Dibatalkan) */
+  --info-color: #0284c7;          /* Biru Muda (Informasi) */
+
+  /* Warna Netral Latar Belakang & Teks */
+  --bg-main: #f8fafc;             /* Latar belakang utama halaman (Light Gray-Blue) */
+  --bg-surface: #ffffff;          /* Latar belakang Card, Form, dan Modal (Putih Bersih) */
+  --bg-sidebar: #0f172a;          /* Latar belakang Sidebar (Dark Navy) */
+  --text-main: #1e293b;           /* Warna teks utama (Dark Gray - Tidak terlalu pekat agar mata tidak lelah) */
+  --text-muted: #64748b;          /* Warna teks sekunder / keterangan tambahan */
+  --text-light: #f8fafc;          /* Warna teks untuk area gelap (Sidebar/Header) */
+  --border-color: #e2e8f0;        /* Warna garis tepi tabel, input, & pembatas */
+
+  /* Ukuran & Tata Letak Universal */
+  --sidebar-width: 250px;         /* Lebar Sidebar saat mode Desktop */
+  --topbar-height: 60px;          /* Tinggi Header/Topbar */
+  --border-radius: 8px;           /* Kebulatan sudut komponen (Card, Button, Input) */
+  --transition-speed: 0.2s;       /* Kecepatan animasi transisi hover */
+  --box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* ------------------------------------------------------------------------------
+   2. RESET CSS DASAR
+   Menyelaraskan margin dan padding standar di semua browser.
+------------------------------------------------------------------------------ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 14px; /* Ukuran font standar ERP (Optimal untuk kepadatan data tabel) */
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ------------------------------------------------------------------------------
+   3. STYLING SCROLLBAR CUSTOM
+   Membuat scrollbar lebih ramping dan elegan.
+------------------------------------------------------------------------------ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+>>>>>>> 3d00068 (Initial commit Web ERP)
 }

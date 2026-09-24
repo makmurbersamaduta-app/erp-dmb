@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -504,4 +505,512 @@
         });
     </script>
 </body>
+=======
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard STG - DMB ERP</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="../css/base.css" rel="stylesheet">
+    <link href="../css/components.css" rel="stylesheet">
+    <link href="../css/layout.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --stg-primary: #2b6cb0;
+            --stg-primary-dark: #1e4e8c;
+            --stg-bg-soft: #e1ecf5;
+            --stg-border: #d3dfea;
+            --stg-text-main: #1f2d3d;
+            --stg-text-muted: #6b7c93;
+            --stg-warning: #d9822b;
+            --stg-danger: #d64545;
+            --stg-success: #2f9e44;
+            --stg-radius: 10px;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--stg-text-main);
+        }
+
+        .stg-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--stg-border);
+        }
+
+        .btn-back {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--stg-border);
+            background: var(--stg-bg-soft);
+            color: var(--stg-primary-dark);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--stg-primary); color: #fff; }
+
+        .stg-header-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .stg-main {
+            padding: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .dummy-badge {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--stg-warning);
+            background: #fdf1e2;
+            border: 1px solid #f3d9b3;
+            border-radius: 999px;
+            padding: 2px 10px;
+            margin-left: 8px;
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            margin-top: 28px;
+        }
+        .section-title:first-of-type { margin-top: 0; }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+        }
+        .menu-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid var(--stg-border);
+            border-radius: var(--stg-radius);
+            padding: 18px 12px;
+            text-decoration: none;
+            color: var(--stg-text-main);
+            transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+            cursor: pointer;
+        }
+        .menu-btn:hover {
+            border-color: var(--stg-primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(43, 108, 176, 0.1);
+            color: var(--stg-primary-dark);
+        }
+        .menu-btn-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 11px;
+            background: var(--stg-bg-soft);
+            color: var(--stg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .menu-btn-label {
+            font-size: 12.5px;
+            font-weight: 600;
+            text-align: center;
+            line-height: 1.3;
+        }
+
+        .info-card {
+            background: #fff;
+            border: 1px solid var(--stg-border);
+            border-radius: var(--stg-radius);
+            padding: 18px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            height: 100%;
+        }
+        .info-card-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+        .icon-bg-warning { background: #fdf1e2; color: var(--stg-warning); }
+        .icon-bg-danger { background: #fbe6e6; color: var(--stg-danger); }
+        .icon-bg-primary { background: var(--stg-bg-soft); color: var(--stg-primary); }
+
+        .info-card-value {
+            font-size: 26px;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+        .info-card-label {
+            font-size: 13px;
+            color: var(--stg-text-muted);
+            margin-top: 2px;
+        }
+
+        .info-card-link, .chart-card-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            height: 100%;
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+        .info-card-link:hover, .chart-card-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(43, 108, 176, 0.12);
+        }
+
+        .chart-card {
+            background: #fff;
+            border: 1px solid var(--stg-border);
+            border-radius: var(--stg-radius);
+            padding: 20px;
+            height: 100%;
+        }
+        .chart-card-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
+        }
+        .chart-canvas-wrapper {
+            position: relative;
+            height: 260px;
+        }
+
+        .modal-content {
+            border-radius: var(--stg-radius);
+            border: none;
+        }
+        .modal-header {
+            border-bottom: 1px solid var(--stg-border);
+        }
+        .modal-title {
+            font-size: 16px;
+            font-weight: 700;
+        }
+        .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--stg-text-main);
+        }
+        .form-select:focus, .form-control:focus {
+            border-color: var(--stg-primary);
+            box-shadow: 0 0 0 0.2rem rgba(43, 108, 176, 0.15);
+        }
+        .btn-modal-back {
+            background: var(--stg-bg-soft);
+            color: var(--stg-primary-dark);
+            border: none;
+            font-weight: 600;
+        }
+        .btn-modal-back:hover {
+            background: #cfe0f0;
+            color: var(--stg-primary-dark);
+        }
+    </style>
+</head>
+<body>
+
+    <header class="stg-header">
+        <a href="../../../index.html" class="btn-back" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h1 class="stg-header-title">Dashboard STG</h1>
+    </header>
+
+    <main class="stg-main">
+
+        <div class="section-title">Menu</div>
+        <div class="menu-grid">
+            <a href="../oms/oms.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-gauge-high"></i></div>
+                <div class="menu-btn-label">OMS<br>(Operational Monitoring)</div>
+            </a>
+            <a href="../../operations/stg/artikel.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-tags"></i></div>
+                <div class="menu-btn-label">Data Artikel</div>
+            </a>
+            <a href="../../operations/stg/memo.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-file-lines"></i></div>
+                <div class="menu-btn-label">Data Borong Memo</div>
+            </a>
+            <a href="../stg/borong.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-clipboard-list"></i></div>
+                <div class="menu-btn-label">Data Borong Hasil</div>
+            </a>
+            <a href="../../operations/stg/sisa_wrapping.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-box-open"></i></div>
+                <div class="menu-btn-label">Laporan Barang<br>Sisa Wrapping</div>
+            </a>
+            <a href="../stock/data_stock.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-warehouse"></i></div>
+                <div class="menu-btn-label">Data Stock Barang</div>
+            </a>
+            <a href="#" class="menu-btn" title="Lokasi halaman akan disetting kemudian">
+                <div class="menu-btn-icon"><i class="fa-solid fa-tag"></i></div>
+                <div class="menu-btn-label">Cetak Label<br>Barang Jadi</div>
+            </a>
+        </div>
+
+        <div class="section-title">Ringkasan</div>
+        <div class="row g-3">
+            <div class="col-6 col-md-3">
+                <a href="../../operations/stg/memo.html#tabPending" class="info-card-link">
+                    <div class="info-card">
+                        <div class="info-card-icon icon-bg-warning">
+                            <i class="fa-solid fa-file-circle-exclamation"></i>
+                        </div>
+                        <div>
+                            <div class="info-card-value" id="pendingMemoCount">7</div>
+                            <div class="info-card-label">Pending Approval<br>Borong Memo</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="../stg/borong.html#tabPendingBorong" class="info-card-link">
+                    <div class="info-card">
+                        <div class="info-card-icon icon-bg-warning">
+                            <i class="fa-solid fa-clipboard-check"></i>
+                        </div>
+                        <div>
+                            <div class="info-card-value" id="pendingHasilCount">4</div>
+                            <div class="info-card-label">Pending Approval<br>Borong Hasil</div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="#" class="info-card-link" title="Lokasi halaman akan disetting kemudian">
+                    <div class="info-card">
+                        <div class="info-card-icon icon-bg-danger">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                        <div>
+                            <div class="info-card-value" id="pendingPekerjaanCount">5</div>
+                            <div class="info-card-label">Pending Pekerjaan <span class="dummy-badge">Dummy</span></div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-6 col-md-3">
+                <a href="#" class="info-card-link" title="Lokasi halaman akan disetting kemudian">
+                    <div class="info-card">
+                        <div class="info-card-icon icon-bg-danger">
+                            <i class="fa-solid fa-circle-exclamation"></i>
+                        </div>
+                        <div>
+                            <div class="info-card-value" id="pendingKendalaCount">2</div>
+                            <div class="info-card-label">Pending Kendala <span class="dummy-badge">Dummy</span></div>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="section-title">Trend Bulanan <span class="dummy-badge">Data Dummy</span></div>
+        <div class="row g-3">
+            <div class="col-12 col-lg-6">
+                <a href="#" class="chart-card-link" title="Tujuan link akan disetting kemudian">
+                    <div class="chart-card">
+                        <div class="chart-card-title">Trend Absensi Karyawan Borongan (Ijin / Sakit / Alpha)</div>
+                        <div class="chart-canvas-wrapper">
+                            <canvas id="chartAbsensi"></canvas>
+                        </div>
+                    </div>
+                </a>
+            </div>
+            <div class="col-12 col-lg-6">
+                <a href="#" class="chart-card-link" title="Tujuan link akan disetting kemudian">
+                    <div class="chart-card">
+                        <div class="chart-card-title">Trend Pelanggaran Karyawan Borongan</div>
+                        <div class="chart-canvas-wrapper">
+                            <canvas id="chartPelanggaran"></canvas>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../../js/supabase.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        // ===================================================
+        // AMBIL JUMLAH PENDING NYATA (Memo & Borong Hasil)
+        // Logika filter disamakan persis dengan memo.js / borong.js
+        // supaya angka di dashboard konsisten dengan tab Pending
+        // di masing-masing halaman.
+        //
+        // Scoping role:
+        // - KARU STG (roleId 8, bukan Maintenance/Superadmin) -> cuma
+        //   hitung pending miliknya sendiri (nip_karu / nik_karu = NIK-nya)
+        // - Role lain (Maintenance, Superadmin, Admin, Admin STG, dst) -> total
+        // ===================================================
+        const ROLE_KARU_STG = 8;
+        const ROLE_FULL_ACCESS = [1, 2]; // Maintenance, Superadmin -- selalu total, tidak pernah discoping
+
+        function getCurrentUserSession() {
+            const raw = localStorage.getItem("erp_session") || sessionStorage.getItem("erp_session");
+            if (!raw) return null;
+            try { return JSON.parse(raw); } catch { return null; }
+        }
+
+        async function loadPendingCounts() {
+            try {
+                const supabaseClient = window.supabaseClient;
+                const session = getCurrentUserSession();
+                const roleId = session?.roleId;
+                const userNik = session?.nik;
+
+                const isScopedKaru = roleId === ROLE_KARU_STG && !ROLE_FULL_ACCESS.includes(roleId);
+
+                let memoQuery = supabaseClient
+                    .schema("stg_public")
+                    .from("memos")
+                    .select("*", { count: "exact", head: true })
+                    .eq("status", "pending");
+
+                let borongQuery = supabaseClient
+                    .schema("stg_public")
+                    .from("borong_batch_view")
+                    .select("*", { count: "exact", head: true })
+                    .not("status", "ilike", "%approved%")
+                    .eq("has_kosong_loading_corrugator", false);
+
+                if (isScopedKaru && userNik) {
+                    memoQuery = memoQuery.eq("nip_karu", userNik);
+                    borongQuery = borongQuery.eq("nik_karu", userNik);
+                }
+
+                const [memoRes, borongRes] = await Promise.all([memoQuery, borongQuery]);
+
+                if (!memoRes.error) {
+                    document.getElementById("pendingMemoCount").textContent = memoRes.count ?? 0;
+                }
+                if (!borongRes.error) {
+                    document.getElementById("pendingHasilCount").textContent = borongRes.count ?? 0;
+                }
+
+            } catch (err) {
+                console.error("Gagal memuat jumlah pending:", err);
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", loadPendingCounts);
+    </script>
+    <script>
+        const absensiLabels = ["Mar", "Apr", "Mei", "Jun", "Jul", "Agu"];
+        const absensiData = {
+            ijin:  [12, 15, 9, 14, 11, 13],
+            sakit: [8, 10, 7, 9, 12, 8],
+            alpha: [5, 3, 6, 4, 7, 5]
+        };
+
+        const pelanggaranLabels = ["Mar", "Apr", "Mei", "Jun", "Jul", "Agu"];
+        const pelanggaranData = [4, 6, 3, 5, 2, 4];
+
+        new Chart(document.getElementById("chartAbsensi"), {
+            type: "line",
+            data: {
+                labels: absensiLabels,
+                datasets: [
+                    {
+                        label: "Ijin",
+                        data: absensiData.ijin,
+                        borderColor: "#2b6cb0",
+                        backgroundColor: "rgba(43,108,176,0.1)",
+                        tension: 0.35,
+                        fill: true
+                    },
+                    {
+                        label: "Sakit",
+                        data: absensiData.sakit,
+                        borderColor: "#d9822b",
+                        backgroundColor: "rgba(217,130,43,0.1)",
+                        tension: 0.35,
+                        fill: true
+                    },
+                    {
+                        label: "Alpha",
+                        data: absensiData.alpha,
+                        borderColor: "#d64545",
+                        backgroundColor: "rgba(214,69,69,0.1)",
+                        tension: 0.35,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 12 } } }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+
+        new Chart(document.getElementById("chartPelanggaran"), {
+            type: "bar",
+            data: {
+                labels: pelanggaranLabels,
+                datasets: [
+                    {
+                        label: "Jumlah Pelanggaran",
+                        data: pelanggaranData,
+                        backgroundColor: "#d64545",
+                        borderRadius: 6,
+                        maxBarThickness: 36
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+    </script>
+</body>
+>>>>>>> 3d00068 (Initial commit Web ERP)
 </html>

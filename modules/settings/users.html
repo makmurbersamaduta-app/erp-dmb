@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -179,4 +180,187 @@
     <script src="../../js/supabase.js"></script>
     <script src="../../js/module/settings/users.js"></script>
 </body>
+=======
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Users Account - DMB ERP</title>
+
+    <!-- Bootstrap & Icon -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS Global Project (sesuaikan path jika berbeda) -->
+    <link href="../../css/base.css" rel="stylesheet">
+    <link href="../../css/components.css" rel="stylesheet">
+    <link href="../../css/layout.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+
+    <!-- CSS Khusus Halaman Ini -->
+    <link href="../../css/pages/settings/users.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- =============================================== -->
+    <!-- HEADER (tanpa sidebar, ada tombol kembali)        -->
+    <!-- =============================================== -->
+    <header class="users-header">
+        <button type="button" class="btn-back" id="btnBack" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <h1 class="users-header-title">Users Account</h1>
+    </header>
+
+    <!-- =============================================== -->
+    <!-- MAIN CONTENT                                      -->
+    <!-- =============================================== -->
+    <main class="users-main">
+
+        <!-- Toolbar: Search + Filter -->
+        <div class="users-toolbar">
+            <div class="users-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="inputSearch" placeholder="Cari NIK atau Nama Karyawan...">
+            </div>
+
+            <!-- Dropdown Filter -->
+            <div class="users-filter-wrapper">
+                <button type="button" class="btn-filter" id="btnFilterToggle">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filter</span>
+                    <span class="filter-count-badge d-none" id="filterCountBadge">0</span>
+                </button>
+
+                <div class="users-filter-panel d-none" id="filterPanel">
+
+                    <!-- Grup Filter: Branch -->
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterBranch">
+                            <span>Branch</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterBranch"></div>
+                    </div>
+
+                    <!-- Grup Filter: Cost Center -->
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterCostCenter">
+                            <span>Cost Center</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterCostCenter"></div>
+                    </div>
+
+                    <!-- Grup Filter: Area -->
+<div class="filter-group">
+    <button type="button" class="filter-group-header" data-target="filterArea">
+        <span>Area</span>
+        <i class="fa-solid fa-chevron-down"></i>
+    </button>
+    <div class="filter-group-body" id="filterArea"></div>
+</div>                    
+                    <!-- Grup Filter: Departemen -->
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterDepartemen">
+                            <span>Departemen</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterDepartemen"></div>
+                    </div>
+
+                    <!-- Grup Filter: Jabatan -->
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterJabatan">
+                            <span>Jabatan</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterJabatan"></div>
+                    </div>
+
+<!-- Grup Filter: Bagian -->
+<div class="filter-group">
+    <button type="button" class="filter-group-header" data-target="filterBagian">
+        <span>Bagian</span>
+        <i class="fa-solid fa-chevron-down"></i>
+    </button>
+    <div class="filter-group-body" id="filterBagian"></div>
+</div>
+
+                    <!-- Grup Filter: Role -->
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterRole">
+                            <span>Role</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterRole"></div>
+                    </div>
+
+                    <div class="filter-panel-footer">
+                        <button type="button" class="btn-filter-reset" id="btnFilterReset">Reset</button>
+                        <button type="button" class="btn-filter-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabel -->
+        <div class="users-table-wrapper">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th class="col-nik">NIK</th>
+                        <th class="col-nama">Nama Karyawan</th>
+                        <th class="col-branch">Branch</th>
+                        <th class="col-cc">Cost Center</th>
+                        <th class="col-dept">Departemen</th>
+                        <th class="col-jabatan">Jabatan</th>
+                        <th class="col-role">Role</th>
+                        <th class="col-akun">Status Akun</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    <!-- Diisi otomatis oleh users.js -->
+                    <tr class="row-loading">
+                        <td colspan="8">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Memuat data...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="users-pagination" id="usersPagination">
+            <!-- Diisi otomatis oleh users.js -->
+        </div>
+
+    </main>
+
+    <!-- =============================================== -->
+    <!-- FOOTER: Save Changes                              -->
+    <!-- =============================================== -->
+    <footer class="users-footer">
+    <span class="users-footer-info" id="pendingChangeInfo"></span>
+    <button type="button" class="btn-create-auth" id="btnCreateAuth" disabled>
+        <i class="fa-solid fa-user-plus"></i> Buat Akun Login
+    </button>
+    <button type="button" class="btn-save-changes" id="btnSaveChanges" disabled>
+        <i class="fa-solid fa-floppy-disk"></i> Save Changes
+    </button>
+</footer>
+
+    <!-- Toast Notifikasi (sukses/gagal simpan) -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/settings/users.js"></script>
+</body>
+>>>>>>> 3d00068 (Initial commit Web ERP)
 </html>

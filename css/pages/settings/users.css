@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /* ===================================================
    USERS ACCOUNT PAGE - css/pages/settings/users.css
    Mengikuti palet warna project (#e1ecf5 based theme)
@@ -511,4 +512,519 @@ body {
     width: 16px;
     height: 16px;
     accent-color: var(--users-success);
+=======
+/* ===================================================
+   USERS ACCOUNT PAGE - css/pages/settings/users.css
+   Mengikuti palet warna project (#e1ecf5 based theme)
+   =================================================== */
+
+:root {
+    --users-primary: #2b6cb0;
+    --users-primary-dark: #1e4e8c;
+    --users-bg-soft: #e1ecf5;
+    --users-border: #d3dfea;
+    --users-text-main: #1f2d3d;
+    --users-text-muted: #6b7c93;
+    --users-success: #2f9e44;
+    --users-danger: #d64545;
+    --users-radius: 8px;
+}
+
+/* ===================================================
+   1. HEADER
+   =================================================== */
+.users-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--users-border);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.btn-back {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid var(--users-border);
+    background: var(--users-bg-soft);
+    color: var(--users-primary-dark);
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.btn-back:hover {
+    background: var(--users-primary);
+    color: #fff;
+}
+
+.users-header-title {
+    font-family: 'Inter', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--users-text-main);
+    margin: 0;
+}
+
+/* ===================================================
+   2. MAIN CONTAINER
+   =================================================== */
+html, body {
+    height: 100%;
+    margin: 0;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.users-main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0; /* wajib, supaya flex child bisa scroll dengan benar */
+    padding: 20px 24px 90px;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+}
+
+.users-toolbar {
+    flex-shrink: 0;
+}
+
+.users-pagination {
+    flex-shrink: 0;
+}
+
+/* ===================================================
+   3. TOOLBAR: SEARCH + FILTER
+   =================================================== */
+.users-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.users-search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid var(--users-border);
+    border-radius: var(--users-radius);
+    padding: 8px 14px;
+    flex: 1;
+    min-width: 240px;
+    max-width: 380px;
+}
+
+.users-search-box i {
+    color: var(--users-text-muted);
+    font-size: 14px;
+}
+
+.users-search-box input {
+    border: none;
+    outline: none;
+    flex: 1;
+    font-size: 14px;
+    color: var(--users-text-main);
+    background: transparent;
+}
+
+/* Filter Button */
+.users-filter-wrapper {
+    position: relative;
+}
+
+.btn-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid var(--users-border);
+    border-radius: var(--users-radius);
+    padding: 8px 16px;
+    font-size: 14px;
+    color: var(--users-text-main);
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.btn-filter:hover {
+    border-color: var(--users-primary);
+}
+
+.filter-count-badge {
+    background: var(--users-primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 1px 7px;
+    line-height: 1.5;
+}
+
+/* Filter Dropdown Panel */
+.users-filter-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: 280px;
+    background: #fff;
+    border: 1px solid var(--users-border);
+    border-radius: var(--users-radius);
+    box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+    z-index: 60;
+    max-height: 420px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group {
+    border-bottom: 1px solid var(--users-border);
+}
+
+.filter-group:last-of-type {
+    border-bottom: none;
+}
+
+.filter-group-header {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: none;
+    border: none;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--users-text-main);
+    cursor: pointer;
+}
+
+.filter-group-header i {
+    font-size: 11px;
+    color: var(--users-text-muted);
+    transition: transform 0.15s ease;
+}
+
+.filter-group-header.expanded i {
+    transform: rotate(180deg);
+}
+
+.filter-group-body {
+    display: none;
+    flex-direction: column;
+    padding: 0 14px 10px 14px;
+    max-height: 160px;
+    overflow-y: auto;
+}
+
+.filter-group-body.expanded {
+    display: flex;
+}
+
+.filter-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: var(--users-text-main);
+}
+
+.filter-checkbox-item input[type="checkbox"] {
+    accent-color: var(--users-primary);
+    cursor: pointer;
+}
+
+.filter-panel-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-top: 1px solid var(--users-border);
+    background: var(--users-bg-soft);
+    border-radius: 0 0 var(--users-radius) var(--users-radius);
+    position: sticky;
+    bottom: 0;
+}
+
+.btn-filter-reset {
+    background: none;
+    border: none;
+    font-size: 13px;
+    color: var(--users-text-muted);
+    cursor: pointer;
+}
+
+.btn-filter-reset:hover {
+    color: var(--users-danger);
+}
+
+.btn-filter-apply {
+    background: var(--users-primary);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-filter-apply:hover {
+    background: var(--users-primary-dark);
+}
+
+/* ===================================================
+   4. TABEL (dengan header freeze / sticky)
+   =================================================== */
+.users-table-wrapper {
+    background: #fff;
+    border: 1px solid var(--users-border);
+    border-radius: var(--users-radius);
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+
+.users-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--users-bg-soft);
+    color: var(--users-text-main);
+    font-weight: 600;
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 2px solid var(--users-border);
+    white-space: nowrap;
+}
+
+.users-table tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--users-border);
+    color: var(--users-text-main);
+    vertical-align: middle;
+}
+
+.users-table tbody tr:hover {
+    background: #f7fafc;
+}
+
+.col-no {
+    width: 50px;
+    text-align: center;
+}
+
+.row-loading td {
+    text-align: center;
+    padding: 30px;
+    color: var(--users-text-muted);
+}
+
+.row-empty td {
+    text-align: center;
+    padding: 30px;
+    color: var(--users-text-muted);
+}
+
+/* Dropdown Role di dalam tabel */
+.role-select {
+    width: 100%;
+    min-width: 140px;
+    padding: 6px 10px;
+    border: 1px solid var(--users-border);
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--users-text-main);
+    background: #fff;
+    cursor: pointer;
+}
+
+.role-select:focus {
+    outline: none;
+    border-color: var(--users-primary);
+}
+
+/* Highlight baris yang sedang diubah (belum disimpan) */
+.row-changed {
+    background: #fff8e1;
+}
+
+.row-changed:hover {
+    background: #fff3cd;
+}
+
+/* Data kosong (belum ter-link ke employees) */
+.data-empty-cell {
+    color: var(--users-text-muted);
+    font-style: italic;
+}
+
+/* ===================================================
+   5. PAGINATION
+   =================================================== */
+.users-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    margin-top: 16px;
+}
+
+.pagination-btn {
+    min-width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--users-border);
+    background: #fff;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--users-text-main);
+    cursor: pointer;
+}
+
+.pagination-btn:hover {
+    border-color: var(--users-primary);
+}
+
+.pagination-btn.active {
+    background: var(--users-primary);
+    border-color: var(--users-primary);
+    color: #fff;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ===================================================
+   6. FOOTER: SAVE CHANGES
+   =================================================== */
+.users-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+    padding: 14px 24px;
+    background: #fff;
+    border-top: 1px solid var(--users-border);
+    z-index: 40;
+}
+
+.users-footer-info {
+    font-size: 13px;
+    color: var(--users-text-muted);
+}
+
+.btn-save-changes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--users-primary);
+    color: #fff;
+    border: none;
+    border-radius: var(--users-radius);
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+/* Kondisi: tidak ada perubahan -> memudar & tidak bisa diklik */
+.btn-save-changes:disabled {
+    background: #b8c4d1;
+    color: #ffffff;
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-save-changes:not(:disabled):hover {
+    background: var(--users-primary-dark);
+}
+
+/* ===================================================
+   7. RESPONSIVE (opsional, mobile kecil)
+   =================================================== */
+@media (max-width: 640px) {
+    .users-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .users-search-box {
+        max-width: 100%;
+    }
+    .users-filter-panel {
+        width: 100%;
+        left: 0;
+        right: 0;
+    }
+}
+.role-select-readonly {
+    background: #f1f5f9;
+    color: var(--users-text-muted);
+    cursor: not-allowed;
+}
+.btn-create-auth {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--users-success);
+    color: #fff;
+    border: none;
+    border-radius: var(--users-radius);
+    padding: 10px 22px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-create-auth:disabled {
+    background: #b8c4d1;
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-create-auth:not(:disabled):hover {
+    background: #237a37;
+}
+
+.col-akun {
+    text-align: center;
+    width: 100px;
+}
+
+.auth-checkbox {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--users-success);
+>>>>>>> 3d00068 (Initial commit Web ERP)
 }
