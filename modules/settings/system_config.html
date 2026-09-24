@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konfigurasi Sistem - DMB ERP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        body { 
+            background-color: #f8fafc; 
+        }
+
+        #full-container { 
+            max-width: 1400px; 
+            margin: 0 auto; 
+            padding: 0 20px 20px 20px; 
+        }
+
+        /* 1. FREEZE / STICKY HEADER UTAMA */
+        .sticky-main-header {
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+            background-color: #f8fafc; /* Menyamakan warna latar agar konten di bawahnya tertutup sempurna saat di-scroll */
+            padding-top: 15px;
+            padding-bottom: 15px;
+        }
+
+        /* STYLING CARD & TAB SUB-PAGE */
+        .config-card { 
+            background: #ffffff; 
+            border-radius: 10px; 
+            border: 1px solid #e2e8f0; 
+        }
+
+        .config-card-header { 
+            padding: 14px 20px; 
+            border-bottom: 1px solid #e2e8f0; 
+            font-weight: 700; 
+            font-size: 0.95rem; 
+        }
+
+        .nav-pills .nav-link {
+            font-weight: 600;
+            color: #64748b;
+            border-radius: 8px;
+            padding: 8px 16px;
+            transition: all 0.2s ease;
+        }
+
+        .nav-pills .nav-link.active {
+            background-color: #0d6efd;
+            color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(13, 110, 253, 0.2);
+        }
+
+        /* 2. FREEZE / STICKY TABEL HEADER */
+        .table-responsive-scroll {
+            max-height: calc(100vh - 280px); /* Ketinggian dinamis menyesuaikan layar */
+            min-height: 350px;
+            overflow-y: auto;
+        }
+
+        .table-responsive-scroll table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f8fafc !important; /* Mencegah sel data terlihat transparan di bawah header */
+            z-index: 10;
+            box-shadow: inset 0 -1px 0 #dee2e6; /* Menjaga garis border bawah header tetap konsisten saat di-scroll */
+        }
+    </style>
+</head>
+<body>
+
+<div id="full-container">
+
+    <!-- HEADER UTAMA (POSISI FROZEN / STICKY) -->
+    <div class="sticky-main-header">
+        <header class="d-flex justify-content-between align-items-center bg-white p-3 rounded-3 shadow-sm border mb-0">
+            <div class="d-flex align-items-center gap-3">
+                <a href="../../index.html" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>Kembali</span>
+                </a>
+                <div class="vr"></div>
+                <h6 class="mb-0 fw-bold text-dark">Konfigurasi Sistem</h6>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="bg-danger text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+                    <i class="fa-solid fa-code"></i>
+                </div>
+                <div class="text-start d-none d-sm-block">
+                    <div class="fw-bold small lh-1">Maintenance Role</div>
+                </div>
+            </div>
+        </header>
+    </div>
+
+    <!-- TAB NAVIGASI SUB-PAGE -->
+    <ul class="nav nav-pills gap-2 mb-3 bg-white p-2 rounded-3 border shadow-sm" id="configSubPageTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-roles-btn" data-bs-toggle="pill" data-bs-target="#subpage-roles" type="button" role="tab">
+                <i class="fa-solid fa-user-gear me-2"></i>1. Peran Pengguna
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-menus-btn" data-bs-toggle="pill" data-bs-target="#subpage-menus" type="button" role="tab">
+                <i class="fa-solid fa-bars-staggered me-2"></i>2. Menu Aplikasi
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-permissions-btn" data-bs-toggle="pill" data-bs-target="#subpage-permissions" type="button" role="tab">
+                <i class="fa-solid fa-shield-halved me-2"></i>3. Matriks Hak Akses
+            </button>
+        </li>
+    </ul>
+
+    <!-- KONTEN SUB-PAGE (TAB PANES) -->
+    <div class="tab-content" id="configSubPageContent">
+
+        <!-- SUB-PAGE 1: PERAN PENGGUNA -->
+        <div class="tab-pane fade show active" id="subpage-roles" role="tabpanel">
+            <div class="config-card shadow-sm">
+                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
+                    <span><i class="fa-solid fa-user-gear text-primary me-2"></i>Manajemen Peran Pengguna (Role)</span>
+                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openRoleModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Role</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th style="width: 80px;">ID</th>
+                                    <th style="width: 250px;">Nama Role</th>
+                                    <th>Deskripsi</th>
+                                    <th style="width: 120px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rolesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUB-PAGE 2: MENU APLIKASI -->
+        <div class="tab-pane fade" id="subpage-menus" role="tabpanel">
+            <div class="config-card shadow-sm">
+                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
+                    <span><i class="fa-solid fa-bars-staggered text-primary me-2"></i>Manajemen Menu Aplikasi</span>
+                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openMenuModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Menu</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th style="width: 100px;">Kode</th>
+                                    <th>Nama Menu</th>
+                                    <th>Kategori</th>
+                                    <th style="width: 120px;">Status</th>
+                                    <th style="width: 120px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="menusTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SUB-PAGE 3: MATRIKS HAK AKSES -->
+        <div class="tab-pane fade" id="subpage-permissions" role="tabpanel">
+            <div class="config-card shadow-sm">
+                <div class="config-card-header bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span><i class="fa-solid fa-shield-halved text-primary me-2"></i>Matriks Hak Akses Role</span>
+                        <span class="badge bg-warning text-dark"><i class="fa-solid fa-circle-info me-1"></i>Sistem otomatis memuat menu, cukup centang untuk menambah hak akses.</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="small fw-bold mb-0">Pilih Role:</label>
+                        <select id="permissionRoleSelect" class="form-select form-select-sm border-primary fw-semibold" style="width: 250px;" onchange="loadPermissionsMatrix()"></select>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll">
+                        <table class="table table-bordered table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th class="text-start">Nama Menu</th>
+                                    <th>Role yang Dipilih</th>
+                                    <th style="width: 130px;">Lihat (View)</th>
+                                    <th style="width: 130px;">Tambah (Create)</th>
+                                    <th style="width: 130px;">Edit (Update)</th>
+                                    <th style="width: 130px;">Hapus (Delete)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="permissionsMatrixBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer text-end bg-white border-top p-3">
+                    <button class="btn btn-success fw-semibold px-4" onclick="savePermissionsBulk()"><i class="fa-solid fa-floppy-disk me-2"></i>Simpan Perubahan Hak Akses</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- MODAL ROLE -->
+<div class="modal fade" id="modalRole" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Tambah Role Baru</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formRole" onsubmit="handleSaveRole(event)">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="small fw-bold">Nama Role <span class="text-danger">*</span></label>
+                        <input type="text" id="f_role_name" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="small fw-bold">Deskripsi <span class="text-danger">*</span></label>
+                        <input type="text" id="f_role_desc" class="form-control" required>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL MENU -->
+<div class="modal fade" id="modalMenu" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Tambah Menu Aplikasi Baru</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formMenu" onsubmit="handleSaveMenu(event)">
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-6 mb-2">
+                            <label class="small fw-bold">Kode Menu <span class="text-danger">*</span></label>
+                            <input type="text" id="f_menu_code" class="form-control form-control-sm" placeholder="M-01" required>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="small fw-bold">Kategori <span class="text-danger">*</span></label>
+                            <input type="text" id="f_menu_category" class="form-control form-control-sm" placeholder="HRD / Settings" required>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="small fw-bold">Nama Menu <span class="text-danger">*</span></label>
+                            <input type="text" id="f_menu_name" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="small fw-bold">Path URL <span class="text-danger">*</span></label>
+                            <input type="text" id="f_menu_url" class="form-control form-control-sm" placeholder="modules/..." required>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="small fw-bold">Icon Class <span class="text-danger">*</span></label>
+                            <input type="text" id="f_menu_icon" class="form-control form-control-sm" placeholder="fa-solid fa-users" required>
+                        </div>
+                        <div class="col-6 mb-2">
+                            <label class="small fw-bold">Sort Order (No. Urut) <span class="text-danger">*</span></label>
+                            <input type="number" id="f_menu_sort" class="form-control form-control-sm" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Status Aktif</label>
+                            <select id="f_menu_active" class="form-select form-select-sm">
+                                <option value="true">Aktif</option>
+                                <option value="false">Non-Aktif</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../../js/supabase.js"></script>
+<script src="../../js/auth.js"></script>
+<script src="../../js/module/settings/system_config.js"></script>
+</body>
+</html>

@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Hasil Borong - DMB ERP</title>
+
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="../../css/base.css" rel="stylesheet">
+    <link href="../../css/components.css" rel="stylesheet">
+    <link href="../../css/layout.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-primary: #2b6cb0;
+            --bg-primary-dark: #1e4e8c;
+            --bg-bg-soft: #e1ecf5;
+            --bg-border: #d3dfea;
+            --bg-text-main: #1f2d3d;
+            --bg-text-muted: #6b7c93;
+            --bg-radius: 8px;
+        }
+
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--bg-text-main);
+        }
+
+        .bg-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--bg-border);
+            flex-shrink: 0;
+        }
+        .btn-back {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--bg-border);
+            background: var(--bg-bg-soft);
+            color: var(--bg-primary-dark);
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--bg-primary); color: #fff; }
+        .bg-header-title { font-size: 18px; font-weight: 600; margin: 0; }
+
+        .bg-tabs-wrapper {
+            padding: 16px 24px 0;
+            background: #fff;
+            border-bottom: 1px solid var(--bg-border);
+            flex-shrink: 0;
+        }
+        .nav-tabs { border-bottom: none; }
+        .nav-tabs .nav-link {
+            border: none;
+            border-bottom: 3px solid transparent;
+            color: var(--bg-text-muted);
+            font-weight: 600;
+            font-size: 14px;
+            padding: 10px 18px;
+        }
+        .nav-tabs .nav-link.active {
+            color: var(--bg-primary-dark);
+            border-bottom-color: var(--bg-primary);
+            background: none;
+        }
+
+        .bg-main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            padding: 20px 24px;
+            overflow: hidden;
+        }
+        .tab-content { flex: 1; min-height: 0; display: flex; }
+        .tab-pane { display: none; flex-direction: column; flex: 1; min-height: 0; width: 100%; }
+        .tab-pane.active { display: flex; }
+
+        .bg-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+        .bg-filter-wrapper { position: relative; }
+        .btn-filter {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            border: 1px solid var(--bg-border);
+            border-radius: var(--bg-radius);
+            padding: 8px 16px;
+            font-size: 14px;
+            color: var(--bg-text-main);
+            cursor: pointer;
+        }
+        .btn-filter:hover { border-color: var(--bg-primary); }
+        .filter-count-badge {
+            background: var(--bg-primary);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 999px;
+            padding: 1px 7px;
+        }
+
+        .bg-filter-panel {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            width: 320px;
+            background: #fff;
+            border: 1px solid var(--bg-border);
+            border-radius: var(--bg-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+            z-index: 60;
+            max-height: 460px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .filter-group { border-bottom: 1px solid var(--bg-border); padding: 12px 14px; }
+        .filter-group:last-of-type { border-bottom: none; }
+        .filter-group-label {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--bg-text-main);
+            margin-bottom: 8px;
+            display: block;
+        }
+        .filter-select-input {
+            width: 100%;
+            border: 1px solid var(--bg-border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 13px;
+            outline: none;
+        }
+        .filter-select-input:focus { border-color: var(--bg-primary); }
+
+        .filter-group-header {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: none;
+            border: none;
+            padding: 0 0 8px 0;
+            font-size: 12.5px;
+            font-weight: 700;
+            color: var(--bg-text-main);
+            cursor: pointer;
+        }
+        .filter-group-header i {
+            font-size: 11px;
+            color: var(--bg-text-muted);
+            transition: transform 0.15s ease;
+        }
+        .filter-group-header.expanded i { transform: rotate(180deg); }
+
+        .filter-group-body-collapsible { display: none; flex-direction: column; }
+        .filter-group-body-collapsible.expanded { display: flex; }
+
+        .filter-inline-search {
+            width: 100%;
+            border: 1px solid var(--bg-border);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-size: 12.5px;
+            outline: none;
+            margin-bottom: 8px;
+        }
+        .filter-inline-search:focus { border-color: var(--bg-primary); }
+
+        .filter-checkbox-list { max-height: 150px; overflow-y: auto; }
+        .filter-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            font-size: 13px;
+        }
+        .filter-checkbox-item input[type="checkbox"] { accent-color: var(--bg-primary); cursor: pointer; }
+
+        .filter-panel-footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-top: 1px solid var(--bg-border);
+            background: var(--bg-bg-soft);
+            border-radius: 0 0 var(--bg-radius) var(--bg-radius);
+            position: sticky;
+            bottom: 0;
+        }
+        .btn-filter-reset { background: none; border: none; font-size: 13px; color: var(--bg-text-muted); cursor: pointer; }
+        .btn-filter-reset:hover { color: #d64545; }
+        .btn-filter-apply {
+            background: var(--bg-primary);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-filter-apply:hover { background: var(--bg-primary-dark); }
+
+        .bg-table-wrapper {
+            background: #fff;
+            border: 1px solid var(--bg-border);
+            border-radius: var(--bg-radius);
+            overflow: auto;
+            flex: 1;
+            min-height: 0;
+        }
+        .bg-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .bg-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--bg-bg-soft);
+            color: var(--bg-text-main);
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 2px solid var(--bg-border);
+            white-space: nowrap;
+        }
+        .bg-table tbody td {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--bg-border);
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .bg-table tbody tr:hover { background: #f7fafc; }
+        .bg-table tbody tr.row-clickable { cursor: pointer; }
+        .col-no { width: 50px; text-align: center; }
+        .row-loading td, .row-empty td { text-align: center; padding: 30px; color: var(--bg-text-muted); white-space: normal; }
+        .data-empty-cell { color: var(--bg-text-muted); font-style: italic; }
+
+        .badge-status {
+            font-size: 11.5px;
+            font-weight: 700;
+            border-radius: 999px;
+            padding: 3px 10px;
+            display: inline-block;
+        }
+        .badge-open { background: #fdf1e2; color: #b9660b; }
+        .badge-close { background: #f1f3f5; color: var(--bg-text-muted); }
+
+        .bg-pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-top: 16px;
+            flex-shrink: 0;
+        }
+        .pagination-btn {
+            min-width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid var(--bg-border);
+            background: #fff;
+            border-radius: 6px;
+            font-size: 13px;
+            color: var(--bg-text-main);
+            cursor: pointer;
+        }
+        .pagination-btn:hover { border-color: var(--bg-primary); }
+        .pagination-btn.active { background: var(--bg-primary); border-color: var(--bg-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* --- Modal Detail Batch --- */
+        .modal-content { border-radius: var(--bg-radius); border: none; }
+        .modal-header { border-bottom: 1px solid var(--bg-border); }
+        .modal-title { font-size: 16px; font-weight: 700; }
+        .modal-section-title {
+            font-size: 13px;
+            font-weight: 700;
+            margin: 16px 0 8px;
+            color: var(--bg-text-main);
+        }
+        .modal-section-title:first-of-type { margin-top: 0; }
+        .modal-info-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px 16px;
+            font-size: 13px;
+        }
+        .modal-info-item .label { color: var(--bg-text-muted); font-size: 11.5px; }
+        .modal-info-item .value { font-weight: 600; }
+
+        .modal-detail-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+        .modal-detail-table th {
+            background: var(--bg-bg-soft);
+            padding: 8px 10px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .modal-detail-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid var(--bg-border);
+        }
+        .modal-qty-input {
+            width: 90px;
+            padding: 4px 8px;
+            border: 1px solid var(--bg-border);
+            border-radius: 4px;
+            font-size: 12.5px;
+        }
+
+        @media (max-width: 640px) {
+            .bg-filter-panel { width: 100%; left: 0; right: 0; }
+            .modal-info-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="bg-header">
+        <a href="../../operations/stg/dashboard_stg.html" class="btn-back" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h1 class="bg-header-title">Laporan Hasil Borong</h1>
+    </header>
+
+    <!-- =============================================== -->
+    <!-- TABS                                              -->
+    <!-- =============================================== -->
+    <div class="bg-tabs-wrapper">
+        <ul class="nav nav-tabs" id="bgTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabDataHasil" type="button">
+                    Data Hasil Borong
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPendingBorong" type="button">
+                    Pending <span class="filter-count-badge d-none" id="pendingCountBadgeBorong">0</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabQtyLoading" type="button">
+                    Qty Loading & Corrugator <span class="filter-count-badge d-none" id="qtyCountBadgeBorong">0</span>
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <main class="bg-main">
+        <div class="tab-content">
+
+            <!-- =============================================== -->
+            <!-- TAB: DATA HASIL BORONG                            -->
+            <!-- =============================================== -->
+            <div class="tab-pane active" id="tabDataHasil">
+
+                <div class="bg-toolbar">
+                    <div class="bg-filter-wrapper">
+                        <button type="button" class="btn-filter" id="btnFilterToggleDataHasil">
+                            <i class="fa-solid fa-filter"></i>
+                            <span>Filter</span>
+                            <span class="filter-count-badge d-none" id="filterCountBadgeDataHasil">0</span>
+                        </button>
+
+                        <div class="bg-filter-panel d-none" id="filterPanelDataHasil">
+
+                            <!-- Diisi dinamis oleh borong.js: Kode Batch, Petugas Input -->
+                            <div id="filterFieldGroupsDataHasil"></div>
+
+                            <div class="filter-group">
+                                <label class="filter-group-label">Periode</label>
+                                <select class="filter-select-input" id="filterPeriodeDataHasil">
+                                    <option value="">-- Periode Terbaru --</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-panel-footer">
+                                <button type="button" class="btn-filter-reset" id="btnFilterResetDataHasil">Reset</button>
+                                <button type="button" class="btn-filter-apply" id="btnFilterApplyDataHasil">Terapkan</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-filter" id="btnDownloadDataHasil">
+                        <i class="fa-solid fa-file-arrow-down"></i>
+                        <span>Download Excel</span>
+                    </button>
+                </div>
+
+                <div class="bg-table-wrapper">
+                    <table class="bg-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th>
+                                <th>Kode Batch</th>
+                                <th>Grup Kerja</th>
+                                <th>Tanggal</th>
+                                <th>Shift</th>
+                                <th>Petugas Input</th>
+                                <th>Karu</th>
+                                <th>Status Payroll</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataHasilTableBody">
+                            <tr class="row-loading">
+                                <td colspan="8"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-pagination" id="dataHasilPagination"></div>
+            </div>
+
+            <!-- =============================================== -->
+            <!-- TAB: PENDING (khusus KARU + Maintenance/Superadmin) -->
+            <!-- =============================================== -->
+            <div class="tab-pane" id="tabPendingBorong">
+
+                <div class="bg-table-wrapper">
+                    <table class="bg-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th>
+                                <th>Kode Batch</th>
+                                <th>Grup Kerja</th>
+                                <th>Tanggal</th>
+                                <th>Shift</th>
+                                <th>Petugas Input</th>
+                                <th>Karu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pendingBorongTableBody">
+                            <tr class="row-loading">
+                                <td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-pagination" id="pendingBorongPagination"></div>
+            </div>
+
+            <!-- =============================================== -->
+            <!-- TAB: QTY LOADING & CORRUGATOR (khusus Admin STG + Maintenance/Superadmin) -->
+            <!-- =============================================== -->
+            <div class="tab-pane" id="tabQtyLoading">
+
+                <div class="bg-table-wrapper">
+                    <table class="bg-table">
+                        <thead>
+                            <tr>
+                                <th class="col-no">No</th>
+                                <th>Kode Batch</th>
+                                <th>Grup Kerja</th>
+                                <th>Tanggal</th>
+                                <th>Shift</th>
+                                <th>Petugas Input</th>
+                                <th>Karu</th>
+                            </tr>
+                        </thead>
+                        <tbody id="qtyLoadingTableBody">
+                            <tr class="row-loading">
+                                <td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-pagination" id="qtyLoadingPagination"></div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- =============================================== -->
+    <!-- MODAL DETAIL BATCH (dipakai Pending & Qty Loading) -->
+    <!-- Mode ditentukan JS: readonly+Approve/Reject, atau  -->
+    <!-- qty terbuka+Simpan                                 -->
+    <!-- =============================================== -->
+    <div class="modal fade" id="modalDetailBatch" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalDetailTitle">Detail Batch</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modalBatchId">
+
+                    <div class="modal-info-grid" style="grid-template-columns: repeat(4, 1fr);">
+                        <div class="modal-info-item">
+                            <div class="label">Kode Batch</div>
+                            <div class="value" id="modalInfoKodeBatch">-</div>
+                        </div>
+                        <div class="modal-info-item">
+                            <div class="label">Tanggal</div>
+                            <div class="value" id="modalInfoTanggal">-</div>
+                        </div>
+                        <div class="modal-info-item">
+                            <div class="label">Petugas Input</div>
+                            <div class="value" id="modalInfoPetugas">-</div>
+                        </div>
+                        <div class="modal-info-item">
+                            <div class="label">Karu</div>
+                            <div class="value" id="modalInfoKaru">-</div>
+                        </div>
+                    </div>
+
+                    <div class="modal-section-title">Data Borong Artikel</div>
+                    <div style="overflow-x:auto;" id="modalArtikelTableContainer">
+                        <!-- Tabel di-generate dinamis oleh borong.js (kolom beda per tab) -->
+                    </div>
+
+                    <div class="modal-section-title">Data Borong Employee</div>
+                    <div style="overflow-x:auto;" id="modalEmployeeTableContainer">
+                        <!-- Tabel di-generate dinamis oleh borong.js (matrix untuk grup Manual) -->
+                    </div>
+                </div>
+                <div class="modal-footer" id="modalDetailFooter">
+                    <!-- Tombol diisi dinamis oleh JS tergantung tab (Pending / Qty Loading) -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../../js/supabase.js"></script>
+    <script src="../../../js/module/operations/stg/borong.js"></script>
+</body>
+</html>
