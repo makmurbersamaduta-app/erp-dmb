@@ -344,5 +344,5 @@ async function handleLogout() {
     }
     sessionStorage.removeItem("erp_session");
     localStorage.removeItem("erp_session");
-    window.location.href = "/login.html";
+    window.location.href = "./login.html";
 }
