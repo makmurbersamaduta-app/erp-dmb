@@ -844,7 +844,8 @@ async function handleDownloadDataMemo() {
             "Jam Kerja": r.jam_kerja,
             "Shift": formatShift(r.shift_kerja),
             "Jenis Pekerjaan": r.jenis_pekerjaan,
-            "Deskripsi": r.note_kerja
+            "Deskripsi": r.note_kerja,
+            "Jenis Memo": r.jenis_memo
         }));
 
         const wb = XLSX.utils.book_new();
