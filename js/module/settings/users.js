@@ -161,7 +161,7 @@ async function loadReferenceData() {
 // ===================================================
 async function loadUsersPage() {
     const tbody = document.getElementById("usersTableBody");
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="8"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
+    tbody.innerHTML = `<tr class="row-loading"><td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
 
     try {
         let query = supabaseClient
@@ -207,7 +207,7 @@ async function loadUsersPage() {
 
     } catch (err) {
         console.error("Gagal memuat data users:", err);
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="8">Gagal memuat data: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Gagal memuat data: ${err.message}</td></tr>`;
     }
 }
 
@@ -329,7 +329,7 @@ function renderTable() {
     const tbody = document.getElementById("usersTableBody");
 
     if (currentPageData.length === 0) {
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="8">Tidak ada data ditemukan.</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Tidak ada data ditemukan.</td></tr>`;
         return;
     }
 
@@ -390,12 +390,26 @@ function renderTable() {
         return `<i class="fa-solid fa-circle-check" style="color: var(--users-success);" title="Akun login aktif & tersinkron"></i>`;
     })()}
 </td>
+                <td class="col-reset-pw">
+                    ${u.must_change_password
+                        ? `<button type="button" class="btn btn-sm btn-danger fw-bold reset-pw-btn" data-user-id="${u.user_id}" data-username="${u.username}" title="User meminta reset password! Klik untuk menyetujui.">
+                               <i class="fa-solid fa-key me-1"></i> Reset Password
+                           </button>`
+                        : `<button type="button" class="btn btn-sm btn-secondary disabled" disabled title="Tidak ada permintaan reset password">
+                               <i class="fa-solid fa-key me-1"></i> Reset Password
+                           </button>`
+                    }
+                </td>
             </tr>
         `;
     }).join("");
 
     tbody.querySelectorAll(".role-select").forEach(select => {
         select.addEventListener("change", handleRoleChange);
+    });
+
+        tbody.querySelectorAll(".reset-pw-btn").forEach(btn => {
+        btn.addEventListener("click", () => handleAdminResetPassword(btn.dataset.userId, btn.dataset.username));
     });
 
     tbody.querySelectorAll(".auth-checkbox").forEach(cb => {
@@ -622,4 +636,33 @@ function showToast(message, type = "success") {
     const toast = new bootstrap.Toast(toastEl, { delay: 4000 });
     toast.show();
     toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+}
+// ===================================================
+// RESET PASSWORD (dipicu admin dari tombol merah)
+// Memakai Edge Function sync-auth yang sudah ada (aksi
+// "reset_password") -- bukan logika baru, reuse infrastruktur
+// yang sudah terbukti jalan.
+// ===================================================
+async function handleAdminResetPassword(userId, username) {
+    const konfirmasi = confirm(
+        `Reset password untuk ${username}?\n\nPassword akan dikembalikan ke pola standar (${username}123).`
+    );
+    if (!konfirmasi) return;
+
+    try {
+        const { data, error } = await supabaseClient.functions.invoke("sync-auth", {
+            body: { action: "reset_password", user_id: userId }
+        });
+
+        if (error || !data?.success) {
+            throw new Error(data?.message || error?.message || "Gagal mereset password.");
+        }
+
+        showToast("Password berhasil direset ke pola standar.", "success");
+        await loadUsersPage();
+
+    } catch (err) {
+        console.error("Gagal reset password:", err);
+        alert("Gagal mereset password: " + err.message);
+    }
 }
