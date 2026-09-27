@@ -294,6 +294,60 @@ Deno.serve(async (req) => {
             return jsonResponse({ success: true, message: "Akun auth berhasil disinkron ulang." });
         }
 
+        // ===================================================
+        // AKSI: SELF_RESET_PASSWORD -- user set password baru sendiri
+        // lewat halaman Lupa Password (tanpa Auth session aktif)
+        // Hanya boleh jalan kalau must_change_password = true --
+        // ini pagar keamanan utama aksi ini (lihat catatan resiko
+        // yang sudah didiskusikan & diterima).
+        // ===================================================
+        if (action === "self_reset_password") {
+            const newPassword = rawBody.new_password;
+
+            if (!newPassword || newPassword.length < 6) {
+                return jsonResponse({ success: false, message: "Password baru minimal 6 karakter." }, 400);
+            }
+
+            // Pagar utama: tolak kalau user ini TIDAK sedang dalam status wajib ganti password
+            const { data: freshUserRow, error: recheckError } = await supabaseAdmin
+                .from("users")
+                .select("must_change_password, auth_uid")
+                .eq("id", user_id)
+                .single();
+
+            if (recheckError || !freshUserRow) {
+                return jsonResponse({ success: false, message: "User tidak ditemukan." }, 404);
+            }
+
+            if (freshUserRow.must_change_password !== true) {
+                return jsonResponse({ success: false, message: "Akun ini tidak dalam status wajib ganti password." }, 403);
+            }
+
+            if (!freshUserRow.auth_uid) {
+                return jsonResponse({ success: false, message: "Akun ini belum memiliki akun auth." }, 400);
+            }
+
+            const { error: pwError } = await supabaseAdmin.auth.admin.updateUserById(
+                freshUserRow.auth_uid,
+                { password: newPassword }
+            );
+
+            if (pwError) {
+                return jsonResponse({ success: false, message: `Gagal menyimpan password baru: ${pwError.message}` }, 500);
+            }
+
+            const { error: flagError } = await supabaseAdmin
+                .from("users")
+                .update({ must_change_password: false, updated_at: new Date().toISOString() })
+                .eq("id", user_id);
+
+            if (flagError) {
+                return jsonResponse({ success: false, message: `Password tersimpan, tapi gagal update status: ${flagError.message}` }, 500);
+            }
+
+            return jsonResponse({ success: true, message: "Password berhasil diperbarui. Silakan login dengan password baru." });
+        }
+
         return jsonResponse({ success: false, message: `Aksi '${action}' tidak dikenali.` }, 400);
 
     } catch (err) {
