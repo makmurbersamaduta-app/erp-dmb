@@ -118,7 +118,7 @@ function downloadBulkTemplate() {
 
     // B. Sheet Petunjuk / Note Acuan Pengisian Data (Panduan User)
     const guideData = [
-        { "Kategori Field": "STATUS KARYAWAN (Mandatory)", "Pilihan Nilai / Format": "Tetap, PKWT, PKWTT, Borongan, Freelance, Harian" },
+        { "Kategori Field": "STATUS KARYAWAN (Mandatory)", "Pilihan Nilai / Format": "PKWT, PKWTT, Borongan, Reliver" },
         { "Kategori Field": "JENIS KELAMIN (Mandatory)", "Pilihan Nilai / Format": "Laki-laki, Perempuan" },
         { "Kategori Field": "PENDIDIKAN (Mandatory)", "Pilihan Nilai / Format": "SD, SMP, SMA, D3, S1, S2" },
         { "Kategori Field": "AGAMA (Mandatory)", "Pilihan Nilai / Format": "Islam, Kristen, Katolik, Hindu, Buddha, Khonghucu" },
@@ -128,14 +128,17 @@ function downloadBulkTemplate() {
         { "Kategori Field": "--- DAFTAR ID MASTER ---", "Pilihan Nilai / Format": "--- Ambil ID Angka dari Master Data ---" }
     ];
 
-    // Sisipkan Daftar ID Master Cache jika tersedia
-    if (typeof masterCache !== "undefined") {
-        masterCache.branches.forEach(b => guideData.push({ "Kategori Field": "Cabang (branch_id)", "Pilihan Nilai / Format": `ID: ${b.id} -> ${b.branch_name}` }));
-        masterCache.cost_centers.forEach(c => guideData.push({ "Kategori Field": "Cost Center (costcenter_id)", "Pilihan Nilai / Format": `ID: ${c.id} -> ${c.costcenter_name}` }));
-        masterCache.departments.forEach(d => guideData.push({ "Kategori Field": "Departemen (departemen_id)", "Pilihan Nilai / Format": `ID: ${d.id} -> ${d.department_name}` }));
-        masterCache.areas.forEach(a => guideData.push({ "Kategori Field": "Area (area_id)", "Pilihan Nilai / Format": `ID: ${a.id} -> ${a.area_name}` }));
-        masterCache.bagians.forEach(bg => guideData.push({ "Kategori Field": "Bagian (bagian_id)", "Pilihan Nilai / Format": `ID: ${bg.id} -> ${bg.bagian_name}` }));
-        masterCache.jabatans.forEach(j => guideData.push({ "Kategori Field": "Jabatan (jabatan_id)", "Pilihan Nilai / Format": `ID: ${j.id} -> ${j.jabatan_name}` }));
+    // PERBAIKAN: sebelumnya cek "masterCache" -- objek itu TIDAK ADA di
+    // halaman ini (employee_create.js pakai variabel terpisah per master:
+    // masterBranches, masterCostCenters, dst), jadi bagian daftar ID di
+    // bawah ini SELALU kosong. Sekarang pakai nama variabel yang benar.
+    if (typeof masterBranches !== "undefined") {
+        (masterBranches || []).forEach(b => guideData.push({ "Kategori Field": "Cabang (branch_id)", "Pilihan Nilai / Format": `ID: ${b.id} -> ${b.branch_name}` }));
+        (masterCostCenters || []).forEach(c => guideData.push({ "Kategori Field": "Cost Center (costcenter_id)", "Pilihan Nilai / Format": `ID: ${c.id} -> ${c.costcenter_name}` }));
+        (masterDepartments || []).forEach(d => guideData.push({ "Kategori Field": "Departemen (departemen_id)", "Pilihan Nilai / Format": `ID: ${d.id} -> ${d.department_name}` }));
+        (masterAreas || []).forEach(a => guideData.push({ "Kategori Field": "Area (area_id)", "Pilihan Nilai / Format": `ID: ${a.id} -> ${a.area_name}` }));
+        (masterBagians || []).forEach(bg => guideData.push({ "Kategori Field": "Bagian (bagian_id)", "Pilihan Nilai / Format": `ID: ${bg.id} -> ${bg.bagian_name}` }));
+        (masterJabatans || []).forEach(j => guideData.push({ "Kategori Field": "Jabatan (jabatan_id)", "Pilihan Nilai / Format": `ID: ${j.id} -> ${j.jabatan_name}` }));
     }
 
     const wb = XLSX.utils.book_new();
@@ -231,7 +234,14 @@ async function handleBulkExcelUpload() {
                     continue;
                 }
 
-                // Payload Insert hrd.employees
+                // Payload untuk RPC create_employee_with_assignment -- SAMA
+                // PERSIS dengan yang dipakai form hire satu-satu di
+                // employee_create.js. Sebelumnya di sini pakai 2 insert
+                // manual terpisah (employees lalu employee_assignments)
+                // TANPA transaksi -- kalau insert kedua gagal, baris
+                // employees yang PERTAMA sudah kepalang tersimpan (data
+                // karyawan tanpa penempatan/"hantu"). RPC ini membungkus
+                // keduanya dalam 1 transaksi (all-or-nothing).
                 const empPayload = {
                     nik_karyawan: nikKaryawanVal ? String(nikKaryawanVal) : null,
                     email: nikKaryawanVal ? `${String(nikKaryawanVal).toLowerCase()}@supabase.mail` : null,
@@ -257,21 +267,7 @@ async function handleBulkExcelUpload() {
                     is_active: true
                 };
 
-                const { data: insertedEmp, error: errEmp } = await supabaseClient.schema('hrd')
-                    .from('employees')
-                    .insert([empPayload])
-                    .select()
-                    .single();
-
-                if (errEmp) {
-                    failCount++;
-                    errorLogs.push(`Baris ${rowNum} (Employees): ${errEmp.message}`);
-                    continue;
-                }
-
-                // Payload Insert hrd.employee_assignments
                 const assignPayload = {
-                    employee_id: insertedEmp.id,
                     action_type: 'NEW_HIRE',
                     branch_id: parseInt(branchId),
                     costcenter_id: parseInt(costcenterId),
@@ -284,13 +280,16 @@ async function handleBulkExcelUpload() {
                     is_active: true
                 };
 
-                const { error: errAssign } = await supabaseClient.schema('hrd')
-                    .from('employee_assignments')
-                    .insert([assignPayload]);
+                const { error: rpcError } = await supabaseClient
+                    .schema('hrd')
+                    .rpc('create_employee_with_assignment', {
+                        employee_data: empPayload,
+                        assignment_data: assignPayload
+                    });
 
-                if (errAssign) {
+                if (rpcError) {
                     failCount++;
-                    errorLogs.push(`Baris ${rowNum} (Assignment): ${errAssign.message}`);
+                    errorLogs.push(`Baris ${rowNum}: ${rpcError.message}`);
                 } else {
                     successCount++;
                 }
@@ -308,14 +307,13 @@ async function handleBulkExcelUpload() {
             if (modalInstance) modalInstance.hide();
             fileInput.value = "";
 
-            if (typeof loadDirectoryData === "function") {
-                await loadDirectoryData();
-            }
-
-            if (btnProcess) {
-                btnProcess.disabled = false;
-                btnProcess.innerHTML = origText;
-            }
+            // PERBAIKAN UTAMA: sebelumnya kode ini memanggil loadDirectoryData()
+            // -- fungsi itu cuma ada di directory.js, yang TIDAK dimuat di
+            // halaman ini (employee_create.html). Jadi setelah bulk selesai,
+            // user diam saja di halaman ini tanpa redirect apapun. Sekarang
+            // diarahkan balik ke directory.html, sama seperti alur
+            // "Simpan & Kembali" di employee_create.js.
+            window.location.href = "directory.html";
 
         } catch (parseErr) {
             alert("Gagal memproses file Excel: " + parseErr.message);

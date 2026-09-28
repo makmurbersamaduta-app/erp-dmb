@@ -391,14 +391,25 @@ function renderTable() {
     })()}
 </td>
                 <td class="col-reset-pw">
-                    ${u.must_change_password
-                        ? `<button type="button" class="btn btn-sm btn-danger fw-bold reset-pw-btn" data-user-id="${u.user_id}" data-username="${u.username}" title="User meminta reset password! Klik untuk menyetujui.">
-                               <i class="fa-solid fa-key me-1"></i> Reset Password
-                           </button>`
-                        : `<button type="button" class="btn btn-sm btn-secondary disabled" disabled title="Tidak ada permintaan reset password">
-                               <i class="fa-solid fa-key me-1"></i> Reset Password
-                           </button>`
-                    }
+                    ${(() => {
+                        // must_change_password sekarang text 3-status, bukan boolean:
+                        // 'open'     -> karyawan mengajukan, MENUNGGU admin -> tombol aktif merah
+                        // 'progress' -> admin sudah approve, MENUNGGU karyawan ganti password -> disabled, info beda
+                        // 'close'    -> normal, tidak ada permintaan -> disabled
+                        if (u.must_change_password === "open") {
+                            return `<button type="button" class="btn btn-sm btn-danger fw-bold reset-pw-btn" data-user-id="${u.user_id}" data-username="${u.username}" title="Karyawan mengajukan reset password! Klik untuk menyetujui.">
+                                        <i class="fa-solid fa-key me-1"></i> Reset Password
+                                    </button>`;
+                        }
+                        if (u.must_change_password === "progress") {
+                            return `<button type="button" class="btn btn-sm btn-warning disabled" disabled title="Sudah direset admin, menunggu karyawan membuat password baru">
+                                        <i class="fa-solid fa-hourglass-half me-1"></i> Menunggu User
+                                    </button>`;
+                        }
+                        return `<button type="button" class="btn btn-sm btn-secondary disabled" disabled title="Tidak ada permintaan reset password">
+                                    <i class="fa-solid fa-key me-1"></i> Reset Password
+                                </button>`;
+                    })()}
                 </td>
             </tr>
         `;
@@ -658,7 +669,7 @@ async function handleAdminResetPassword(userId, username) {
             throw new Error(data?.message || error?.message || "Gagal mereset password.");
         }
 
-        showToast("Password berhasil direset ke pola standar.", "success");
+        showToast(`Password direset. Informasikan ke ${username} untuk login & buat password baru.`, "success");
         await loadUsersPage();
 
     } catch (err) {

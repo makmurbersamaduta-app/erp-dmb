@@ -444,6 +444,52 @@ async function loadDirectoryData() {
 // ============================================================================
 // 4. RENDER TABEL & PERHITUNGAN STATISTIK DENGAN FILTER & RBAC AKSI
 // ============================================================================
+
+// State pagination -- max 100 baris per halaman
+const DIRECTORY_ROWS_PER_PAGE = 100;
+let directoryCurrentPage = 1;
+let directorySortedFiltered = []; // hasil filter+sort TERAKHIR, dipakai ulang saat pindah halaman (tanpa hitung ulang filter)
+
+// Urutan prioritas Status Karyawan sesuai permintaan:
+// PKWTT & PKWT paling atas (tier sama), lalu Borongan, lalu Reliver.
+// Status lain (kosong/tidak dikenal) ditaruh paling bawah.
+const STATUS_SORT_PRIORITY = {
+    'pkwtt': 1,
+    'pkwt': 1,
+    'borongan': 2,
+    'reliver': 3
+};
+
+function sortEmployeesForDisplay(list) {
+    // Salin array dulu (jangan mutate langsung "filtered" asli)
+    return [...list].sort((a, b) => {
+        const assignA = getEmployeeAssignment(a.id, a.nik_karyawan);
+        const assignB = getEmployeeAssignment(b.id, b.nik_karyawan);
+
+        // 1. Prioritas Status Karyawan
+        const prioA = STATUS_SORT_PRIORITY[(assignA?.status_karyawan || '').toLowerCase()] ?? 99;
+        const prioB = STATUS_SORT_PRIORITY[(assignB?.status_karyawan || '').toLowerCase()] ?? 99;
+        if (prioA !== prioB) return prioA - prioB;
+
+        // 2. Branch (nama, bukan id -- supaya urutannya sesuai abjad nama cabang)
+        const branchA = masterCache.branches.find(b => b.id == assignA?.branch_id)?.branch_name || '';
+        const branchB = masterCache.branches.find(b => b.id == assignB?.branch_id)?.branch_name || '';
+        const branchCompare = branchA.localeCompare(branchB);
+        if (branchCompare !== 0) return branchCompare;
+
+        // 3. Cost Center
+        const ccA = masterCache.cost_centers.find(c => c.id == assignA?.costcenter_id)?.costcenter_name || '';
+        const ccB = masterCache.cost_centers.find(c => c.id == assignB?.costcenter_id)?.costcenter_name || '';
+        const ccCompare = ccA.localeCompare(ccB);
+        if (ccCompare !== 0) return ccCompare;
+
+        // 4. Jabatan
+        const jabA = masterCache.jabatans.find(j => j.id == assignA?.jabatan_id)?.jabatan_name || '';
+        const jabB = masterCache.jabatans.find(j => j.id == assignB?.jabatan_id)?.jabatan_name || '';
+        return jabA.localeCompare(jabB);
+    });
+}
+
 function renderDirectoryTable() {
     renderTableHeader();
 
@@ -488,17 +534,50 @@ function renderDirectoryTable() {
         return true;
     });
 
-    // Update Kartu Statistika Berdasarkan Data Terfilter
+    // Update Kartu Statistika Berdasarkan Data Terfilter (SEBELUM dipaging --
+    // statistik harus mencerminkan SEMUA hasil filter, bukan cuma 1 halaman)
     updateStatisticsCardsFiltered(filtered);
 
     if (filtered.length === 0) {
         tbody.innerHTML = `<tr><td colspan="100%" class="text-center py-5 text-muted">Tidak ada data karyawan yang sesuai dengan kriteria filter.</td></tr>`;
         if (recordInfo) recordInfo.textContent = "Menampilkan 0 data";
+        renderDirectoryPagination(0);
         return;
     }
 
+    // Urutkan sesuai Status Karyawan > Branch > Cost Center > Jabatan,
+    // simpan hasilnya supaya navigasi halaman tidak perlu filter+sort ulang.
+    directorySortedFiltered = sortEmployeesForDisplay(filtered);
+
+    // Setiap kali filter/pencarian/data berubah, kembali ke halaman 1 --
+    // supaya user tidak "nyasar" di halaman 5 saat hasil filter baru cuma 2 halaman.
+    directoryCurrentPage = 1;
+
+    renderDirectoryTableRows();
+}
+
+// ============================================================================
+// RENDER BARIS TABEL UNTUK HALAMAN AKTIF SAJA (dipanggil dari
+// renderDirectoryTable() maupun langsung dari tombol pindah halaman)
+// ============================================================================
+function renderDirectoryTableRows() {
+    const tbody = document.getElementById("tableBody");
+    const recordInfo = document.getElementById("recordInfo");
+    if (!tbody) return;
+
+    const totalRecords = directorySortedFiltered.length;
+    const totalPages = Math.max(1, Math.ceil(totalRecords / DIRECTORY_ROWS_PER_PAGE));
+
+    // Jaga-jaga: kalau currentPage kebablasan (mis. data berkurang), tarik balik ke batas valid
+    if (directoryCurrentPage > totalPages) directoryCurrentPage = totalPages;
+    if (directoryCurrentPage < 1) directoryCurrentPage = 1;
+
+    const startIdx = (directoryCurrentPage - 1) * DIRECTORY_ROWS_PER_PAGE;
+    const pageItems = directorySortedFiltered.slice(startIdx, startIdx + DIRECTORY_ROWS_PER_PAGE);
+
     let html = "";
-    filtered.forEach((emp, index) => {
+    pageItems.forEach((emp, i) => {
+        const index = startIdx + i; // nomor urut tetap berlanjut lintas halaman, bukan reset ke 1 tiap halaman
         const assign = getEmployeeAssignment(emp.id, emp.nik_karyawan);
 
         const deptObj = masterCache.departments.find(d => d.id == assign?.departemen_id);
@@ -575,7 +654,48 @@ function renderDirectoryTable() {
     });
 
     tbody.innerHTML = html;
-    if (recordInfo) recordInfo.textContent = `Menampilkan ${filtered.length} dari ${directoryEmployees.length} total data`;
+    if (recordInfo) recordInfo.textContent = `Menampilkan ${pageItems.length} dari ${totalRecords} data terfilter (Halaman ${directoryCurrentPage}/${totalPages})`;
+
+    renderDirectoryPagination(totalPages);
+}
+
+// ============================================================================
+// KONTROL PAGINATION -- tombol Prev/Next + info halaman, max 100 baris/halaman
+// ============================================================================
+function renderDirectoryPagination(totalPages) {
+    let paginationEl = document.getElementById("directoryPaginationControls");
+
+    // Elemen pagination belum ada di HTML lama -- buat sekali, taruh di
+    // card-footer, sejajar dengan info jumlah data.
+    if (!paginationEl) {
+        const footer = document.querySelector(".card-footer");
+        if (!footer) return;
+        paginationEl = document.createElement("div");
+        paginationEl.id = "directoryPaginationControls";
+        paginationEl.className = "d-flex align-items-center gap-2";
+        footer.appendChild(paginationEl);
+    }
+
+    if (totalPages <= 1) {
+        paginationEl.innerHTML = "";
+        return;
+    }
+
+    paginationEl.innerHTML = `
+        <button type="button" class="btn btn-sm btn-outline-secondary" ${directoryCurrentPage === 1 ? 'disabled' : ''} onclick="goToDirectoryPage(${directoryCurrentPage - 1})">
+            <i class="fa-solid fa-chevron-left"></i>
+        </button>
+        <span class="small fw-semibold text-muted">Halaman ${directoryCurrentPage} / ${totalPages}</span>
+        <button type="button" class="btn btn-sm btn-outline-secondary" ${directoryCurrentPage === totalPages ? 'disabled' : ''} onclick="goToDirectoryPage(${directoryCurrentPage + 1})">
+            <i class="fa-solid fa-chevron-right"></i>
+        </button>`;
+}
+
+// Dipanggil oleh tombol Prev/Next -- TIDAK filter+sort ulang, cukup slice
+// ulang dari directorySortedFiltered yang sudah dihitung sebelumnya (cepat).
+function goToDirectoryPage(page) {
+    directoryCurrentPage = page;
+    renderDirectoryTableRows();
 }
 
 // PERHITUNGAN KARTU DASHBOARD STATISTIK DENGAN FILTER
