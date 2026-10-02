@@ -115,6 +115,11 @@
                 <i class="fa-solid fa-shield-halved me-2"></i>3. Matriks Hak Akses
             </button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-zona-btn" data-bs-toggle="pill" data-bs-target="#subpage-zona" type="button" role="tab">
+                <i class="fa-solid fa-map-location-dot me-2"></i>4. Zona & Approval
+            </button>
+        </li>
     </ul>
 
     <!-- KONTEN SUB-PAGE (TAB PANES) -->
@@ -209,6 +214,82 @@
             </div>
         </div>
 
+        <!-- SUB-PAGE 4: ZONA & APPROVAL ROUTING -->
+        <div class="tab-pane fade" id="subpage-zona" role="tabpanel">
+
+            <!-- BAGIAN A: ZONA (referensi saja, tanpa CRUD) -->
+            <div class="config-card shadow-sm mb-3">
+                <div class="config-card-header bg-light">
+                    <span><i class="fa-solid fa-map text-primary me-2"></i>Daftar Zona (Referensi)</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll" style="max-height: 220px; min-height: auto;">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th>Nama Zona</th>
+                                    <th style="width: 150px;">Kode Zona</th>
+                                    <th style="width: 120px;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="zonasTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BAGIAN B: CAKUPAN ZONA (zona_coverage) -->
+            <div class="config-card shadow-sm mb-3">
+                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
+                    <span><i class="fa-solid fa-diagram-project text-primary me-2"></i>Cakupan Zona (Departemen + Area &rarr; Zona)</span>
+                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openZonaCoverageModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Cakupan</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th style="width: 130px;">Kode</th>
+                                    <th>Zona</th>
+                                    <th>Departemen</th>
+                                    <th>Area</th>
+                                    <th>Keterangan</th>
+                                    <th style="width: 100px;">Status</th>
+                                    <th style="width: 100px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="zonaCoverageTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BAGIAN C: SUPERVISOR ZONA (supervisor_zones) -->
+            <div class="config-card shadow-sm">
+                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
+                    <span><i class="fa-solid fa-user-shield text-primary me-2"></i>Supervisor per Zona (Approval Routing)</span>
+                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openSupervisorZoneModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Supervisor</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive-scroll">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="text-center">
+                                <tr>
+                                    <th>Nama Supervisor</th>
+                                    <th>Zona</th>
+                                    <th style="width: 150px;">Approval Level</th>
+                                    <th style="width: 100px;">Status</th>
+                                    <th style="width: 100px;">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="supervisorZonesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
     </div>
 </div>
 
@@ -301,6 +382,104 @@
                         <div class="col-12">
                             <label class="small fw-bold">Status Aktif</label>
                             <select id="f_menu_active" class="form-select form-select-sm">
+                                <option value="true">Aktif</option>
+                                <option value="false">Non-Aktif</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL CAKUPAN ZONA -->
+<div class="modal fade" id="modalZonaCoverage" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalZonaCoverageTitle">Tambah Cakupan Zona</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formZonaCoverage">
+                <div class="modal-body">
+                    <input type="hidden" id="zc_edit_id" value="">
+                    <div class="row g-2">
+                        <div class="col-12 mb-2" id="zc_zona_wrapper">
+                            <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
+                            <select id="zc_zona_id" class="form-select form-select-sm" onchange="updateZonaCoverageCodePreview()"></select>
+                        </div>
+                        <div class="col-6 mb-2" id="zc_dept_wrapper">
+                            <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
+                            <select id="zc_departemen_id" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-6 mb-2" id="zc_area_wrapper">
+                            <label class="small fw-bold">Area <span class="text-danger">*</span></label>
+                            <select id="zc_area_id" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="small fw-bold">Kode Cakupan <span class="badge bg-secondary-subtle text-secondary">Otomatis</span></label>
+                            <input type="text" id="zc_code_preview" class="form-control form-control-sm bg-light fw-bold" readonly>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="small fw-bold">Keterangan</label>
+                            <input type="text" id="zc_keterangan" class="form-control form-control-sm" placeholder="Opsional">
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Status</label>
+                            <select id="zc_is_active" class="form-select form-select-sm">
+                                <option value="true">Aktif</option>
+                                <option value="false">Non-Aktif</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SUPERVISOR ZONA -->
+<div class="modal fade" id="modalSupervisorZone" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalSupervisorZoneTitle">Tambah Supervisor Zona</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formSupervisorZone">
+                <div class="modal-body">
+                    <input type="hidden" id="sz_edit_id" value="">
+                    <input type="hidden" id="sz_selected_employee_id" value="">
+                    <div class="row g-2">
+                        <div class="col-12 mb-2" id="sz_employee_search_wrapper">
+                            <label class="small fw-bold">Cari Karyawan (NIK / Nama) <span class="text-danger">*</span></label>
+                            <input type="text" id="sz_employee_search" class="form-control form-control-sm" placeholder="Ketik min. 3 huruf..." oninput="handleSupervisorEmployeeSearch()" autocomplete="off">
+                            <div id="sz_employee_search_results" class="list-group mt-1" style="max-height: 180px; overflow-y:auto;"></div>
+                        </div>
+                        <div class="col-12 mb-2" id="sz_employee_selected_display" class="d-none"></div>
+                        <div class="col-12 mb-2" id="sz_zona_wrapper">
+                            <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
+                            <select id="sz_zona_id" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-12 mb-2">
+                            <label class="small fw-bold">Approval Level <span class="text-danger">*</span></label>
+                            <select id="sz_approval_level" class="form-select form-select-sm">
+                                <option value="1">1 - Utama</option>
+                                <option value="2">2 - Eskalasi</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Status</label>
+                            <select id="sz_is_active" class="form-select form-select-sm">
                                 <option value="true">Aktif</option>
                                 <option value="false">Non-Aktif</option>
                             </select>
