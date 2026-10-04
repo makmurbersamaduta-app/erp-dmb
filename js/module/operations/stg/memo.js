@@ -31,7 +31,8 @@ const NAMA_BULAN_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "
 // ===================================================
 const ROLE_FULL_ACCESS = [1, 2, 4];   // Maintenance, Superadmin, Supervisor
 const ROLE_KARU_STG = 8;              // Data Memo semua data, Pending hanya milik sendiri
-const ROLE_ADMIN_STG = 6;             // Data Memo saja, Pending tidak bisa diakses
+const ROLE_ADMIN_STG = 6;             // Data Memo + lihat Pending (TANPA buka modal/edit)
+const ROLE_ADMIN = 3;                 // Data Memo saja, Pending tidak bisa diakses sama sekali
 
 function getCurrentUserSession() {
     const raw = localStorage.getItem("erp_session") || sessionStorage.getItem("erp_session");
@@ -53,9 +54,15 @@ function resolveAccess() {
     const isFullAccess = ROLE_FULL_ACCESS.includes(roleId);
     const isKaruStg = roleId === ROLE_KARU_STG;
     const isAdminStg = roleId === ROLE_ADMIN_STG;
+    const isAdmin = roleId === ROLE_ADMIN;
 
-    const canAccessDataMemo = isFullAccess || isKaruStg || isAdminStg;
-    const canAccessPending = isFullAccess || isKaruStg; // Admin STG dikecualikan
+    const canAccessDataMemo = isFullAccess || isKaruStg || isAdminStg || isAdmin;
+    // Admin STG SEKARANG ikut bisa lihat tab Pending (sebelumnya dikecualikan
+    // total) -- tapi lihat canEditPending di bawah untuk pembatasan modalnya.
+    const canAccessPending = isFullAccess || isKaruStg || isAdminStg;
+    // Siapa yang boleh KLIK baris Pending untuk buka modal approve/edit --
+    // Admin STG SENGAJA tidak dimasukkan di sini (cuma boleh lihat daftar).
+    const canEditPending = isFullAccess || isKaruStg;
     const pendingScopedToOwnKaru = isKaruStg && !isFullAccess; // KARU non-fullaccess dibatasi ke miliknya sendiri
 
     return {
@@ -63,6 +70,7 @@ function resolveAccess() {
         userNik,
         canAccessDataMemo,
         canAccessPending,
+        canEditPending,
         pendingScopedToOwnKaru,
         hasAnyAccess: canAccessDataMemo || canAccessPending
     };
@@ -85,7 +93,10 @@ function applyRoleAccess() {
         return access;
     }
 
-    // Admin STG: tab Pending disembunyikan total dari tampilan
+    // Tab Pending disembunyikan total HANYA untuk role yang benar-benar
+    // tidak boleh melihatnya sama sekali (mis. Admin biasa, id:3).
+    // Admin STG (id:6) TIDAK masuk sini lagi -- dia tetap lihat tab ini,
+    // cuma barisnya tidak clickable (lihat canEditPending di renderPendingTable).
     if (!access.canAccessPending) {
         const pendingTabBtn = document.querySelector('[data-bs-target="#tabPending"]');
         pendingTabBtn?.closest(".nav-item")?.classList.add("d-none");
@@ -508,8 +519,13 @@ function renderPendingTable() {
 
     const start = (pendingState.page - 1) * ROWS_PER_PAGE;
 
+    // Admin STG (canAccessPending=true tapi canEditPending=false): baris
+    // TIDAK diberi class "row-clickable" (hilangkan cursor pointer/hover
+    // style) dan TIDAK dipasangi listener klik -- murni tampilan daftar.
+    const isClickable = !!currentAccess?.canEditPending;
+
     tbody.innerHTML = pendingState.data.map((row, index) => `
-        <tr class="row-clickable" data-id="${row.id}">
+        <tr class="${isClickable ? 'row-clickable' : ''}" data-id="${row.id}">
             <td class="col-no">${start + index + 1}</td>
             <td>${row.jenis_memo || "-"}</td>
             <td>${row.no_absen || "-"}</td>
@@ -523,12 +539,14 @@ function renderPendingTable() {
         </tr>
     `).join("");
 
-    tbody.querySelectorAll("tr[data-id]").forEach(tr => {
-        tr.addEventListener("click", () => {
-            const id = tr.getAttribute("data-id");
-            openPendingModal(id);
+    if (isClickable) {
+        tbody.querySelectorAll("tr[data-id]").forEach(tr => {
+            tr.addEventListener("click", () => {
+                const id = tr.getAttribute("data-id");
+                openPendingModal(id);
+            });
         });
-    });
+    }
 }
 
 function updatePendingBadge() {
@@ -836,9 +854,36 @@ async function handleDownloadDataMemo() {
             return;
         }
 
+        // ===================================================
+        // Ambil "No Absen STG" dari hrd.employees. memos_view TIDAK
+        // punya kolom ini sendiri -- kuncinya: no_absen (di memo) sama
+        // dengan nik_karyawan (di hrd.employees). Query sekali untuk
+        // semua nik unik (di-chunk per 200 supaya tidak kepanjangan
+        // untuk query .in()), bukan 1 query per baris.
+        // ===================================================
+        const uniqueNikList = [...new Set(allRows.map(r => r.no_absen).filter(Boolean))];
+        const noAbsenStgMap = {};
+        const NIK_CHUNK = 200;
+
+        for (let i = 0; i < uniqueNikList.length; i += NIK_CHUNK) {
+            const chunk = uniqueNikList.slice(i, i + NIK_CHUNK);
+            const { data: empRows, error: empErr } = await supabaseClient
+                .schema("hrd")
+                .from("employees")
+                .select("nik_karyawan, no_absen_stg")
+                .in("nik_karyawan", chunk);
+
+            if (empErr) {
+                console.warn("Gagal memuat sebagian data No Absen STG:", empErr.message);
+                continue; // jangan gagalkan seluruh download cuma karena kolom tambahan ini
+            }
+            (empRows || []).forEach(e => { noAbsenStgMap[e.nik_karyawan] = e.no_absen_stg; });
+        }
+
         const exportData = allRows.map(r => ({
             "Tanggal": formatTanggal(r.tanggal),
             "No Absen": r.no_absen,
+            "No Absen STG": noAbsenStgMap[r.no_absen] || "-",
             "Nama Karyawan": r.nama_karyawan,
             "Bagian": r.bagian,
             "Jam Kerja": r.jam_kerja,

@@ -167,6 +167,7 @@
                                     <th>Path URL</th>
                                     <th style="width: 90px;">Platform</th>
                                     <th style="width: 100px;">Status</th>
+                                    <th style="width: 140px;">Akses</th>
                                     <th style="width: 100px;">Aksi</th>
                                 </tr>
                             </thead>
@@ -393,6 +394,81 @@
                     <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL AKSES MENU (menu_access_rules) -->
+<div class="modal fade" id="modalMenuAccess" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalMenuAccessTitle">Atur Akses Menu</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="ma_menu_id" value="">
+                <input type="hidden" id="ma_menu_code" value="">
+                <p class="small text-muted mb-3">Kosongkan semua blok di bawah kalau menu ini tidak punya batasan tambahan (hanya mengikuti Matriks Hak Akses Role).</p>
+
+                <!-- BLOK DEPARTEMEN -->
+                <div class="border rounded-3 p-3 mb-3">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="ma_dept_enabled" onchange="toggleAccessBlock('dept')">
+                        <label class="form-check-label fw-bold" for="ma_dept_enabled">Batasi berdasarkan Departemen</label>
+                    </div>
+                    <div id="ma_dept_body" class="d-none">
+                        <div class="btn-group btn-group-sm mb-2" role="group">
+                            <input type="radio" class="btn-check" name="ma_dept_mode" id="ma_dept_mode_hanya" value="hanya" checked>
+                            <label class="btn btn-outline-primary" for="ma_dept_mode_hanya">Hanya</label>
+                            <input type="radio" class="btn-check" name="ma_dept_mode" id="ma_dept_mode_kecuali" value="kecuali">
+                            <label class="btn btn-outline-danger" for="ma_dept_mode_kecuali">Kecuali</label>
+                        </div>
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Cari departemen..." oninput="filterAccessList('dept', this.value)">
+                        <div id="ma_dept_list" class="border rounded-2 p-2" style="max-height: 160px; overflow-y:auto;"></div>
+                    </div>
+                </div>
+
+                <!-- BLOK AREA -->
+                <div class="border rounded-3 p-3 mb-3">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="ma_area_enabled" onchange="toggleAccessBlock('area')">
+                        <label class="form-check-label fw-bold" for="ma_area_enabled">Batasi berdasarkan Area</label>
+                    </div>
+                    <div id="ma_area_body" class="d-none">
+                        <div class="btn-group btn-group-sm mb-2" role="group">
+                            <input type="radio" class="btn-check" name="ma_area_mode" id="ma_area_mode_hanya" value="hanya" checked>
+                            <label class="btn btn-outline-primary" for="ma_area_mode_hanya">Hanya</label>
+                            <input type="radio" class="btn-check" name="ma_area_mode" id="ma_area_mode_kecuali" value="kecuali">
+                            <label class="btn btn-outline-danger" for="ma_area_mode_kecuali">Kecuali</label>
+                        </div>
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Cari area..." oninput="filterAccessList('area', this.value)">
+                        <div id="ma_area_list" class="border rounded-2 p-2" style="max-height: 160px; overflow-y:auto;"></div>
+                    </div>
+                </div>
+
+                <!-- BLOK JABATAN -->
+                <div class="border rounded-3 p-3">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="ma_jabatan_enabled" onchange="toggleAccessBlock('jabatan')">
+                        <label class="form-check-label fw-bold" for="ma_jabatan_enabled">Batasi berdasarkan Jabatan</label>
+                    </div>
+                    <div id="ma_jabatan_body" class="d-none">
+                        <div class="btn-group btn-group-sm mb-2" role="group">
+                            <input type="radio" class="btn-check" name="ma_jabatan_mode" id="ma_jabatan_mode_hanya" value="hanya" checked>
+                            <label class="btn btn-outline-primary" for="ma_jabatan_mode_hanya">Hanya</label>
+                            <input type="radio" class="btn-check" name="ma_jabatan_mode" id="ma_jabatan_mode_kecuali" value="kecuali">
+                            <label class="btn btn-outline-danger" for="ma_jabatan_mode_kecuali">Kecuali</label>
+                        </div>
+                        <input type="text" class="form-control form-control-sm mb-2" placeholder="Cari jabatan..." oninput="filterAccessList('jabatan', this.value)">
+                        <div id="ma_jabatan_list" class="border rounded-2 p-2" style="max-height: 160px; overflow-y:auto;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnSaveMenuAccess" onclick="handleSaveMenuAccess()">Simpan Akses</button>
+            </div>
         </div>
     </div>
 </div>

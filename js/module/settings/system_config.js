@@ -12,6 +12,8 @@ let menuCategories = [];        // dari tabel public.menu_categories: [{category
 let currentPermissions = {};    // state lokal checkbox SEBELUM disimpan ke DB
 let originalPermissions = {};   // snapshot terakhir yg TERSIMPAN di DB -- dipakai utk deteksi "ada perubahan atau tidak"
 let editingMenuId = null;       // null = mode Tambah Menu, angka = mode Edit Menu
+let jabatanList = [];           // dari tabel public.jabatans -- dipakai blok Jabatan di modal Akses Menu
+let menuAccessRulesAll = [];    // seluruh baris menu_access_rules -- badge ringkas kolom Akses
 
 // Flag pengunci (cegah double submit / race condition)
 let isRoleSubmitting = false;
@@ -47,6 +49,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadSystemRoles();
     await loadMenuCategories();   // kamus kategori -- WAJIB sebelum render dropdown & tabel menu
+    await loadJabatanList();          // WAJIB sebelum modal Akses Menu dibuka
+    await loadMenuAccessRulesAll();   // WAJIB sebelum renderMenusTable (badge kolom Akses)
     await loadSystemMenus();
     await loadPermissionsMatrix();
 
@@ -208,6 +212,57 @@ function handleCategoryChange() {
 }
 
 // ===================================================
+// 3B. JABATAN (public.jabatans) -- untuk blok ketiga di modal Akses Menu
+// ===================================================
+async function loadJabatanList() {
+    const { data, error } = await supabaseClient
+        .from("jabatans")
+        .select("*")
+        .eq("is_active", true)
+        .order("jabatan_name", { ascending: true });
+
+    if (error) {
+        console.error("Gagal memuat daftar jabatan:", error.message);
+        jabatanList = [];
+        return;
+    }
+    jabatanList = data || [];
+}
+
+// ===================================================
+// 3C. MENU ACCESS RULES -- load semua baris sekaligus, dipakai untuk
+// badge ringkas di kolom "Akses" tabel menu, dan sebagai sumber data
+// saat modal Akses dibuka (tidak query ulang per menu).
+// ===================================================
+async function loadMenuAccessRulesAll() {
+    const { data, error } = await supabaseClient
+        .from("menu_access_rules")
+        .select("*");
+
+    if (error) {
+        console.error("Gagal memuat menu_access_rules:", error.message);
+        menuAccessRulesAll = [];
+        return;
+    }
+    menuAccessRulesAll = data || [];
+}
+
+// Badge ringkas: tampilkan dimensi apa saja yang dibatasi untuk satu menu_code.
+// Tidak merinci value_id/mode di badge -- cukup jadi indikator "ada batasan",
+// detail lengkap dilihat dengan klik tombol "Atur".
+function renderAccessBadge(menuCode) {
+    const rules = menuAccessRulesAll.filter(r => r.menu_code === menuCode);
+    if (rules.length === 0) {
+        return `<span class="badge bg-light text-muted border">Semua</span>`;
+    }
+
+    const labelMap = { departemen: "Dept", area: "Area", jabatan: "Jabatan" };
+    const dims = [...new Set(rules.map(r => r.dimension))].map(d => labelMap[d] || d);
+
+    return `<span class="badge bg-warning-subtle text-dark border">${dims.join(" + ")}</span>`;
+}
+
+// ===================================================
 // 4. PEMBUATAN KODE MENU OTOMATIS
 //
 // Format: {PLATFORM}-{KODE_KATEGORI}-{URUT}
@@ -283,7 +338,7 @@ async function loadSystemMenus() {
         .order("sort_order", { ascending: true });
 
     if (error) {
-        document.getElementById("menusTableBody").innerHTML = `<tr><td colspan="6" class="text-center text-danger">Gagal memuat menu: ${error.message}</td></tr>`;
+        document.getElementById("menusTableBody").innerHTML = `<tr><td colspan="7" class="text-center text-danger">Gagal memuat menu: ${error.message}</td></tr>`;
         return;
     }
     systemMenus = data || [];
@@ -294,7 +349,7 @@ const PLATFORM_LABEL = { "M": "Web ERP", "PWA": "Aplikasi PWA" };
 
 function renderMenusTable() {
     if (systemMenus.length === 0) {
-        document.getElementById("menusTableBody").innerHTML = `<tr><td colspan="6" class="text-center text-muted">Belum ada menu.</td></tr>`;
+        document.getElementById("menusTableBody").innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada menu.</td></tr>`;
         return;
     }
 
@@ -303,23 +358,21 @@ function renderMenusTable() {
     let lastCategory = null;
 
     systemMenus.forEach(m => {
-        // Baris header grup PLATFORM (level 1) -- tiap kali platform berganti
         if (m.platform !== lastPlatform) {
             html += `
                 <tr class="table-secondary">
-                    <td colspan="6" class="fw-bold small text-uppercase">
+                    <td colspan="7" class="fw-bold small text-uppercase">
                         <i class="fa-solid fa-layer-group me-2"></i>${PLATFORM_LABEL[m.platform] || m.platform}
                     </td>
                 </tr>`;
             lastPlatform = m.platform;
-            lastCategory = null; // reset supaya header kategori baru muncul lagi di platform baru
+            lastCategory = null;
         }
 
-        // Baris header grup KATEGORI (level 2, nested di dalam platform)
         if (m.category !== lastCategory) {
             html += `
                 <tr class="table-light">
-                    <td colspan="6" class="fw-semibold small text-muted ps-4">
+                    <td colspan="7" class="fw-semibold small text-muted ps-4">
                         <i class="fa-solid fa-folder me-2"></i>${m.category}
                     </td>
                 </tr>`;
@@ -334,6 +387,10 @@ function renderMenusTable() {
                 <td><span class="badge bg-primary-subtle text-primary">${m.platform}</span></td>
                 <td>${m.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
                 <td>
+                    ${renderAccessBadge(m.menu_code)}<br>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 mt-1" style="font-size:0.7rem;" onclick="openMenuAccessModal(${m.id})">Atur</button>
+                </td>
+                <td>
                     <button class="btn btn-sm btn-light text-primary me-1" onclick="openMenuModal(${m.id})" title="Edit menu"><i class="fa-solid fa-pen"></i></button>
                     <button class="btn btn-sm btn-light text-danger" onclick="deleteMenu(${m.id})" title="Hapus menu"><i class="fa-solid fa-trash"></i></button>
                 </td>
@@ -341,6 +398,127 @@ function renderMenusTable() {
     });
 
     document.getElementById("menusTableBody").innerHTML = html;
+}
+
+// ===================================================
+// 5B. MODAL AKSES MENU (menu_access_rules)
+// Simpan dengan hapus-lalu-insert-ulang seluruh rule untuk
+// menu_code itu, sesuai desain yang disepakati.
+// ===================================================
+function openMenuAccessModal(menuId) {
+    const menu = systemMenus.find(m => m.id === menuId);
+    if (!menu) { alert("Menu tidak ditemukan."); return; }
+
+    document.getElementById("ma_menu_id").value = menu.id;
+    document.getElementById("ma_menu_code").value = menu.menu_code;
+    document.getElementById("modalMenuAccessTitle").textContent = `Atur Akses: ${menu.menu_name}`;
+
+    const existingRules = menuAccessRulesAll.filter(r => r.menu_code === menu.menu_code);
+
+    setupAccessBlock("dept", departmentList, "id", "department_name", existingRules.filter(r => r.dimension === "departemen"));
+    setupAccessBlock("area", areaList, "id", "area_name", existingRules.filter(r => r.dimension === "area"));
+    setupAccessBlock("jabatan", jabatanList, "id", "jabatan_name", existingRules.filter(r => r.dimension === "jabatan"));
+
+    new bootstrap.Modal(document.getElementById("modalMenuAccess")).show();
+}
+
+// Isi satu blok (dept/area/jabatan): render checklist dari master data,
+// centang yang sudah tersimpan, set toggle Hanya/Kecuali, buka blok
+// otomatis kalau menu ini memang sudah punya rule untuk dimension itu.
+function setupAccessBlock(prefix, masterList, idField, nameField, existingRules) {
+    const listEl = document.getElementById(`ma_${prefix}_list`);
+    const enabledCheckbox = document.getElementById(`ma_${prefix}_enabled`);
+    const bodyEl = document.getElementById(`ma_${prefix}_body`);
+
+    const selectedIds = existingRules.map(r => r.value_id);
+    const mode = existingRules.length > 0 ? existingRules[0].mode : "hanya";
+
+    listEl.innerHTML = masterList.map(item => `
+        <div class="form-check access-item">
+            <input class="form-check-input" type="checkbox" value="${item[idField]}" id="ma_${prefix}_item_${item[idField]}" ${selectedIds.includes(item[idField]) ? "checked" : ""}>
+            <label class="form-check-label small" for="ma_${prefix}_item_${item[idField]}">${item[nameField]}</label>
+        </div>
+    `).join("") || `<div class="small text-muted">Tidak ada data.</div>`;
+
+    document.getElementById(`ma_${prefix}_mode_${mode}`).checked = true;
+
+    enabledCheckbox.checked = existingRules.length > 0;
+    bodyEl.classList.toggle("d-none", existingRules.length === 0);
+}
+
+function toggleAccessBlock(prefix) {
+    const enabled = document.getElementById(`ma_${prefix}_enabled`).checked;
+    document.getElementById(`ma_${prefix}_body`).classList.toggle("d-none", !enabled);
+}
+
+function filterAccessList(prefix, keyword) {
+    const items = document.querySelectorAll(`#ma_${prefix}_list .access-item`);
+    const kw = keyword.trim().toLowerCase();
+    items.forEach(item => {
+        const label = item.querySelector("label").textContent.toLowerCase();
+        item.style.display = label.includes(kw) ? "" : "none";
+    });
+}
+
+async function handleSaveMenuAccess() {
+    const menuCode = document.getElementById("ma_menu_code").value;
+    const btnSubmit = document.getElementById("btnSaveMenuAccess");
+    const origText = btnSubmit.innerHTML;
+
+    const newRows = [];
+    let validationError = null;
+
+    [["dept", "departemen"], ["area", "area"], ["jabatan", "jabatan"]].forEach(([prefix, dimension]) => {
+        const enabled = document.getElementById(`ma_${prefix}_enabled`).checked;
+        if (!enabled) return;
+
+        const mode = document.querySelector(`input[name="ma_${prefix}_mode"]:checked`).value;
+        const checkedBoxes = document.querySelectorAll(`#ma_${prefix}_list input[type="checkbox"]:checked`);
+        const valueIds = Array.from(checkedBoxes).map(cb => parseInt(cb.value, 10));
+
+        if (valueIds.length === 0) {
+            validationError = `Blok "${dimension}" aktif tapi belum ada yang dicentang. Pilih minimal satu, atau matikan toggle-nya.`;
+            return;
+        }
+
+        valueIds.forEach(valueId => {
+            newRows.push({ menu_code: menuCode, dimension, mode, value_id: valueId, rule_group: 1 });
+        });
+    });
+
+    if (validationError) {
+        alert(validationError);
+        return;
+    }
+
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...`;
+
+    try {
+        const { error: deleteError } = await supabaseClient
+            .from("menu_access_rules")
+            .delete()
+            .eq("menu_code", menuCode);
+        if (deleteError) throw deleteError;
+
+        if (newRows.length > 0) {
+            const { error: insertError } = await supabaseClient
+                .from("menu_access_rules")
+                .insert(newRows);
+            if (insertError) throw insertError;
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById("modalMenuAccess"))?.hide();
+        await loadMenuAccessRulesAll();
+        renderMenusTable();
+        alert("Akses menu berhasil disimpan!");
+
+    } catch (err) {
+        alert("Gagal menyimpan akses menu: " + (err.message || err));
+    } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = origText;
+    }
 }
 
 // openMenuModal(null atau tanpa argumen) = mode TAMBAH

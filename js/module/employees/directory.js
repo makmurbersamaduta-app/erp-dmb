@@ -1280,28 +1280,55 @@ function exportDirectoryToExcel() {
         return;
     }
 
-    if (directoryEmployees.length === 0) {
-        alert("Tidak ada data karyawan untuk di-export.");
+    // PERBAIKAN: sebelumnya pakai "directoryEmployees" (SEMUA data,
+    // mengabaikan filter yang sedang aktif). Sekarang pakai
+    // "directorySortedFiltered" -- array yang sama yang dipakai untuk
+    // render tabel, jadi PASTI konsisten dengan hasil filter/pencarian
+    // yang sedang ditampilkan user, dan ikut terurut sama (Status
+    // Karyawan > Branch > Cost Center > Jabatan).
+    if (directorySortedFiltered.length === 0) {
+        alert("Tidak ada data karyawan (sesuai filter saat ini) untuk di-export.");
         return;
     }
 
-    const exportRows = directoryEmployees.map(emp => {
+    const exportRows = directorySortedFiltered.map(emp => {
         const assign = getEmployeeAssignment(emp.id, emp.nik_karyawan);
 
         const deptObj = masterCache.departments.find(d => d.id == assign?.departemen_id);
-        const jabObj = masterCache.jabatans.find(j => j.id == assign?.jabatan_id);
         const branchObj = masterCache.branches.find(b => b.id == assign?.branch_id);
         const ccObj = masterCache.cost_centers.find(c => c.id == assign?.costcenter_id);
+        const areaObj = masterCache.areas.find(a => a.id == assign?.area_id);
+        const bagObj = masterCache.bagians.find(bg => bg.id == assign?.bagian_id);
 
         return {
             "NIK": emp.nik_karyawan || "-",
+            "No KTP": emp.nik_ktp || "-",
             "Nama": emp.nama || "-",
-            "Departemen": deptObj?.department_name || "-",
-            "Jabatan": jabObj?.jabatan_name || "-",
-            "Cabang": branchObj?.branch_name || "-",
-            "Cost Center": ccObj?.costcenter_name || "-",
+            "Tempat Lahir": emp.tempat_lahir || "-",
+            "Tanggal Lahir": emp.tanggal_lahir || "-",
+            "Jenis Kelamin": emp.jenis_kelamin || "-",
+            "Pendidikan": emp.pendidikan || "-",
+            "Agama": emp.agama || "-",
+            "Status Pernikahan": emp.status_pernikahan || "-",
+            "Jumlah Anak": emp.anak ?? 0,
+            "Ibu Kandung": emp.ibu_kandung || "-",
+            "No Telp": emp.no_telp || "-",
+            "Alamat KTP": emp.alamat_ktp || "-",
+            "Alamat Domisili": emp.alamat_domisili || "-",
+            "NPWP": emp.npwp || "-",
+            "PTKP": emp.ptkp || "-",
+            "Nama Bank": emp.bank || "-",
+            "No Rekening": emp.no_rekening || "-",
+            "BPJS Ketenagakerjaan": emp.bpjs_ketenagakerjaan || "-",
+            "BPJS Kesehatan": emp.bpjs_kesehatan || "-",
             "Status Karyawan": assign?.status_karyawan || "-",
-            "Status Data": emp.is_active !== false ? "Aktif" : "Non-Aktif"
+            "Tanggal Masuk": assign?.start_date || "-",
+            "Tanggal Keluar": assign?.end_date || "",      // kosong kalau NULL, sesuai permintaan
+            "Cabang": branchObj?.branch_name || "-",
+            "Departemen": deptObj?.department_name || "-",
+            "Cost Center": ccObj?.costcenter_name || "-",
+            "Area": areaObj?.area_name || "-",
+            "Bagian": bagObj?.bagian_name || ""            // kosong kalau NULL, sesuai permintaan
         };
     });
 

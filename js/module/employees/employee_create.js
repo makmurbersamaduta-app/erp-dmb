@@ -53,8 +53,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupHeaderUserProfile();
     await loadMasterDropdowns();
     setupEventListeners();
-    setupCurrencyFormatters();
-
+    // PERBAIKAN: setupCurrencyFormatters() dihapus -- fungsi ini tidak
+    // pernah didefinisikan di file manapun (menyebabkan ReferenceError
+    // di console), dan form ini memang tidak punya field bertipe
+    // currency/gaji yang butuh formatter semacam itu.
 });
 
 // ---------------------------------------------------
@@ -237,14 +239,12 @@ async function handlePlacementAndFiltering() {
         }
     }
 
-    // 2. FILTER AREA BERDASARKAN BRANCH DAN COST CENTER (Poin 7)
-    const currentCcVal = document.getElementById("costcenter_id")?.value || "";
-    if (!branchVal || !currentCcVal) {
+    // 2. FILTER AREA BERDASARKAN BRANCH SAJA (sebelumnya Branch+Cost Center)
+    if (!branchVal) {
         resetSelect("area_id", "-- Pilih Area --");
     } else {
-        const filteredAreas = masterAreas.filter(a => 
-            String(a.branch_id) === String(branchVal) && 
-            String(a.cost_center_id) === String(currentCcVal)
+        const filteredAreas = masterAreas.filter(a =>
+            String(a.branch_id) === String(branchVal)
         );
         populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
     }
@@ -521,4 +521,3 @@ function toggleNoAbsenStgVisibility() {
         }
     }
 }
-
