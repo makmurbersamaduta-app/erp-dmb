@@ -241,16 +241,14 @@ function setInputValue(id, val) {
 // ==============================================================================
 function handleAreaFiltering() {
     const branchVal = document.getElementById("branch_id")?.value || "";
-    const ccVal = document.getElementById("costcenter_id")?.value || "";
 
-    if (!branchVal || !ccVal) {
+    if (!branchVal) {
         resetSelect("area_id", "-- Pilih Area --");
         return;
     }
 
     const filteredAreas = masterAreas.filter(a =>
-        String(a.branch_id) === String(branchVal) &&
-        String(a.cost_center_id) === String(ccVal)
+        String(a.branch_id) === String(branchVal)
     );
     populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
 }
