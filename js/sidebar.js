@@ -11,6 +11,12 @@
 // (tidak ada round-trip ke DB tiap buka halaman) dan otomatis benar
 // per-role karena memang dihitung ulang tiap kali user login.
 //
+// TAMBAHAN: filter akses menu per DEPARTEMEN / AREA / JABATAN
+// (tabel menu_access_rules, diatur lewat halaman system_config).
+// Aturan ini DIBACA LANGSUNG DARI DATABASE tiap halaman dibuka,
+// jadi perubahan di system_config langsung berlaku tanpa user
+// harus logout. Logikanya sama dengan filter di PWA.
+//
 // CATATAN KETERBATASAN: karena permission ini "dibekukan" di dalam
 // session saat login, kalau Admin/Maintenance mengubah Matriks Hak
 // Akses SAAT user itu sedang login, sidebar user tsb TIDAK otomatis
@@ -76,7 +82,93 @@ function getSessionPermissions() {
     }
 }
 
-function renderDropdownSidebar() {
+// ===================================================
+// FILTER AKSES MENU (menu_access_rules)
+// Membatasi menu berdasarkan Departemen / Area / Jabatan user.
+// ===================================================
+
+// Ambil data user dari erp_session. Nama field di session Web ERP:
+// roleId, departmentId, areaId, jabatanId.
+function getSessionUserForRules() {
+    const raw = localStorage.getItem("erp_session") || sessionStorage.getItem("erp_session");
+    if (!raw) return null;
+    try {
+        const s = JSON.parse(raw);
+        return {
+            roleId: s.roleId,
+            depId: s.departmentId,
+            areaId: s.areaId,
+            jabatanId: s.jabatanId
+        };
+    } catch {
+        return null;
+    }
+}
+
+// Ambil rule dari DB lalu buang menu yang tidak boleh dilihat user ini.
+async function filterMenusByAccessRules(menus) {
+    const user = getSessionUserForRules();
+
+    // Tidak ada data user -> tidak bisa memfilter, tampilkan apa adanya
+    if (!user) return menus;
+    // Role 1 (Maintenance) melewati semua filter, sama seperti di PWA
+    if (user.roleId === 1) return menus;
+    if (menus.length === 0) return menus;
+
+    if (!window.supabaseClient) {
+        console.warn("[Sidebar] supabaseClient tidak ditemukan -- filter akses menu dilewati.");
+        return menus;
+    }
+
+    const menuCodes = menus.map(m => m.menu_code);
+    const { data: rules, error } = await window.supabaseClient
+        .from("menu_access_rules")
+        .select("menu_code, dimension, mode, value_id, rule_group")
+        .in("menu_code", menuCodes);
+
+    if (error) {
+        // Gagal ambil rule -> menu tetap tampil (fail-open), sama seperti PWA
+        console.error("[Sidebar] Gagal load menu_access_rules:", error);
+        return menus;
+    }
+
+    return menus.filter(m => sidebarIsAllowedByRules(m.menu_code, rules, user));
+}
+
+// Satu menu boleh tampil kalau SALAH SATU rule_group terpenuhi.
+// Di dalam satu rule_group, SEMUA dimensi (departemen/area/jabatan) harus terpenuhi.
+function sidebarIsAllowedByRules(menuCode, rules, user) {
+    const menuRules = rules.filter(r => r.menu_code === menuCode);
+    if (menuRules.length === 0) return true; // tidak ada rule = terbuka untuk semua
+
+    const groupIds = [...new Set(menuRules.map(r => r.rule_group))];
+
+    return groupIds.some(groupId => {
+        const groupRules = menuRules.filter(r => r.rule_group === groupId);
+        const dimensionSets = {};
+        groupRules.forEach(r => {
+            const key = `${r.dimension}_${r.mode}`;
+            if (!dimensionSets[key]) dimensionSets[key] = { dimension: r.dimension, mode: r.mode, valueIds: [] };
+            dimensionSets[key].valueIds.push(r.value_id);
+        });
+        return Object.values(dimensionSets).every(set => sidebarCheckDimensionSet(set, user));
+    });
+}
+
+// mode "hanya"   -> nilai user HARUS ada di daftar
+// mode "kecuali" -> nilai user TIDAK BOLEH ada di daftar
+function sidebarCheckDimensionSet(set, user) {
+    const userValue = set.dimension === "departemen" ? user.depId
+                    : set.dimension === "area" ? user.areaId
+                    : set.dimension === "jabatan" ? user.jabatanId
+                    : null;
+
+    return set.mode === "hanya"
+        ? set.valueIds.includes(userValue)
+        : !set.valueIds.includes(userValue);
+}
+
+async function renderDropdownSidebar() {
     const sidebarEl = document.getElementById("dynamicSidebarMenu");
     if (!sidebarEl) return;
 
@@ -104,6 +196,9 @@ function renderDropdownSidebar() {
                 icon_class: p.icon,
                 sort_order: p.sort || 0
             }));
+
+        // Filter tambahan: Departemen / Area / Jabatan (menu_access_rules)
+        menusToRender = await filterMenusByAccessRules(menusToRender);
     } else {
         // Sesi tidak ada / rusak / belum punya field permissions --
         // jaring pengaman darurat, tampilkan default TANPA filter role.
