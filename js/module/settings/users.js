@@ -535,6 +535,30 @@ function updateCreateAuthButtonState() {
     }
 }
 
+// ===================================================
+// PERBAIKAN: ketika Edge Function balas status non-2xx, supabase-js
+// HANYA memberi error.message = "Edge Function returned a non-2xx
+// status code" -- pesan JSON asli yang dikirim function (mis. "Gagal
+// membuat akun auth: email sudah terdaftar") ada di error.context
+// (Response object), tidak pernah dibaca sebelumnya. Akibatnya alasan
+// kegagalan SEBENARNYA tidak pernah terlihat, baik di toast maupun
+// console.error. Helper ini membaca context-nya kalau ada.
+// ===================================================
+async function extractEdgeFunctionMessage(error, data, fallback = "Gagal memproses.") {
+    if (data?.message) return data.message;
+    if (error?.context && typeof error.context.json === "function") {
+        try {
+            // Response body hanya bisa dibaca SEKALI -- clone supaya
+            // tidak bentrok kalau supabase-js/kode lain juga membacanya.
+            const body = await error.context.clone().json();
+            if (body?.message) return body.message;
+        } catch {
+            // context bukan JSON valid (mis. error gateway/HTML) -- abaikan, pakai fallback
+        }
+    }
+    return error?.message || fallback;
+}
+
 async function executeBulkAuthCreate() {
     const btn = document.getElementById("btnCreateAuth");
     const entries = Array.from(pendingAuthActions.entries()); // [userId, mode]
@@ -553,7 +577,8 @@ async function executeBulkAuthCreate() {
             });
 
             if (error || !data?.success) {
-                gagal.push({ userId, message: data?.message || error?.message || "Gagal" });
+                const realMessage = await extractEdgeFunctionMessage(error, data, "Gagal");
+                gagal.push({ userId, message: realMessage });
             } else {
                 sukses++;
             }
@@ -666,7 +691,8 @@ async function handleAdminResetPassword(userId, username) {
         });
 
         if (error || !data?.success) {
-            throw new Error(data?.message || error?.message || "Gagal mereset password.");
+            const realMessage = await extractEdgeFunctionMessage(error, data, "Gagal mereset password.");
+            throw new Error(realMessage);
         }
 
         showToast(`Password direset. Informasikan ke ${username} untuk login & buat password baru.`, "success");

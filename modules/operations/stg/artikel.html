@@ -238,6 +238,20 @@
             cursor: pointer;
         }
 
+        .filter-date-label {
+            font-size: 12px;
+            color: var(--art-text-muted);
+            margin: 4px 0 2px 0;
+        }
+        .filter-date-input {
+            border: 1px solid var(--art-border);
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-size: 13px;
+            color: var(--art-text-main);
+            margin-bottom: 4px;
+        }
+
         .filter-panel-footer {
             display: flex;
             justify-content: space-between;
@@ -446,6 +460,10 @@
         </a>
         <h1 class="art-header-title">Database Artikel</h1>
 
+        <button type="button" class="btn-header-action" id="btnDownloadData">
+            <i class="fa-solid fa-download"></i> Download Data
+        </button>
+
         <button type="button" class="btn-header-action" id="btnDownloadTemplate">
         <i class="fa-solid fa-file-arrow-down"></i> Template Upload
         </button>
@@ -514,6 +532,19 @@
                             <i class="fa-solid fa-chevron-down"></i>
                         </button>
                         <div class="filter-group-body" id="filterItemType"></div>
+                    </div>
+
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterTanggalUpdate">
+                            <span>Tanggal Update</span>
+                            <i class="fa-solid fa-chevron-down"></i>
+                        </button>
+                        <div class="filter-group-body" id="filterTanggalUpdate">
+                            <label class="filter-date-label" for="filterTanggalDari">Dari tanggal</label>
+                            <input type="date" class="filter-date-input" id="filterTanggalDari">
+                            <label class="filter-date-label" for="filterTanggalSampai">Sampai tanggal</label>
+                            <input type="date" class="filter-date-input" id="filterTanggalSampai">
+                        </div>
                     </div>
 
                     <div class="filter-panel-footer">

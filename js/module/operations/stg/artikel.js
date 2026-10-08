@@ -24,6 +24,9 @@ let activeFilters = {
     item_type: []
 };
 
+// Rentang filter "Tanggal Update" (format YYYY-MM-DD, kosong = tidak aktif)
+let activeDateRange = { from: "", to: "" };
+
 let searchKeyword = "";
 let currentPage = 1;
 let totalRows = 0;
@@ -40,6 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupColumnToggle();
     setupEditModal();
     setupDeleteAction();
+    setupDownloadAction();
 
     // Menggunakan try-catch agar kegagalan ref data tidak memutus render tabel/panel
     try {
@@ -83,6 +87,29 @@ function extractUniqueValues(rows, columnName) {
 }
 
 // ===================================================
+// 3B. TERAPKAN SEARCH + FILTER KE QUERY SUPABASE
+// Dipakai bersama oleh tabel (loadArtikelPage) dan Download,
+// supaya hasil keduanya selalu konsisten.
+// ===================================================
+function applyActiveFilters(query) {
+    if (searchKeyword) {
+        query = query.ilike("kode_artikel", `%${searchKeyword}%`);
+    }
+
+    if (activeFilters.customer.length > 0) query = query.in("customer", activeFilters.customer);
+    if (activeFilters.flute.length > 0) query = query.in("flute", activeFilters.flute);
+    if (activeFilters.tipe_partisi.length > 0) query = query.in("tipe_partisi", activeFilters.tipe_partisi);
+    if (activeFilters.joint.length > 0) query = query.in("joint", activeFilters.joint);
+    if (activeFilters.item_type.length > 0) query = query.in("item_type", activeFilters.item_type);
+
+    // Filter rentang Tanggal Update (kolom update_at bertipe date)
+    if (activeDateRange.from) query = query.gte("update_at", activeDateRange.from);
+    if (activeDateRange.to) query = query.lte("update_at", activeDateRange.to);
+
+    return query;
+}
+
+// ===================================================
 // 4. AMBIL DATA HALAMAN AKTIF (SERVER-SIDE PAGINATION)
 // ===================================================
 async function loadArtikelPage() {
@@ -97,15 +124,7 @@ async function loadArtikelPage() {
             .from("artikel")
             .select("*", { count: "exact" });
 
-        if (searchKeyword) {
-            query = query.ilike("kode_artikel", `%${searchKeyword}%`);
-        }
-
-        if (activeFilters.customer.length > 0) query = query.in("customer", activeFilters.customer);
-        if (activeFilters.flute.length > 0) query = query.in("flute", activeFilters.flute);
-        if (activeFilters.tipe_partisi.length > 0) query = query.in("tipe_partisi", activeFilters.tipe_partisi);
-        if (activeFilters.joint.length > 0) query = query.in("joint", activeFilters.joint);
-        if (activeFilters.item_type.length > 0) query = query.in("item_type", activeFilters.item_type);
+        query = applyActiveFilters(query);
 
         const start = (currentPage - 1) * ROWS_PER_PAGE;
         const end = start + ROWS_PER_PAGE - 1;
@@ -185,6 +204,9 @@ function setupFilterToggle() {
     if (btnReset) {
         btnReset.addEventListener("click", () => {
             activeFilters = { customer: [], flute: [], tipe_partisi: [], joint: [], item_type: [] };
+            activeDateRange = { from: "", to: "" };
+            document.getElementById("filterTanggalDari").value = "";
+            document.getElementById("filterTanggalSampai").value = "";
             renderFilterPanel();
             currentPage = 1;
             loadArtikelPage();
@@ -196,6 +218,15 @@ function setupFilterToggle() {
     const btnApply = document.getElementById("btnFilterApply");
     if (btnApply) {
         btnApply.addEventListener("click", () => {
+            const dateFrom = document.getElementById("filterTanggalDari").value;
+            const dateTo = document.getElementById("filterTanggalSampai").value;
+
+            if (dateFrom && dateTo && dateFrom > dateTo) {
+                alert("Tanggal 'Dari' tidak boleh lebih besar dari tanggal 'Sampai'.");
+                return;
+            }
+            activeDateRange = { from: dateFrom, to: dateTo };
+
             activeFilters.customer = getCheckedValues("filterCustomer");
             activeFilters.flute = getCheckedValues("filterFlute");
             activeFilters.tipe_partisi = getCheckedValues("filterTipePartisi");
@@ -218,7 +249,9 @@ function getCheckedValues(containerId) {
 }
 
 function updateFilterBadge() {
-    const total = Object.values(activeFilters).reduce((sum, arr) => sum + arr.length, 0);
+    let total = Object.values(activeFilters).reduce((sum, arr) => sum + arr.length, 0);
+    // Filter tanggal dihitung 1 jika salah satu atau kedua tanggal terisi
+    if (activeDateRange.from || activeDateRange.to) total += 1;
     const badge = document.getElementById("filterCountBadge");
     if (!badge) return;
 
@@ -580,4 +613,120 @@ async function handleDeleteArtikel(id) {
 
 async function reloadArtikelTable() {
     await loadArtikelPage();
+}
+
+// ===================================================
+// 12. DOWNLOAD DATA (.xlsx)
+// Jika search/filter aktif -> download sesuai search/filter aktif.
+// Jika tidak ada yang aktif -> download semua baris.
+// ===================================================
+
+// Urutan ini menentukan urutan kolom di file Excel.
+// key = nama kolom di tabel, header = judul kolom di Excel
+const DOWNLOAD_COLUMNS = [
+    { key: "kode_artikel", header: "Kode Artikel" },
+    { key: "nama_barang",  header: "Nama Barang" },
+    { key: "customer",     header: "Customer" },
+    { key: "flute",        header: "Flute" },
+    { key: "width",        header: "Width" },
+    { key: "length",       header: "Length" },
+    { key: "panjang_box",  header: "Panjang Box" },
+    { key: "lebar_box",    header: "Lebar Box" },
+    { key: "tinggi_box",   header: "Tinggi Box" },
+    { key: "tipe_partisi", header: "Tipe Partisi" },
+    { key: "joint",        header: "Joint" },
+    { key: "pcs_pallet",   header: "Pcs Pallet" },
+    { key: "item_type",    header: "Item Type" },
+    { key: "wrapping_ml",  header: "Wrapping Ml" }
+];
+
+function setupDownloadAction() {
+    const btn = document.getElementById("btnDownloadData");
+    if (btn) btn.addEventListener("click", downloadArtikelData);
+}
+
+// Ambil SEMUA baris yang cocok dengan filter, bertahap.
+// Jumlah total dipastikan lewat count "exact", dan pengambilan lanjut
+// berdasarkan jumlah baris yang BENAR-BENAR diterima, sehingga tetap
+// lengkap walau batas Max Rows di Supabase lebih kecil dari 1000.
+async function fetchAllArtikelForDownload() {
+    const PAGE_SIZE = 1000;
+    const selectedColumns = DOWNLOAD_COLUMNS.map(c => c.key).join(",");
+    const allRows = [];
+    let totalCount = null;
+
+    while (totalCount === null || allRows.length < totalCount) {
+        let query = supabaseClient
+            .schema("stg_public")
+            .from("artikel")
+            .select(selectedColumns, { count: "exact" });
+
+        query = applyActiveFilters(query);
+        // Urutan wajib tetap agar pembagian per halaman tidak tumpang tindih
+        query = query.order("kode_artikel").range(allRows.length, allRows.length + PAGE_SIZE - 1);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+
+        if (totalCount === null) totalCount = count || 0;
+        if (!data || data.length === 0) break; // jaga-jaga agar tidak loop selamanya
+
+        allRows.push(...data);
+    }
+
+    // Pengaman: beri tahu jika jumlah yang diterima tidak sama dengan total di database
+    if (totalCount !== null && allRows.length < totalCount) {
+        alert(`Peringatan: hanya ${allRows.length} dari ${totalCount} baris yang berhasil diambil.`);
+    }
+
+    return allRows;
+}
+
+async function downloadArtikelData() {
+    if (typeof XLSX === "undefined") {
+        alert("Library SheetJS (XLSX) belum dimuat! Pastikan koneksi internet aktif.");
+        return;
+    }
+
+    const btn = document.getElementById("btnDownloadData");
+    const origHtml = btn ? btn.innerHTML : "";
+
+    try {
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Menyiapkan...`;
+        }
+
+        const rows = await fetchAllArtikelForDownload();
+
+        if (rows.length === 0) {
+            alert("Tidak ada data untuk didownload.");
+            return;
+        }
+
+        // Ubah nama kolom tabel -> header Excel (null jadi sel kosong)
+        const excelRows = rows.map(r => {
+            const obj = {};
+            DOWNLOAD_COLUMNS.forEach(c => { obj[c.header] = r[c.key] ?? ""; });
+            return obj;
+        });
+
+        const ws = XLSX.utils.json_to_sheet(excelRows, { header: DOWNLOAD_COLUMNS.map(c => c.header) });
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data Artikel");
+
+        // Nama file: Data_Artikel_YYYY-MM-DD.xlsx (tanggal lokal browser)
+        const now = new Date();
+        const tgl = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+        XLSX.writeFile(wb, `Data_Artikel_${tgl}.xlsx`);
+
+    } catch (err) {
+        console.error("Gagal download data artikel:", err);
+        alert("Gagal download data: " + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+        }
+    }
 }

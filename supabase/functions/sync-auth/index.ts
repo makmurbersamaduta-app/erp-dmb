@@ -42,11 +42,12 @@ Deno.serve(async (req) => {
         // Client dengan service_role -- otomatis tersedia di setiap
         // Edge Function tanpa perlu diset manual, bisa bypass RLS
         // dan mengakses Admin API (auth.admin.*)
-        const supabaseAdmin = createClient(
-            Deno.env.get("https://gkqxzxwiawfpjtnzexvq.supabase.co") ?? "",
-            Deno.env.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcXh6eHdpYXdmcGp0bnpleHZxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDYzMjQzOSwiZXhwIjoyMTAwMjA4NDM5fQ.1Bso1q41baA1OfuPeFxyiWeqCzwXA9orniOdtzRrLqY") ?? ""
-        );
 
+const supabaseAdmin = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "https://gkqxzxwiawfpjtnzexvq.supabase.co",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdrcXh6eHdpYXdmcGp0bnpleHZxIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDYzMjQzOSwiZXhwIjoyMTAwMjA4NDM5fQ.1Bso1q41baA1OfuPeFxyiWeqCzwXA9orniOdtzRrLqY"
+);
+       
         const rawBody = await req.json();
 
         // Deteksi sumber pemanggilan: Database Webhook (otomatis) atau

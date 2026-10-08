@@ -3,7 +3,8 @@
 // Handler Download Template & Upload Data Bulk Artikel
 // ===================================================
 
-// Header Standar Template Excel (A - BX)
+// Header Standar Template Excel (A - BT)
+// Catatan: "KOLOM", "ITEM CODE", "ITEMTYPE" sudah dihapus
 const ARTIKEL_EXCEL_HEADERS = [
     "KODE ARTIKEL", "NAMA BARANG", "CUSTOMER", "Q-DB", "Q-DB2", "Q-BF", "Q-BF2", 
     "Q-BL", "Q-BL2", "Q-CF", "Q-CF2", "Q-CL", "Q-CL2", "FLUTE", "WIDTH", "LENGTH", 
@@ -14,7 +15,7 @@ const ARTIKEL_EXCEL_HEADERS = [
     "PALLET", "PCS/PALLET", "PACKING", "WRAPPING", "SCORING #", "SCR TYPE", 
     "SCORING DIRECTION", "TEAR TAPE", "STAMP", "WAX", "VENDOR", "DBS", "BFS", 
     "BLS", "CFS", "CLS", "OUT 1", "SIZE 1", "TRIM 1", "OUT 2", "SIZE 2", "TRIM 2", 
-    "LIST QTTY", "KOLOM", "ITEM CODE", "ITEMTYPE"
+    "LIST QTTY"
 ];
 
 // ---------------------------------------------------
@@ -37,10 +38,11 @@ function downloadArtikelTemplate() {
             "P": 270,
             "L": 170,
             "T": 175,
+            "ITEM.TYPE": "BA",
             "PART.TYPE": "-",
+            "SHEET OUTPUT": 1,
             "JOINT": "GL",
-            "PCS/PALLET": 500,
-            "ITEMTYPE": "BA"
+            "PCS/PALLET": 500
         };
 
         const wb = XLSX.utils.book_new();
@@ -97,6 +99,29 @@ function extractWrappingMl(namaBarang, pcsPalletVal) {
 }
 
 // ---------------------------------------------------
+// Hitung item_type dari rumus Excel:
+// =IF(AND($AF5<>1;OR($AC5="SN";$AC5="SB"));"LS";IF($AF5=0,5;"DJ";$AC5))
+//
+// $AC5 = kolom "ITEM.TYPE"    -> parameter itemTypeAC
+// $AF5 = kolom "SHEET OUTPUT" -> parameter sheetOutputAF
+//
+// Aturan:
+// 1. Jika SHEET OUTPUT bukan 1 DAN ITEM.TYPE = SN atau SB -> "LS"
+// 2. Jika tidak, dan SHEET OUTPUT = 0.5                    -> "DJ"
+// 3. Selain itu                                            -> isi ITEM.TYPE apa adanya
+// ---------------------------------------------------
+function hitungItemType(itemTypeAC, sheetOutputAF) {
+    // Sel kosong di Excel dianggap 0 saat dibandingkan, jadi disamakan di sini
+    const sheetOutput = sheetOutputAF === null ? 0 : sheetOutputAF;
+    // Excel tidak membedakan huruf besar/kecil pada perbandingan teks
+    const itemType = itemTypeAC ? String(itemTypeAC).trim().toUpperCase() : null;
+
+    if (sheetOutput !== 1 && (itemType === "SN" || itemType === "SB")) return "LS";
+    if (sheetOutput === 0.5) return "DJ";
+    return itemType;
+}
+
+// ---------------------------------------------------
 // B. PROSES UPLOAD EXCEL DARI MODAL
 // ---------------------------------------------------
 async function handleArtikelBulkUpload() {
@@ -143,6 +168,10 @@ async function handleArtikelBulkUpload() {
                 const namaBarangVal = getRowValue(row, ['NAMA BARANG', 'nama_barang']);
                 const pcsPalletVal = parseNumber(getRowValue(row, ['PCS/PALLET', 'pcs_pallet']));
 
+                // Ambil 2 input untuk rumus item_type
+                const itemTypeAC = getRowValue(row, ['ITEM.TYPE']);
+                const sheetOutputAF = parseNumber(getRowValue(row, ['SHEET OUTPUT']));
+
                 payloadList.push({
                     kode_artikel: kodeArtikel,
                     nama_barang: namaBarangVal,
@@ -156,7 +185,7 @@ async function handleArtikelBulkUpload() {
                     tipe_partisi: getRowValue(row, ['PART.TYPE', 'tipe_partisi']),
                     joint: getRowValue(row, ['JOINT', 'joint']),
                     pcs_pallet: pcsPalletVal,
-                    item_type: getRowValue(row, ['ITEMTYPE', 'item_type']),
+                    item_type: hitungItemType(itemTypeAC, sheetOutputAF),
                     wrapping_ml: extractWrappingMl(namaBarangVal, pcsPalletVal)
                 });
             }

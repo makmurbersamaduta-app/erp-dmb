@@ -1094,8 +1094,43 @@ async function handleSaveResign(e) {
             .eq('is_active', true);
         if (errAssign) throw errAssign;
 
+        // ===================================================
+        // PERBAIKAN BUG: sebelumnya resign HANYA menonaktifkan data
+        // kepegawaian (employees.is_active, employee_assignments),
+        // tidak pernah menyentuh akun login (public.users.auth_uid).
+        // Akibatnya ex-karyawan tetap bisa login tanpa batas waktu.
+        // Sekarang: cari baris public.users utk employee ini, kalau
+        // sudah punya akun auth, panggil Edge Function sync-auth
+        // action "deactivate" (ban permanen) utk menutup aksesnya.
+        //
+        // Ini SENGAJA tidak menggagalkan proses resign kalau langkah
+        // ini error -- data kepegawaian tetap harus tersimpan sebagai
+        // resign walau akun login gagal dinonaktifkan (tidak ideal,
+        // tapi lebih baik daripada resign batal total gara-gara
+        // Edge Function down). Admin diberi tahu lewat alert terpisah.
+        // ===================================================
+        let authDeactivateWarning = "";
+        try {
+            const { data: userRow, error: userLookupErr } = await supabaseClient
+                .from("users")
+                .select("id, auth_uid")
+                .eq("employee_id", empId)
+                .maybeSingle();
+
+            if (!userLookupErr && userRow?.auth_uid) {
+                const { data: deactData, error: deactErr } = await supabaseClient.functions.invoke("sync-auth", {
+                    body: { action: "deactivate", user_id: userRow.id }
+                });
+                if (deactErr || !deactData?.success) {
+                    authDeactivateWarning = "\n\nPERINGATAN: akun login karyawan ini GAGAL dinonaktifkan otomatis -- nonaktifkan manual lewat halaman Users Account.";
+                }
+            }
+        } catch {
+            authDeactivateWarning = "\n\nPERINGATAN: akun login karyawan ini GAGAL dinonaktifkan otomatis -- nonaktifkan manual lewat halaman Users Account.";
+        }
+
         bootstrap.Modal.getInstance(document.getElementById("modalResignKaryawan")).hide();
-        alert("Karyawan berhasil di-set Resign / Non-Aktif.");
+        alert("Karyawan berhasil di-set Resign / Non-Aktif." + authDeactivateWarning);
         await loadDirectoryData();
 
     } catch (err) {
@@ -1299,10 +1334,10 @@ function exportDirectoryToExcel() {
         const ccObj = masterCache.cost_centers.find(c => c.id == assign?.costcenter_id);
         const areaObj = masterCache.areas.find(a => a.id == assign?.area_id);
         const bagObj = masterCache.bagians.find(bg => bg.id == assign?.bagian_id);
+        const jabObj = masterCache.jabatans.find(j => j.id == assign?.jabatan_id);
 
         return {
             "NIK": emp.nik_karyawan || "-",
-            "No KTP": emp.nik_ktp || "-",
             "Nama": emp.nama || "-",
             "Tempat Lahir": emp.tempat_lahir || "-",
             "Tanggal Lahir": emp.tanggal_lahir || "-",
@@ -1328,7 +1363,8 @@ function exportDirectoryToExcel() {
             "Departemen": deptObj?.department_name || "-",
             "Cost Center": ccObj?.costcenter_name || "-",
             "Area": areaObj?.area_name || "-",
-            "Bagian": bagObj?.bagian_name || ""            // kosong kalau NULL, sesuai permintaan
+            "Bagian": bagObj?.bagian_name || "",            // kosong kalau NULL, sesuai permintaan
+            "Jabatan": jabObj?.jabatan_name || "-"          // kosong kalau NULL, sesuai permintaan
         };
     });
 
