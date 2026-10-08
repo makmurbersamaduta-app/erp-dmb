@@ -3,6 +3,8 @@
 // Halaman Laporan Sisa Wrapping (stg_public.sisa_wrapping_view)
 // 2 tab: Laporan (is_active=true) & History (is_active=false)
 // Server-side pagination -- 100 baris per halaman.
+// Fitur: search (kode artikel/nama barang/customer), filter per tab,
+// modal detail saat baris diklik (edit Qty & Batch Number khusus tab Laporan).
 // Filter Kode Artikel / Nama Barang / Customer: checklist
 // dengan search per grup (nilai unik dari RPC, di-generate
 // dinamis di JS -- bukan ditulis manual di HTML).
@@ -22,20 +24,28 @@ const CHECKLIST_FIELDS = [
 // ===================================================
 // 1. STATE GLOBAL
 // ===================================================
-let referenceData = { kode_artikel: [], nama_barang: [], customer: [] };
+// Opsi checklist filter dipisah per tab: Laporan = data aktif, History = data tidak aktif
+let referenceDataByTab = {
+    Laporan: { kode_artikel: [], nama_barang: [], customer: [] },
+    History: { kode_artikel: [], nama_barang: [], customer: [] }
+};
 
 let laporanState = {
     filters: { kodeArtikel: [], namaBarang: [], customer: [], tglMasukDari: "", tglMasukSampai: "" },
     page: 1,
     totalRows: 0,
-    data: []
+    data: [],
+    search: "",   // kata kunci search aktif
+    reqId: 0      // penanda permintaan terbaru (mencegah hasil lama menimpa hasil baru)
 };
 
 let historyState = {
     filters: { kodeArtikel: [], namaBarang: [], customer: [], tglMasukDari: "", tglMasukSampai: "", tglKeluarDari: "", tglKeluarSampai: "" },
     page: 1,
     totalRows: 0,
-    data: []
+    data: [],
+    search: "",   // kata kunci search aktif
+    reqId: 0      // penanda permintaan terbaru (mencegah hasil lama menimpa hasil baru)
 };
 
 // ===================================================
@@ -49,6 +59,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupFilterReset("Laporan");
     setupFilterReset("History");
     setupDownloadLaporan();
+    setupSearch("Laporan");
+    setupSearch("History");
+    setupRowModal();
+    setupDeleteAction();
 
     try {
         await loadReferenceData();
@@ -79,18 +93,33 @@ document.addEventListener("DOMContentLoaded", async () => {
 // dikerjakan di database.
 // ===================================================
 async function loadReferenceData() {
+    // Opsi filter diambil terpisah: data aktif untuk tab Laporan,
+    // data tidak aktif untuk tab History.
+    const [aktif, history] = await Promise.all([
+        fetchFilterOptions(true),
+        fetchFilterOptions(false)
+    ]);
+    referenceDataByTab.Laporan = aktif;
+    referenceDataByTab.History = history;
+}
+
+async function fetchFilterOptions(isActive) {
+    const empty = { kode_artikel: [], nama_barang: [], customer: [] };
+
     const { data, error } = await supabaseClient
         .schema("stg_public")
-        .rpc("get_sisa_wrapping_filter_options");
+        .rpc("get_sisa_wrapping_filter_options_by_status", { p_is_active: isActive });
 
     if (error) {
-        console.error("Gagal memuat opsi filter:", error.message);
-        return;
+        console.error("Gagal memuat opsi filter (is_active=" + isActive + "):", error.message);
+        return empty;
     }
 
-    referenceData.kode_artikel = data?.kode_artikel || [];
-    referenceData.nama_barang = data?.nama_barang || [];
-    referenceData.customer = data?.customer || [];
+    return {
+        kode_artikel: data?.kode_artikel || [],
+        nama_barang: data?.nama_barang || [],
+        customer: data?.customer || []
+    };
 }
 
 // ===================================================
@@ -105,7 +134,7 @@ function renderFieldFilterGroups(tabName) {
     const state = tabName === "Laporan" ? laporanState : historyState;
 
     container.innerHTML = CHECKLIST_FIELDS.map(field => {
-        const values = referenceData[field.column] || [];
+        const values = referenceDataByTab[tabName][field.column] || [];
         const groupId = `filterGroup_${field.key}_${tabName}`;
         const searchId = `filterSearch_${field.key}_${tabName}`;
         const listId = `filterList_${field.key}_${tabName}`;
@@ -168,6 +197,56 @@ function renderFieldFilterGroups(tabName) {
 }
 
 // ===================================================
+// 4B. HELPER QUERY: SEARCH + FILTER (dipakai tabel & download)
+// ===================================================
+
+// Search mencocokkan sebagian teks di kode_artikel, nama_barang, ATAU customer.
+// Nilai dibungkus tanda kutip ganda supaya karakter seperti koma/kurung
+// pada kata kunci tidak merusak sintaks query.
+function buildSearchOrClause(keyword) {
+    const safe = keyword.replace(/[\\"]/g, "\\$&");
+    const pattern = `"%${safe}%"`;
+    return `kode_artikel.ilike.${pattern},nama_barang.ilike.${pattern},customer.ilike.${pattern}`;
+}
+
+// Terapkan search + semua filter dari state tab ke query Supabase.
+function applyStateFilters(query, state) {
+    const f = state.filters;
+
+    if (state.search) query = query.or(buildSearchOrClause(state.search));
+
+    if (f.kodeArtikel.length > 0) query = query.in("kode_artikel", f.kodeArtikel);
+    if (f.namaBarang.length > 0) query = query.in("nama_barang", f.namaBarang);
+    if (f.customer.length > 0) query = query.in("customer", f.customer);
+    if (f.tglMasukDari) query = query.gte("tanggal_masuk", f.tglMasukDari);
+    if (f.tglMasukSampai) query = query.lte("tanggal_masuk", f.tglMasukSampai);
+
+    // Khusus History (di state Laporan field ini tidak ada, jadi otomatis dilewati)
+    if (f.tglKeluarDari) query = query.gte("tanggal_out", f.tglKeluarDari);
+    if (f.tglKeluarSampai) query = query.lte("tanggal_out", f.tglKeluarSampai);
+
+    return query;
+}
+
+// Kotak search di toolbar tiap tab (jeda 400 ms setelah berhenti mengetik)
+function setupSearch(tabName) {
+    const input = document.getElementById(`searchInput${tabName}`);
+    if (!input) return;
+
+    let timer = null;
+    input.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+            const state = tabName === "Laporan" ? laporanState : historyState;
+            state.search = input.value.trim();
+            state.page = 1;
+            if (tabName === "Laporan") loadLaporanPage();
+            else loadHistoryPage();
+        }, 400);
+    });
+}
+
+// ===================================================
 // 5. HELPER: format tanggal ke dd/mm/yyyy untuk tampilan
 // ===================================================
 function formatTanggal(isoDate) {
@@ -184,8 +263,9 @@ function formatTanggal(isoDate) {
 // 6. TAB LAPORAN -- ambil data (is_active = true)
 // ===================================================
 async function loadLaporanPage() {
+    const myReq = ++laporanState.reqId;
     const tbody = document.getElementById("laporanTableBody");
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
+    tbody.innerHTML = `<tr class="row-loading"><td colspan="11"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
 
     try {
         let query = supabaseClient
@@ -194,18 +274,14 @@ async function loadLaporanPage() {
             .select("*", { count: "exact" })
             .eq("is_active", true);
 
-        const f = laporanState.filters;
-        if (f.kodeArtikel.length > 0) query = query.in("kode_artikel", f.kodeArtikel);
-        if (f.namaBarang.length > 0) query = query.in("nama_barang", f.namaBarang);
-        if (f.customer.length > 0) query = query.in("customer", f.customer);
-        if (f.tglMasukDari) query = query.gte("tanggal_masuk", f.tglMasukDari);
-        if (f.tglMasukSampai) query = query.lte("tanggal_masuk", f.tglMasukSampai);
+        query = applyStateFilters(query, laporanState);
 
         const start = (laporanState.page - 1) * ROWS_PER_PAGE;
         const end = start + ROWS_PER_PAGE - 1;
         query = query.order("created_at", { ascending: false }).range(start, end);
 
         const { data, error, count } = await query;
+        if (myReq !== laporanState.reqId) return; // ada permintaan yang lebih baru
         if (error) throw error;
 
         laporanState.data = data || [];
@@ -216,21 +292,21 @@ async function loadLaporanPage() {
 
     } catch (err) {
         console.error("Gagal memuat data laporan:", err);
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Gagal memuat data: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="11">Gagal memuat data: ${err.message}</td></tr>`;
     }
 }
 
 function renderLaporanTable() {
     const tbody = document.getElementById("laporanTableBody");
     if (laporanState.data.length === 0) {
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Tidak ada data ditemukan.</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="11">Tidak ada data ditemukan.</td></tr>`;
         return;
     }
 
     const start = (laporanState.page - 1) * ROWS_PER_PAGE;
 
     tbody.innerHTML = laporanState.data.map((row, index) => `
-        <tr>
+        <tr class="row-clickable" data-id="${String(row.id).replace(/"/g, "&quot;")}">
             <td class="col-no">${start + index + 1}</td>
             <td class="col-aksi">
                 <button type="button" class="btn-download-label" data-id="${row.id}">
@@ -245,7 +321,11 @@ function renderLaporanTable() {
             <td>${row.qty ?? '<span class="data-empty-cell">-</span>'}</td>
             <td>${row.petugas_in || '<span class="data-empty-cell">-</span>'}</td>
             <td>${row.shift_in || '<span class="data-empty-cell">-</span>'}</td>
-            
+            <td class="col-hapus">
+                <button type="button" class="btn-delete-row" data-id="${String(row.id).replace(/"/g, "&quot;")}">
+                    <i class="fa-solid fa-trash"></i> Hapus
+                </button>
+            </td>
         </tr>
     `).join("");
 
@@ -354,6 +434,7 @@ async function downloadLabelWrapping(id) {
 // 7. TAB HISTORY -- ambil data (is_active = false)
 // ===================================================
 async function loadHistoryPage() {
+    const myReq = ++historyState.reqId;
     const tbody = document.getElementById("historyTableBody");
     tbody.innerHTML = `<tr class="row-loading"><td colspan="12"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
 
@@ -364,20 +445,14 @@ async function loadHistoryPage() {
             .select("*", { count: "exact" })
             .eq("is_active", false);
 
-        const f = historyState.filters;
-        if (f.kodeArtikel.length > 0) query = query.in("kode_artikel", f.kodeArtikel);
-        if (f.namaBarang.length > 0) query = query.in("nama_barang", f.namaBarang);
-        if (f.customer.length > 0) query = query.in("customer", f.customer);
-        if (f.tglMasukDari) query = query.gte("tanggal_masuk", f.tglMasukDari);
-        if (f.tglMasukSampai) query = query.lte("tanggal_masuk", f.tglMasukSampai);
-        if (f.tglKeluarDari) query = query.gte("tanggal_out", f.tglKeluarDari);
-        if (f.tglKeluarSampai) query = query.lte("tanggal_out", f.tglKeluarSampai);
+        query = applyStateFilters(query, historyState);
 
         const start = (historyState.page - 1) * ROWS_PER_PAGE;
         const end = start + ROWS_PER_PAGE - 1;
         query = query.order("update_at", { ascending: false }).range(start, end);
 
         const { data, error, count } = await query;
+        if (myReq !== historyState.reqId) return; // ada permintaan yang lebih baru
         if (error) throw error;
 
         historyState.data = data || [];
@@ -402,7 +477,7 @@ function renderHistoryTable() {
     const start = (historyState.page - 1) * ROWS_PER_PAGE;
 
     tbody.innerHTML = historyState.data.map((row, index) => `
-        <tr>
+        <tr class="row-clickable" data-id="${String(row.id).replace(/"/g, "&quot;")}">
             <td class="col-no">${start + index + 1}</td>
             <td>${row.kode_artikel || "-"}</td>
             <td>${row.nama_barang || '<span class="data-empty-cell">-</span>'}</td>
@@ -597,34 +672,38 @@ async function handleDownloadLaporan() {
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> <span>Menyiapkan...</span>`;
 
     try {
-        let query = supabaseClient
-            .schema("stg_public")
-            .from("sisa_wrapping_view")
-            .select("*")
-            .eq("is_active", true);
+        // Ambil SEMUA baris yang cocok dengan search + filter tab Laporan,
+        // bertahap. Total dipastikan lewat count "exact", dan pengambilan
+        // lanjut dari jumlah baris yang BENAR-BENAR diterima. Urutan memakai
+        // created_at lalu id agar baris ber-created_at sama tidak tertukar
+        // atau terlewat di batas antar-halaman.
+        const PAGE = 1000;
+        const allRows = [];
+        let totalCount = null;
 
-        // Terapkan filter yang SAMA PERSIS dengan tampilan tabel Laporan
-        const f = laporanState.filters;
-        if (f.kodeArtikel.length > 0) query = query.in("kode_artikel", f.kodeArtikel);
-        if (f.namaBarang.length > 0) query = query.in("nama_barang", f.namaBarang);
-        if (f.customer.length > 0) query = query.in("customer", f.customer);
-        if (f.tglMasukDari) query = query.gte("tanggal_masuk", f.tglMasukDari);
-        if (f.tglMasukSampai) query = query.lte("tanggal_masuk", f.tglMasukSampai);
+        while (totalCount === null || allRows.length < totalCount) {
+            let q = supabaseClient
+                .schema("stg_public")
+                .from("sisa_wrapping_view")
+                .select("*", { count: "exact" })
+                .eq("is_active", true);
 
-        query = query.order("created_at", { ascending: false });
+            q = applyStateFilters(q, laporanState);
+            q = q.order("created_at", { ascending: false })
+                 .order("id", { ascending: false })
+                 .range(allRows.length, allRows.length + PAGE - 1);
 
-        // Ambil SEMUA baris (tanpa .range() 100 baris) -- diambil bertahap
-        // per 1000 baris kalau datanya besar, mengikuti batas default
-        // PostgREST per-request.
-        let allRows = [];
-        let start = 0;
-        const CHUNK = 1000;
-        while (true) {
-            const { data: chunkData, error: chunkErr } = await query.range(start, start + CHUNK - 1);
+            const { data: chunkData, error: chunkErr, count } = await q;
             if (chunkErr) throw chunkErr;
-            allRows = allRows.concat(chunkData || []);
-            if (!chunkData || chunkData.length < CHUNK) break;
-            start += CHUNK;
+
+            if (totalCount === null) totalCount = count || 0;
+            if (!chunkData || chunkData.length === 0) break;
+
+            allRows.push(...chunkData);
+        }
+
+        if (totalCount !== null && allRows.length < totalCount) {
+            alert(`Peringatan: hanya ${allRows.length} dari ${totalCount} baris yang berhasil diambil.`);
         }
 
         if (allRows.length === 0) {
@@ -652,6 +731,283 @@ async function handleDownloadLaporan() {
         console.error("Gagal download laporan sisa wrapping:", err);
         alert("Gagal menyiapkan file download: " + err.message);
     } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+    }
+}
+
+
+// ===================================================
+// 10. MODAL DETAIL BARIS (muncul saat baris tabel diklik)
+// - Awalnya SEMUA field terkunci (readonly), di tab Laporan maupun History.
+// - Tombol "Edit" hanya ada di tab Laporan, dan hanya membuka
+//   field Batch Number & Qty. Field lain tetap terkunci.
+// ===================================================
+let modalContext = { tab: null, row: null };
+let modalPhotoReq = 0;
+
+function setupRowModal() {
+    document.getElementById("laporanTableBody")?.addEventListener("click", (e) => handleRowClick(e, "Laporan"));
+    document.getElementById("historyTableBody")?.addEventListener("click", (e) => handleRowClick(e, "History"));
+
+    document.getElementById("btnModalEdit")?.addEventListener("click", () => setModalEditMode(true));
+    document.getElementById("btnModalBatal")?.addEventListener("click", cancelModalEdit);
+    document.getElementById("btnModalSimpan")?.addEventListener("click", saveModalEdit);
+    document.getElementById("modalSisaWrapping")?.addEventListener("hidden.bs.modal", resetModalState);
+}
+
+function handleRowClick(e, tabName) {
+    // Klik tombol "Label" tetap mengunduh PDF, tidak membuka modal
+    if (e.target.closest(".btn-download-label")) return;
+    if (e.target.closest(".btn-delete-row")) return;
+
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+
+    const state = tabName === "Laporan" ? laporanState : historyState;
+    const row = state.data.find(r => String(r.id) === tr.getAttribute("data-id"));
+    if (!row) return;
+
+    openRowModal(tabName, row);
+}
+
+function openRowModal(tabName, row) {
+    modalContext = { tab: tabName, row: row };
+
+    fillModal(row);
+    setModalEditMode(false);
+    loadModalPhoto(row.id);
+
+    const modalEl = document.getElementById("modalSisaWrapping");
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+function fillModal(row) {
+    document.getElementById("mdKodeArtikel").value = row.kode_artikel || "";
+    document.getElementById("mdNamaBarang").value = row.nama_barang || "";
+    document.getElementById("mdCustomer").value = row.customer || "";
+    document.getElementById("mdBatch").value = row.batch_number || "";
+    document.getElementById("mdQty").value = row.qty ?? "";
+    document.getElementById("mdTglMasuk").value = formatTanggal(row.tanggal_masuk) || "";
+    document.getElementById("mdPetugas").value = row.petugas_in || "";
+}
+
+// on = true  -> Batch Number & Qty bisa diedit, tombol Batal + Simpan muncul
+// on = false -> semua terkunci, tombol Edit muncul (hanya di tab Laporan)
+function setModalEditMode(on) {
+    const batch = document.getElementById("mdBatch");
+    const qty = document.getElementById("mdQty");
+
+    batch.readOnly = !on;
+    qty.readOnly = !on;
+
+    document.getElementById("btnModalEdit").classList.toggle("d-none", on || modalContext.tab !== "Laporan");
+    document.getElementById("btnModalBatal").classList.toggle("d-none", !on);
+    document.getElementById("btnModalSimpan").classList.toggle("d-none", !on);
+    document.getElementById("btnModalTutup").classList.toggle("d-none", on);
+
+    showModalMessage("", "");
+    if (on) batch.focus();
+}
+
+function cancelModalEdit() {
+    if (modalContext.row) fillModal(modalContext.row); // kembalikan ke nilai awal
+    setModalEditMode(false);
+}
+
+function showModalMessage(text, type) {
+    const el = document.getElementById("mdMessage");
+    if (!text) {
+        el.classList.add("d-none");
+        el.textContent = "";
+        return;
+    }
+    el.className = `alert py-2 small alert-${type}`;
+    el.textContent = text;
+}
+
+// Foto tidak ada di sisa_wrapping_view, jadi diambil dari tabel sisa_wrapping
+// (kolom foto_path) saat modal dibuka.
+async function loadModalPhoto(rowId) {
+    const wrap = document.getElementById("mdFotoWrapper");
+    wrap.innerHTML = `<span class="data-empty-cell">Memuat foto...</span>`;
+    const myReq = ++modalPhotoReq;
+
+    const { data, error } = await supabaseClient
+        .schema("stg_public")
+        .from("sisa_wrapping")
+        .select("foto_path")
+        .eq("id", rowId)
+        .maybeSingle();
+
+    if (myReq !== modalPhotoReq) return; // modal sudah pindah ke baris lain / ditutup
+
+    if (error) {
+        console.error("Gagal memuat foto:", error);
+        wrap.innerHTML = `<span class="data-empty-cell">Gagal memuat foto.</span>`;
+        return;
+    }
+
+    const url = data?.foto_path;
+    if (!url) {
+        wrap.innerHTML = `<span class="data-empty-cell">Tidak ada foto.</span>`;
+        return;
+    }
+
+    wrap.innerHTML = "";
+    const link = document.createElement("a");
+    link.href = url;
+    link.target = "_blank";
+    link.rel = "noopener";
+
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = "Foto barang";
+    img.className = "md-foto";
+    img.onerror = () => { wrap.innerHTML = `<span class="data-empty-cell">Foto tidak dapat dimuat.</span>`; };
+
+    link.appendChild(img);
+    wrap.appendChild(link);
+}
+
+async function saveModalEdit() {
+    const row = modalContext.row;
+    if (!row) return;
+
+    // --- Validasi input ---
+    const newBatch = document.getElementById("mdBatch").value.trim() || null;
+    const qtyRaw = document.getElementById("mdQty").value.trim();
+    const newQty = Number(qtyRaw);
+
+    if (qtyRaw === "" || isNaN(newQty) || newQty < 0) {
+        showModalMessage("Qty harus berupa angka dan tidak boleh negatif.", "danger");
+        return;
+    }
+
+    const batchBefore = row.batch_number || null;
+    const qtyBefore = row.qty === null || row.qty === undefined ? null : Number(row.qty);
+    if (newBatch === batchBefore && newQty === qtyBefore) {
+        setModalEditMode(false); // tidak ada perubahan
+        return;
+    }
+
+    const btnSimpan = document.getElementById("btnModalSimpan");
+    const btnBatal = document.getElementById("btnModalBatal");
+    const origHtml = btnSimpan.innerHTML;
+    btnSimpan.disabled = true;
+    btnBatal.disabled = true;
+    btnSimpan.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...`;
+
+    try {
+        // Update ke TABEL sisa_wrapping (bukan view). Hanya baris yang masih
+        // aktif yang boleh diedit. .select() dipakai untuk memastikan ada
+        // baris yang benar-benar berubah.
+        const { data, error } = await supabaseClient
+            .schema("stg_public")
+            .from("sisa_wrapping")
+            .update({
+                batch_number: newBatch,
+                qty: newQty,
+                update_at: new Date().toISOString()
+            })
+            .eq("id", row.id)
+            .eq("is_active", true)
+            .select("id");
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            showModalMessage("Tidak ada data yang tersimpan. Kemungkinan data sudah tidak aktif, atau akun ini tidak punya izin mengubah data.", "danger");
+            return;
+        }
+
+        // Berhasil: perbarui data di memori, kembali ke mode terkunci, segarkan tabel
+        row.batch_number = newBatch;
+        row.qty = newQty;
+        fillModal(row);
+        setModalEditMode(false);
+        showModalMessage("Perubahan berhasil disimpan.", "success");
+        await loadLaporanPage();
+
+    } catch (err) {
+        console.error("Gagal menyimpan perubahan:", err);
+        showModalMessage("Gagal menyimpan: " + err.message, "danger");
+    } finally {
+        btnSimpan.disabled = false;
+        btnBatal.disabled = false;
+        btnSimpan.innerHTML = origHtml;
+    }
+}
+
+function resetModalState() {
+    modalPhotoReq++;
+    modalContext = { tab: null, row: null };
+    document.getElementById("mdFotoWrapper").innerHTML = "";
+    showModalMessage("", "");
+}
+
+
+// ===================================================
+// 11. HAPUS BARIS (khusus tab Laporan)
+// Menghapus PERMANEN baris dari tabel stg_public.sisa_wrapping.
+// Hanya baris aktif (is_active = true) yang bisa dihapus.
+// ===================================================
+function setupDeleteAction() {
+    document.getElementById("laporanTableBody")?.addEventListener("click", (e) => {
+        const btn = e.target.closest(".btn-delete-row");
+        if (!btn) return;
+        deleteLaporanRow(btn.getAttribute("data-id"), btn);
+    });
+}
+
+async function deleteLaporanRow(id, btn) {
+    const row = laporanState.data.find(r => String(r.id) === String(id));
+    if (!row) {
+        alert("Data tidak ditemukan pada halaman saat ini.");
+        return;
+    }
+
+    // Konfirmasi dulu -- penghapusan tidak bisa dibatalkan
+    const ok = confirm(
+        "Hapus data ini secara permanen?\n\n" +
+        `Kode Artikel : ${row.kode_artikel || "-"}\n` +
+        `Batch Number : ${row.batch_number || "-"}\n` +
+        `Qty          : ${row.qty ?? "-"}\n` +
+        `Tanggal Masuk: ${formatTanggal(row.tanggal_masuk) || "-"}\n\n` +
+        "Tindakan ini TIDAK dapat dibatalkan."
+    );
+    if (!ok) return;
+
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i>`;
+
+    try {
+        // .select("id") dipakai untuk memastikan ada baris yang benar-benar terhapus
+        const { data, error } = await supabaseClient
+            .schema("stg_public")
+            .from("sisa_wrapping")
+            .delete()
+            .eq("id", row.id)
+            .eq("is_active", true)
+            .select("id");
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            alert("Tidak ada data yang terhapus. Kemungkinan data sudah tidak aktif atau sudah dihapus, atau akun ini tidak punya izin menghapus.");
+            return;
+        }
+
+        // Jika yang dihapus adalah satu-satunya baris di halaman ini, mundur satu halaman
+        if (laporanState.data.length === 1 && laporanState.page > 1) laporanState.page--;
+        await loadLaporanPage();
+
+    } catch (err) {
+        console.error("Gagal menghapus data:", err);
+        alert("Gagal menghapus data: " + err.message);
+    } finally {
+        // Jika baris sudah dirender ulang, tombol lama tidak ada lagi -- aman diabaikan
         btn.disabled = false;
         btn.innerHTML = origHtml;
     }
