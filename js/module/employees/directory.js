@@ -1338,6 +1338,7 @@ function exportDirectoryToExcel() {
 
         return {
             "NIK": emp.nik_karyawan || "-",
+            "NIK KTP": emp.nik_ktp || "-",
             "Nama": emp.nama || "-",
             "Tempat Lahir": emp.tempat_lahir || "-",
             "Tanggal Lahir": emp.tanggal_lahir || "-",
