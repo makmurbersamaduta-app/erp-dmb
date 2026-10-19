@@ -17,8 +17,8 @@ const STOCK_VIEW = "stock_view";     // view sumber data
 const ROWS_PER_PAGE = 100;           // baris maksimal per halaman
 
 // Cabang: branch_id -> nama tab
-const BRANCHES = { 1: "Makassar", 2: "Surabaya" };
-const DEFAULT_BRANCH = 1;
+const BRANCHES = { 2: "Makassar", 1: "Surabaya" };
+const DEFAULT_BRANCH = 2;   // Makassar
 
 // Halaman tujuan untuk 3 tombol di bawah tabel.
 // Cabang yang sedang dibuka ikut dikirim sebagai ?branch_id=1 atau ?branch_id=2.

@@ -32,8 +32,8 @@ const RPC_UBAH = "ubah_stock_out";
 const RPC_NEXT_KODE = "next_kode_batch";
 
 // Cabang: branch_id -> nama tab
-const BRANCHES = { 1: "Makassar", 2: "Surabaya" };
-const DEFAULT_BRANCH = 1;
+const BRANCHES = { 2: "Makassar", 1: "Surabaya" };
+const DEFAULT_BRANCH = 2;
 
 // Sesi login & hak akses
 const SESSION_KEY = "erp_session";          // key sesi login di browser (JSON)
@@ -43,7 +43,7 @@ const SESSION_BRANCH_FIELDS = ["branchId", "branch_id"];
 
 // Pencarian Kode Barang (Non-Request) hanya menampilkan barang yang tidak bernilai false di kolom cabang.
 const BATASI_BARANG_PER_CABANG = true;
-const BRANCH_FLAG_COLUMN = { 1: "is_makassar", 2: "is_surabaya" };
+const BRANCH_FLAG_COLUMN = { 2: "is_makassar", 1: "is_surabaya" };
 
 // Filter di panel Filter: key -> judul (jenis di view stock_out_opsi_filter)
 const FILTER_FIELDS = [
@@ -220,7 +220,7 @@ function setupTabs() {
             const id = parseInt(btn.dataset.branch, 10);
             if (!state.canSwitch || id === state.branchId) return;
             state.branchId = id;
-            state.page = 1;
+            state.page = 2;
             state.filters = { department: [], area: [], periode: [], kategori: [] };
             updateTabUi();
             updateFilterBadge();

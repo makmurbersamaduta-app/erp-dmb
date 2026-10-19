@@ -20,8 +20,8 @@ const MODAL_MAX_ROWS = 50;                  // batas maksimal baris di modal Inp
 const SUGGEST_LIMIT = 15;                   // jumlah saran Kode Barang yang ditampilkan
 
 // Cabang: branch_id -> nama tab
-const BRANCHES = { 1: "Makassar", 2: "Surabaya" };
-const DEFAULT_BRANCH = 1;
+const BRANCHES = { 2: "Makassar", 1: "Surabaya" };
+const DEFAULT_BRANCH = 2;
 
 // Sesi login & hak akses
 const SESSION_KEY = "erp_session";          // key sesi login di browser (JSON)
@@ -33,7 +33,7 @@ const SESSION_BRANCH_FIELDS = ["branchId", "branch_id"];
 // Hanya tampilkan barang yang "Tersedia" di cabang tsb (kolom is_makassar / is_surabaya di data_barang).
 // Barang yang nilainya false disembunyikan dari pencarian Kode Barang. Ubah ke false untuk mematikan.
 const BATASI_BARANG_PER_CABANG = true;
-const BRANCH_FLAG_COLUMN = { 1: "is_makassar", 2: "is_surabaya" };
+const BRANCH_FLAG_COLUMN = { 2: "is_makassar", 1: "is_surabaya" };
 
 // ===================================================
 // KELOMPOK 2: STATE (DATA SEMENTARA DI MEMORI)
