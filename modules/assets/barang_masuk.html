@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Barang Masuk - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: Bootstrap (hanya untuk modal), ikon Font Awesome, font Inter,
+         dan seluruh gaya halaman (ditulis di sini, tanpa CSS proyek).
+         Prefix "ct-" = gaya halaman, "mi-" = isi modal Input.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --ct-primary: #2b6cb0;
+            --ct-primary-dark: #1e4e8c;
+            --ct-bg-soft: #e1ecf5;
+            --ct-border: #d3dfea;
+            --ct-text-main: #1f2d3d;
+            --ct-text-muted: #6b7c93;
+            --ct-danger: #d64545;
+            --ct-radius: 8px;
+            --ct-head-h: 40px;           /* tinggi satu baris header tabel (header 2 tingkat) */
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--ct-text-main);
+        }
+
+        /* --- Bar atas: Kembali (kiri) + tab cabang (kanan) --- */
+        .ct-topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--ct-border); flex-shrink: 0;
+        }
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 16px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-border); background: var(--ct-bg-soft);
+            color: var(--ct-primary-dark); font-size: 14px; font-weight: 600; text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--ct-primary); color: #fff; }
+        .ct-tabs { display: flex; gap: 6px; background: var(--ct-bg-soft); padding: 4px; border-radius: 10px; }
+        .ct-tabs[hidden] { display: none; }
+        .ct-tab {
+            border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+            font-size: 14px; font-weight: 600; color: var(--ct-text-muted); cursor: pointer; font-family: inherit;
+        }
+        .ct-tab:hover { color: var(--ct-primary-dark); }
+        .ct-tab.active { background: var(--ct-primary); color: #fff; }
+
+        /* --- Area utama & judul --- */
+        .ct-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+        .ct-title-block { text-align: center; margin-bottom: 14px; flex-shrink: 0; }
+        .ct-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .ct-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--ct-primary); }
+
+        /* --- Toolbar --- */
+        .ct-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .ct-search-wrapper { position: relative; flex: 1; max-width: 360px; min-width: 200px; }
+        .ct-search-wrapper i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ct-text-muted); font-size: 13px; }
+        .ct-search-input {
+            width: 100%; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            padding: 8px 12px 8px 34px; font-size: 14px; outline: none; background: #fff; font-family: inherit;
+        }
+        .ct-search-input:focus { border-color: var(--ct-primary); }
+        .btn-action {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 9px 18px; border-radius: var(--ct-radius); border: 1px solid var(--ct-primary);
+            background: var(--ct-primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-action:hover { background: var(--ct-primary-dark); border-color: var(--ct-primary-dark); }
+        .btn-action:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* --- Tabel utama (header 2 tingkat, sticky) --- */
+        .ct-table-wrapper {
+            background: #fff; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            overflow: auto; flex: 1; min-height: 0;
+        }
+        .ct-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .ct-table thead th {
+            position: sticky; z-index: 10; height: var(--ct-head-h);
+            background: var(--ct-bg-soft); color: var(--ct-text-main);
+            font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap;
+            border-bottom: 1px solid var(--ct-border);
+        }
+        .ct-table thead tr:first-child th { top: 0; }
+        .ct-table thead tr:nth-child(2) th { top: var(--ct-head-h); border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-span-2 { border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-group { text-align: center; }
+        .ct-table tbody td { padding: 9px 14px; border-bottom: 1px solid var(--ct-border); vertical-align: middle; white-space: nowrap; }
+        .ct-table tbody tr.row-clickable { cursor: pointer; }
+        .ct-table tbody tr.row-clickable:hover { background: #f7fafc; }
+        .ct-table tbody tr.row-group td {
+            background: #f0f5fa; font-weight: 700; font-size: 13px; color: var(--ct-primary-dark);
+            padding: 8px 14px; border-bottom: 1px solid var(--ct-border);
+        }
+        .col-no { width: 50px; text-align: center !important; }
+        .col-qty { text-align: right !important; min-width: 80px; }
+        .col-ket { white-space: normal !important; min-width: 160px; max-width: 280px; }
+        .qty-zero { color: var(--ct-text-muted); }
+        .badge-status { display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .badge-new { background: #d1fae5; color: #065f46; }
+        .badge-second { background: #fef3c7; color: #92400e; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--ct-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--ct-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .ct-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--ct-border); background: #fff; border-radius: 6px;
+            font-size: 13px; color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .pagination-btn:hover { border-color: var(--ct-primary); }
+        .pagination-btn.active { background: var(--ct-primary); border-color: var(--ct-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ct-page-info { font-size: 12.5px; color: var(--ct-text-muted); margin-left: 10px; }
+
+        /* --- Modal: tabel isian --- */
+        .mi-table-wrapper { overflow-x: auto; }
+        .mi-table { width: 100%; min-width: 1000px; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .mi-table thead th {
+            background: var(--ct-bg-soft); padding: 9px 8px; font-weight: 600; text-align: left; white-space: nowrap;
+            border-bottom: 2px solid var(--ct-border);
+        }
+        .mi-table tbody td { padding: 6px 6px; border-bottom: 1px solid var(--ct-border); vertical-align: middle; }
+        .mi-table tbody tr.row-invalid td { background: #fdecec; }
+        .mi-no { width: 40px; text-align: center; color: var(--ct-text-muted); }
+        .md-input {
+            width: 100%; border: 1px solid var(--ct-border); border-radius: 6px;
+            padding: 7px 9px; font-size: 13.5px; color: var(--ct-text-main); background: #fff; outline: none; font-family: inherit;
+        }
+        .md-input:focus { border-color: var(--ct-primary); }
+        .md-input[readonly] { background: #f4f7fb; }
+        .col-w-kode { min-width: 190px; }
+        .col-w-nama { min-width: 200px; }
+        .col-w-qty { min-width: 90px; width: 100px; }
+        .col-w-satuan { min-width: 80px; width: 90px; }
+        .col-w-ket { min-width: 180px; }
+        .mi-thumb { width: 44px; height: 44px; object-fit: cover; border: 1px solid var(--ct-border); border-radius: 6px; display: block; }
+        .mi-count { font-size: 12.5px; color: var(--ct-text-muted); }
+
+        /* Tombol pilihan Baru / Second */
+        .seg { display: inline-flex; border: 1px solid var(--ct-border); border-radius: 6px; overflow: hidden; white-space: nowrap; }
+        .seg button { border: none; background: #fff; padding: 6px 12px; font-size: 13px; cursor: pointer; color: var(--ct-text-muted); font-family: inherit; }
+        .seg button.active[data-val="true"] { background: #d1fae5; color: #065f46; font-weight: 600; }
+        .seg button.active[data-val="false"] { background: #fef3c7; color: #92400e; font-weight: 600; }
+
+        /* Daftar saran Kode Barang (melayang di atas modal) */
+        .ks-box {
+            position: fixed; z-index: 1100; background: #fff; border: 1px solid var(--ct-border);
+            border-radius: 6px; box-shadow: 0 8px 24px rgba(31, 45, 61, 0.18); max-height: 260px; overflow-y: auto;
+        }
+        .ks-item { padding: 8px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #eef2f6; }
+        .ks-item:last-child { border-bottom: none; }
+        .ks-item.active, .ks-item:hover { background: var(--ct-bg-soft); }
+        .ks-empty { padding: 10px 12px; font-size: 13px; color: var(--ct-text-muted); }
+
+        @media (max-width: 640px) {
+            .ct-topbar, .ct-main { padding-left: 12px; padding-right: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS
+         Fungsi: tombol "Kembali" ke catalog.html (kiri) dan tab cabang (kanan).
+         Tab hanya tampil untuk role Maintenance dan Superadmin (diatur JS).
+         ============================================================ -->
+    <header class="ct-topbar">
+        <a href="../assets/catalog.html" class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <div class="ct-tabs" id="branchTabs" role="tablist" hidden>
+            <button type="button" class="ct-tab active" data-branch="1" role="tab">Makassar</button>
+            <button type="button" class="ct-tab" data-branch="2" role="tab">Surabaya</button>
+        </div>
+    </header>
+
+    <main class="ct-main">
+
+        <!-- KELOMPOK 3: JUDUL (baris kedua berganti sesuai cabang, diatur JS) -->
+        <div class="ct-title-block">
+            <h1 class="ct-title">Data Barang Masuk</h1>
+            <div class="ct-subtitle" id="branchTitle">Makassar</div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Search (kiri) dan tombol "Input Barang" (kanan).
+             ======================================================== -->
+        <div class="ct-toolbar">
+            <div class="ct-search-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="ct-search-input" id="searchInput" placeholder="Cari kode, nama, kategori barang..." autocomplete="off">
+            </div>
+            <button type="button" class="btn-action" id="btnInput"><i class="fa-solid fa-plus"></i> Input Barang</button>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL UTAMA
+             Fungsi: riwayat barang masuk, dikelompokkan per kategori.
+             Header 2 tingkat dan sticky. Isi dibuat oleh barang_masuk.js.
+             ======================================================== -->
+        <div class="ct-table-wrapper">
+            <table class="ct-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="th-span-2 col-no">No</th>
+                        <th rowspan="2" class="th-span-2">Tanggal</th>
+                        <th rowspan="2" class="th-span-2">Kode Barang</th>
+                        <th rowspan="2" class="th-span-2">Nama Barang</th>
+                        <th colspan="2" class="th-group">Qty Barang</th>
+                        <th rowspan="2" class="th-span-2">Satuan</th>
+                        <th rowspan="2" class="th-span-2">Status Barang</th>
+                        <th rowspan="2" class="th-span-2">Kategori</th>
+                        <th rowspan="2" class="th-span-2">Keterangan</th>
+                    </tr>
+                    <tr>
+                        <th class="th-group">Baru</th>
+                        <th class="th-group">Second</th>
+                    </tr>
+                </thead>
+                <tbody id="stockInTableBody">
+                    <tr class="row-loading"><td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 6: PAGINATION (maksimal 100 baris per halaman) -->
+        <div class="ct-pagination" id="stockInPagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 7: MODAL INPUT / EDIT
+         Fungsi: satu modal untuk dua mode (diatur JS):
+           - Input : tabel isian, mulai 5 baris, bertambah otomatis sampai 50 baris
+           - Edit  : 1 baris saja, hanya Qty dan Baru/Second yang bisa diubah,
+                     ada tombol Hapus (permanen). Khusus Maintenance & Superadmin.
+         ============================================================ -->
+    <div class="modal fade" id="modalInput" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="miTitle">Input Barang Masuk</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="miMessage" class="alert d-none py-2 small" role="alert"></div>
+                    <div class="mi-table-wrapper">
+                        <table class="mi-table">
+                            <thead>
+                                <tr>
+                                    <th class="mi-no">No</th>
+                                    <th class="col-w-kode">Kode Barang</th>
+                                    <th class="col-w-nama">Nama Barang</th>
+                                    <th class="col-w-qty">Qty</th>
+                                    <th class="col-w-satuan">Satuan</th>
+                                    <th>Baru / Second</th>
+                                    <th>Foto Barang</th>
+                                    <th class="col-w-ket">Keterangan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="miTbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <button type="button" class="btn btn-outline-danger d-none" id="btnMiHapus"><i class="fa-solid fa-trash"></i> Hapus</button>
+                        <span class="mi-count" id="miCount"></span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                        <button type="button" class="btn btn-primary" id="btnMiSimpan"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 8: SCRIPT
+         Fungsi: Bootstrap (modal), Supabase (database), lalu barang_masuk.js.
+         PERLU DICEK: path supabase.js dan barang_masuk.js. Samakan dengan
+         path yang sudah berjalan di catalog.html Anda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/assets/barang_masuk.js"></script>
+</body>
+</html>

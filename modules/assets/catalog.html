@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Barang - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: ikon Font Awesome, font Inter, dan seluruh gaya halaman
+         (ditulis di sini, tanpa memuat CSS proyek, supaya tidak ada error path).
+         Prefix "ct-" = catalog.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --ct-primary: #2b6cb0;
+            --ct-primary-dark: #1e4e8c;
+            --ct-bg-soft: #e1ecf5;
+            --ct-border: #d3dfea;
+            --ct-text-main: #1f2d3d;
+            --ct-text-muted: #6b7c93;
+            --ct-danger: #d64545;
+            --ct-radius: 8px;
+            --ct-head-h: 40px;           /* tinggi satu baris header tabel (dipakai untuk header 2 tingkat) */
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--ct-text-main);
+        }
+
+        /* --- Bar paling atas: Kembali (kiri) + tab cabang (kanan) --- */
+        .ct-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--ct-border);
+            flex-shrink: 0;
+        }
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 16px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-border); background: var(--ct-bg-soft);
+            color: var(--ct-primary-dark); font-size: 14px; font-weight: 600; text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--ct-primary); color: #fff; }
+
+        .ct-tabs { display: flex; gap: 6px; background: var(--ct-bg-soft); padding: 4px; border-radius: 10px; }
+        .ct-tabs[hidden] { display: none; }
+        .ct-tab {
+            border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+            font-size: 14px; font-weight: 600; color: var(--ct-text-muted); cursor: pointer;
+            font-family: inherit;
+        }
+        .ct-tab:hover { color: var(--ct-primary-dark); }
+        .ct-tab.active { background: var(--ct-primary); color: #fff; }
+
+        /* --- Area utama --- */
+        .ct-main {
+            display: flex; flex-direction: column; flex: 1; min-height: 0;
+            padding: 16px 24px 16px; overflow: hidden;
+        }
+
+        /* --- Judul di tengah --- */
+        .ct-title-block { text-align: center; margin-bottom: 14px; flex-shrink: 0; }
+        .ct-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .ct-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--ct-primary); }
+
+        /* --- Toolbar: search kiri, download kanan --- */
+        .ct-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .ct-search-wrapper { position: relative; flex: 1; max-width: 360px; min-width: 200px; }
+        .ct-search-wrapper i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ct-text-muted); font-size: 13px; }
+        .ct-search-input {
+            width: 100%; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            padding: 8px 12px 8px 34px; font-size: 14px; outline: none; background: #fff; font-family: inherit;
+        }
+        .ct-search-input:focus { border-color: var(--ct-primary); }
+
+        .btn-tool {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: #fff; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            padding: 8px 16px; font-size: 14px; color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .btn-tool:hover { border-color: var(--ct-primary); color: var(--ct-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* --- Tabel dengan header 2 tingkat (sticky) --- */
+        .ct-table-wrapper {
+            background: #fff; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            overflow: auto; flex: 1; min-height: 0;
+        }
+        .ct-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .ct-table thead th {
+            position: sticky; z-index: 10;
+            height: var(--ct-head-h);
+            background: var(--ct-bg-soft); color: var(--ct-text-main);
+            font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap;
+            border-bottom: 1px solid var(--ct-border);
+        }
+        .ct-table thead tr:first-child th { top: 0; }
+        .ct-table thead tr:nth-child(2) th { top: var(--ct-head-h); border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-span-2 { border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-group { text-align: center; }
+        .ct-table tbody td { padding: 10px 14px; border-bottom: 1px solid var(--ct-border); vertical-align: middle; white-space: nowrap; }
+        .ct-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center !important; }
+        .col-qty { text-align: right !important; min-width: 90px; }
+        .qty-negative { color: var(--ct-danger); font-weight: 600; }
+        .qty-zero { color: var(--ct-text-muted); }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--ct-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--ct-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .ct-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--ct-border); background: #fff; border-radius: 6px;
+            font-size: 13px; color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .pagination-btn:hover { border-color: var(--ct-primary); }
+        .pagination-btn.active { background: var(--ct-primary); border-color: var(--ct-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ct-page-info { font-size: 12.5px; color: var(--ct-text-muted); margin-left: 10px; }
+
+        /* --- Tombol aksi (rata kanan di bawah tabel) --- */
+        .ct-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; flex-shrink: 0; }
+        .btn-action {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 9px 18px; border-radius: var(--ct-radius); border: 1px solid var(--ct-primary);
+            background: var(--ct-primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-action:hover { background: var(--ct-primary-dark); border-color: var(--ct-primary-dark); }
+
+        @media (max-width: 640px) {
+            .ct-topbar, .ct-main { padding-left: 12px; padding-right: 12px; }
+            .ct-actions { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS
+         Fungsi: tombol "Kembali" di kiri (ke index.html) dan tab cabang di
+         kanan. Tab Makassar = branch_id 1, Surabaya = branch_id 2.
+         Tab hanya tampil untuk role Maintenance dan Superadmin (diatur catalog.js).
+         Tidak ada sidebar di halaman ini.
+         ============================================================ -->
+    <header class="ct-topbar">
+        <a href="../../index.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <div class="ct-tabs" id="branchTabs" role="tablist" hidden>
+            <button type="button" class="ct-tab active" data-branch="1" role="tab">Makassar</button>
+            <button type="button" class="ct-tab" data-branch="2" role="tab">Surabaya</button>
+        </div>
+    </header>
+
+    <main class="ct-main">
+
+        <!-- ========================================================
+             KELOMPOK 3: JUDUL
+             Fungsi: judul tetap "Stock Barang" di tengah, dan baris di
+             bawahnya berganti Makassar / Surabaya sesuai tab (diatur JS).
+             ======================================================== -->
+        <div class="ct-title-block">
+            <h1 class="ct-title">Stock Barang</h1>
+            <div class="ct-subtitle" id="branchTitle">Makassar</div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Search di kiri, Download Excel di kanan.
+             ======================================================== -->
+        <div class="ct-toolbar">
+            <div class="ct-search-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="ct-search-input" id="searchInput" placeholder="Cari kode, nama, kategori barang..." autocomplete="off">
+            </div>
+            <button type="button" class="btn-tool" id="btnDownload">
+                <i class="fa-solid fa-file-arrow-down"></i>
+                <span>Download Excel</span>
+            </button>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL
+             Fungsi: daftar stok per barang. Header 2 tingkat dan sticky:
+             "Qty Barang" membawahi sub header "Baru" dan "Second".
+             Isi tabel dibuat oleh catalog.js.
+             ======================================================== -->
+        <div class="ct-table-wrapper">
+            <table class="ct-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="th-span-2 col-no">No</th>
+                        <th rowspan="2" class="th-span-2">Kode Barang</th>
+                        <th rowspan="2" class="th-span-2">Nama Barang</th>
+                        <th colspan="2" class="th-group">Qty Barang</th>
+                        <th rowspan="2" class="th-span-2">Satuan</th>
+                        <th rowspan="2" class="th-span-2">Kategori</th>
+                    </tr>
+                    <tr>
+                        <th class="th-group">Baru</th>
+                        <th class="th-group">Second</th>
+                    </tr>
+                </thead>
+                <tbody id="stockTableBody">
+                    <tr class="row-loading"><td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 6: PAGINATION (maksimal 100 baris per halaman, diatur JS) -->
+        <div class="ct-pagination" id="stockPagination"></div>
+
+        <!-- ========================================================
+             KELOMPOK 7: TOMBOL AKSI
+             Fungsi: tiga tombol rata kanan di bawah tabel. Tujuan halamannya
+             diatur di catalog.js (ACTION_PAGES).
+             ======================================================== -->
+        <div class="ct-actions">
+            <button type="button" class="btn-action" id="btnBarangMasuk"><i class="fa-solid fa-arrow-right-to-bracket"></i> Barang Masuk</button>
+            <button type="button" class="btn-action" id="btnBarangKeluar"><i class="fa-solid fa-arrow-right-from-bracket"></i> Barang Keluar</button>
+            <button type="button" class="btn-action" id="btnSuratJalan"><i class="fa-solid fa-file-lines"></i> Surat Jalan</button>
+        </div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 8: SCRIPT
+         Fungsi: XLSX (download Excel), Supabase (database), lalu catalog.js.
+         PERLU DICEK: path supabase.js dan catalog.js. Samakan dengan
+         path yang sudah berjalan di data-barang.html Anda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/assets/catalog.js"></script>
+</body>
+</html>

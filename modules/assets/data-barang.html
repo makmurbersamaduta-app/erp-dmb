@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Barang - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & CSS
+         Fungsi: memuat Bootstrap (tampilan & modal), Font Awesome (ikon),
+         font Inter, dan CSS proyek Anda (sama dengan sisa_wrapping.html).
+         PERLU DICEK: path "../css/..." mengikuti folder sisa_wrapping.html.
+         Jika data-barang.html ada di folder berbeda, sesuaikan path-nya.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <link href="../../css/base.css" rel="stylesheet">
+    <link href="../../css/components.css" rel="stylesheet">
+    <link href="../../css/layout.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+
+    <!-- ============================================================
+         KELOMPOK 2: STYLE HALAMAN
+         Fungsi: warna, header, toolbar, tabel (header sticky), filter,
+         pagination, dan tampilan modal. Prefix "db-" = Database Barang.
+         ============================================================ -->
+    <style>
+        :root {
+            --db-primary: #2b6cb0;
+            --db-primary-dark: #1e4e8c;
+            --db-bg-soft: #e1ecf5;
+            --db-border: #d3dfea;
+            --db-text-main: #1f2d3d;
+            --db-text-muted: #6b7c93;
+            --db-radius: 8px;
+        }
+
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--db-text-main);
+        }
+
+        /* --- Header (tanpa sidebar, tanpa profile) --- */
+        .db-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 24px;
+            background: #fff;
+            border-bottom: 1px solid var(--db-border);
+            flex-shrink: 0;
+        }
+        .btn-back {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: var(--db-radius);
+            border: 1px solid var(--db-border);
+            background: var(--db-bg-soft);
+            color: var(--db-primary-dark);
+            font-size: 14px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--db-primary); color: #fff; }
+        .db-header-title { font-size: 18px; font-weight: 600; margin: 0; }
+
+        /* --- Area utama --- */
+        .db-main {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+            padding: 20px 24px;
+            overflow: hidden;
+        }
+
+        /* --- Toolbar: search, filter, download, tambah --- */
+        .db-toolbar {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-shrink: 0;
+        }
+        .db-search-wrapper { position: relative; flex: 1; min-width: 220px; max-width: 360px; }
+        .db-search-wrapper i {
+            position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+            color: var(--db-text-muted); font-size: 13px;
+        }
+        .db-search-input {
+            width: 100%;
+            border: 1px solid var(--db-border);
+            border-radius: var(--db-radius);
+            padding: 8px 12px 8px 34px;
+            font-size: 14px;
+            outline: none;
+            background: #fff;
+        }
+        .db-search-input:focus { border-color: var(--db-primary); }
+        .db-toolbar-spacer { flex: 1; }
+
+        .btn-tool {
+            display: flex; align-items: center; gap: 8px;
+            background: #fff;
+            border: 1px solid var(--db-border);
+            border-radius: var(--db-radius);
+            padding: 8px 16px;
+            font-size: 14px;
+            color: var(--db-text-main);
+            cursor: pointer;
+        }
+        .btn-tool:hover { border-color: var(--db-primary); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-tool-primary { background: var(--db-primary); border-color: var(--db-primary); color: #fff; font-weight: 600; }
+        .btn-tool-primary:hover { background: var(--db-primary-dark); border-color: var(--db-primary-dark); }
+
+        .db-filter-wrapper { position: relative; }
+        .filter-count-badge {
+            background: var(--db-primary); color: #fff; font-size: 11px; font-weight: 600;
+            border-radius: 999px; padding: 1px 7px;
+        }
+        .db-filter-panel {
+            position: absolute; top: calc(100% + 6px); left: 0; width: 320px;
+            background: #fff; border: 1px solid var(--db-border); border-radius: var(--db-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12);
+            z-index: 60; max-height: 480px; overflow-y: auto;
+            display: flex; flex-direction: column;
+        }
+        .filter-group { border-bottom: 1px solid var(--db-border); padding: 4px 14px; }
+        .filter-group-header {
+            width: 100%; display: flex; align-items: center; justify-content: space-between;
+            background: none; border: none; padding: 10px 0;
+            font-size: 12.5px; font-weight: 700; color: var(--db-text-main); cursor: pointer;
+        }
+        .filter-group-header i { font-size: 11px; color: var(--db-text-muted); transition: transform 0.15s ease; }
+        .filter-group-header.expanded i { transform: rotate(180deg); }
+        .filter-group-body { display: none; flex-direction: column; padding-bottom: 10px; }
+        .filter-group-body.expanded { display: flex; }
+        .filter-inline-search {
+            width: 100%; border: 1px solid var(--db-border); border-radius: 6px;
+            padding: 6px 10px; font-size: 12.5px; outline: none; margin-bottom: 8px;
+        }
+        .filter-inline-search:focus { border-color: var(--db-primary); }
+        .filter-checkbox-list { max-height: 160px; overflow-y: auto; }
+        .filter-checkbox-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+        .filter-checkbox-item input[type="checkbox"] { accent-color: var(--db-primary); cursor: pointer; }
+        .filter-panel-footer {
+            display: flex; justify-content: space-between; padding: 10px 14px;
+            border-top: 1px solid var(--db-border); background: var(--db-bg-soft);
+            border-radius: 0 0 var(--db-radius) var(--db-radius);
+            position: sticky; bottom: 0;
+        }
+        .btn-filter-reset { background: none; border: none; font-size: 13px; color: var(--db-text-muted); cursor: pointer; }
+        .btn-filter-reset:hover { color: #d64545; }
+        .btn-filter-apply {
+            background: var(--db-primary); color: #fff; border: none; border-radius: 6px;
+            padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer;
+        }
+        .btn-filter-apply:hover { background: var(--db-primary-dark); }
+
+        /* --- Tabel (header sticky ke atas) --- */
+        .db-table-wrapper {
+            background: #fff; border: 1px solid var(--db-border); border-radius: var(--db-radius);
+            overflow: auto; flex: 1; min-height: 0;
+        }
+        .db-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .db-table thead th {
+            position: sticky; top: 0; z-index: 10;
+            background: var(--db-bg-soft); color: var(--db-text-main);
+            font-weight: 600; text-align: left; padding: 12px 14px;
+            border-bottom: 2px solid var(--db-border); white-space: nowrap;
+        }
+        .db-table tbody td {
+            padding: 10px 14px; border-bottom: 1px solid var(--db-border);
+            vertical-align: middle; white-space: nowrap;
+        }
+        .db-table tbody tr.row-clickable { cursor: pointer; }
+        .db-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center !important; }
+        .col-num { text-align: right !important; }
+        .col-desc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--db-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--db-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .db-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; flex-shrink: 0; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--db-border); background: #fff; border-radius: 6px;
+            font-size: 13px; color: var(--db-text-main); cursor: pointer;
+        }
+        .pagination-btn:hover { border-color: var(--db-primary); }
+        .pagination-btn.active { background: var(--db-primary); border-color: var(--db-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* --- Isi modal --- */
+        .md-label { font-size: 12.5px; font-weight: 600; color: var(--db-text-muted); margin-bottom: 4px; display: block; }
+        .md-input {
+            width: 100%; border: 1px solid var(--db-border); border-radius: 6px;
+            padding: 8px 10px; font-size: 14px; color: var(--db-text-main);
+            background: #fff; outline: none;
+        }
+        .md-input:focus { border-color: var(--db-primary); }
+        .md-input[readonly], .md-input:disabled { background: #f4f7fb; border-color: var(--db-border); }
+        .md-addon {
+            display: flex; align-items: center; padding: 0 10px; font-size: 13px;
+            color: var(--db-text-muted); background: var(--db-bg-soft);
+            border: 1px solid var(--db-border); border-left: none; border-radius: 0 6px 6px 0;
+        }
+        .md-input-group { display: flex; }
+        .md-input-group .md-input { border-radius: 6px 0 0 6px; min-width: 0; }
+        .md-foto { max-width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--db-border); border-radius: 6px; }
+        .req-mark { color: #d64545; }
+        .md-radio-group { display: flex; gap: 20px; padding: 6px 0; }
+        .md-radio-group label { display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: pointer; }
+        .md-radio-group input { accent-color: var(--db-primary); }
+        .md-section-title { font-size: 13px; font-weight: 700; margin: 18px 0 10px; padding-top: 12px; border-top: 1px solid var(--db-border); }
+
+        @media (max-width: 640px) {
+            .db-filter-panel { width: 100%; left: 0; right: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 3: HEADER
+         Fungsi: judul halaman + tombol "Kembali" ke index.html.
+         Tidak ada info profile, tidak ada sidebar.
+         ============================================================ -->
+    <header class="db-header">
+        <a href="../../index.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <h1 class="db-header-title">Database Barang</h1>
+    </header>
+
+    <main class="db-main">
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Search, Filter (panel diisi oleh JS), Download Excel,
+             dan tombol Tambah Barang.
+             ======================================================== -->
+        <div class="db-toolbar">
+            <div class="db-search-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="db-search-input" id="searchInput" placeholder="Cari kode, nama, kategori barang..." autocomplete="off">
+            </div>
+
+            <div class="db-filter-wrapper">
+                <button type="button" class="btn-tool" id="btnFilterToggle">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filter</span>
+                    <span class="filter-count-badge d-none" id="filterCountBadge">0</span>
+                </button>
+                <div class="db-filter-panel d-none" id="filterPanel">
+                    <div id="filterGroups"></div>
+                    <div class="filter-panel-footer">
+                        <button type="button" class="btn-filter-reset" id="btnFilterReset">Reset</button>
+                        <button type="button" class="btn-filter-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="btn-tool" id="btnDownload">
+                <i class="fa-solid fa-file-arrow-down"></i>
+                <span>Download Excel</span>
+            </button>
+
+            <div class="db-toolbar-spacer"></div>
+
+            <button type="button" class="btn-tool" id="btnAturKategori">
+                <i class="fa-solid fa-layer-group"></i>
+                <span>Atur Kategori</span>
+            </button>
+
+            <button type="button" class="btn-tool btn-tool-primary" id="btnTambah">
+                <i class="fa-solid fa-plus"></i>
+                <span>Tambah Barang</span>
+            </button>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL
+             Fungsi: daftar barang aktif. Header sticky (CSS .db-table thead th).
+             Klik baris = membuka modal detail.
+             ======================================================== -->
+        <div class="db-table-wrapper">
+            <table class="db-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th>Kode Barang</th>
+                        <th>Nama Barang</th>
+                        <th>Satuan</th>
+                        <th class="col-num">Harga Amortisasi</th>
+                        <th class="col-num">Harga Jual</th>
+                        <th class="col-num">Harga Internal</th>
+                    </tr>
+                </thead>
+                <tbody id="barangTableBody">
+                    <tr class="row-loading">
+                        <td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="db-pagination" id="barangPagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 6: MODAL BARANG
+         Fungsi: satu modal untuk 3 mode (diatur oleh JS):
+           - Tambah : semua kolom terbuka, tombol Batal + Simpan
+           - Lihat  : semua kolom readonly, tombol Update Harga / Edit / Hapus
+           - Edit   : kolom terbuka, tombol Batal + Simpan
+         Tanda * merah = wajib diisi (semua kecuali Deskripsi).
+         ============================================================ -->
+    <div class="modal fade" id="modalBarang" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalBarangTitle">Tambah Barang</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="mbMessage" class="alert d-none py-2 small" role="alert"></div>
+
+                    <form id="formBarang" novalidate>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="md-label" for="fKode">Kode Barang</label>
+                                <input type="text" class="md-input" id="fKode" readonly placeholder="Otomatis setelah memilih kategori">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="fKategori">Kategori Barang <span class="req-mark">*</span></label>
+                                <select class="md-input" id="fKategori" required>
+                                    <option value="">Pilih Kategori</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-8">
+                                <label class="md-label" for="fNama">Nama Barang <span class="req-mark">*</span></label>
+                                <input type="text" class="md-input" id="fNama" required autocomplete="off">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="md-label" for="fSatuan">Satuan <span class="req-mark">*</span></label>
+                                <select class="md-input" id="fSatuan" required>
+                                    <option value="">Pilih Satuan</option>
+                                </select>
+                                <input type="text" class="md-input mt-2 d-none" id="fSatuanBaru" maxlength="20" autocomplete="off" placeholder="Nama satuan baru">
+                            </div>
+
+                            <div class="col-12">
+                                <label class="md-label" for="fDeskripsi">Deskripsi</label>
+                                <textarea class="md-input" id="fDeskripsi" rows="2"></textarea>
+                            </div>
+
+                            <div class="col-md-6">
+                                <span class="md-label">Level Approval <span class="req-mark">*</span></span>
+                                <div class="md-radio-group">
+                                    <label><input type="radio" name="fLevel" value="Supervisor" required> Supervisor</label>
+                                    <label><input type="radio" name="fLevel" value="Manajer" required> Manajer</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="fEstimasi">Estimasi Masa Pakai <span class="req-mark">*</span></label>
+                                <div class="md-input-group">
+                                    <input type="number" class="md-input" id="fEstimasi" min="1" step="1" required>
+                                    <span class="md-addon">Bulan</span>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="md-label" for="fFoto">Foto Barang <span class="req-mark" id="fFotoStar">*</span></label>
+                                <input type="file" class="md-input" id="fFoto" accept="image/*">
+                                <div id="fFotoPreview" class="mt-2"></div>
+                            </div>
+                        </div>
+
+                        <div class="md-section-title">Ketersediaan</div>
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <span class="md-label">Makassar <span class="req-mark">*</span></span>
+                                <div class="md-radio-group" style="flex-direction: column; gap: 4px;">
+                                    <label><input type="radio" name="fMakassar" value="true" required> Tersedia</label>
+                                    <label><input type="radio" name="fMakassar" value="false" required> Tidak Tersedia</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="md-label">Surabaya <span class="req-mark">*</span></span>
+                                <div class="md-radio-group" style="flex-direction: column; gap: 4px;">
+                                    <label><input type="radio" name="fSurabaya" value="true" required> Tersedia</label>
+                                    <label><input type="radio" name="fSurabaya" value="false" required> Tidak Tersedia</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <span class="md-label">Bekasi <span class="req-mark">*</span></span>
+                                <div class="md-radio-group" style="flex-direction: column; gap: 4px;">
+                                    <label><input type="radio" name="fBekasi" value="true" required> Tersedia</label>
+                                    <label><input type="radio" name="fBekasi" value="false" required> Tidak Tersedia</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="md-section-title">Harga</div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="md-label" for="fSupplier">Harga Supplier <span class="req-mark">*</span></label>
+                                <input type="text" inputmode="numeric" class="md-input" id="fSupplier" required autocomplete="off">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="fInternal">Harga Internal</label>
+                                <input type="text" class="md-input" id="fInternal" readonly>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="md-label" for="fJual">Harga Jual</label>
+                                <input type="text" class="md-input" id="fJual" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="fMargin">Margin Jual <span class="req-mark">*</span></label>
+                                <div class="md-input-group">
+                                    <input type="number" class="md-input" id="fMargin" min="0" step="any" required>
+                                    <span class="md-addon">%</span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="md-label" for="fAmortisasi">Harga Amortisasi</label>
+                                <input type="text" class="md-input" id="fAmortisasi" readonly>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btnMbTutup" data-bs-dismiss="modal">Tutup</button>
+                    <button type="button" class="btn btn-outline-secondary d-none" id="btnMbBatal">Batal</button>
+                    <button type="button" class="btn btn-outline-danger d-none" id="btnMbHapus"><i class="fa-solid fa-trash"></i> Hapus</button>
+                    <button type="button" class="btn btn-outline-primary d-none" id="btnMbUpdateHarga"><i class="fa-solid fa-tags"></i> Update Harga</button>
+                    <button type="button" class="btn btn-primary d-none" id="btnMbEdit"><i class="fa-solid fa-pen"></i> Edit</button>
+                    <button type="submit" form="formBarang" class="btn btn-primary d-none" id="btnMbSimpan"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 7: MODAL UPDATE HARGA
+         Fungsi: memasukkan harga baru (riwayat). Kolom identitas barang
+         readonly. Rumus hitung sama dengan modal Tambah Barang.
+         ============================================================ -->
+    <div class="modal fade" id="modalHarga" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Update Harga</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="mhMessage" class="alert d-none py-2 small" role="alert"></div>
+
+                    <form id="formHarga" novalidate>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="md-label" for="hKode">Kode Barang</label>
+                                <input type="text" class="md-input" id="hKode" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="hSatuan">Satuan</label>
+                                <input type="text" class="md-input" id="hSatuan" readonly>
+                            </div>
+                            <div class="col-12">
+                                <label class="md-label" for="hNama">Nama Barang</label>
+                                <input type="text" class="md-input" id="hNama" readonly>
+                            </div>
+                            <div class="col-12">
+                                <span class="md-label">Foto Barang</span>
+                                <div id="hFotoWrapper"></div>
+                            </div>
+                        </div>
+
+                        <div class="md-section-title">Harga Baru</div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="md-label" for="hSupplier">Harga Supplier <span class="req-mark">*</span></label>
+                                <input type="text" inputmode="numeric" class="md-input" id="hSupplier" required autocomplete="off">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="hInternal">Harga Internal</label>
+                                <input type="text" class="md-input" id="hInternal" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="hJual">Harga Jual</label>
+                                <input type="text" class="md-input" id="hJual" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="hMargin">Margin Jual <span class="req-mark">*</span></label>
+                                <div class="md-input-group">
+                                    <input type="number" class="md-input" id="hMargin" min="0" step="any" required>
+                                    <span class="md-addon">%</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="md-label" for="hAmortisasi">Harga Amortisasi</label>
+                                <input type="text" class="md-input" id="hAmortisasi" readonly>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="btnMhBatal">Batal</button>
+                    <button type="submit" form="formHarga" class="btn btn-primary" id="btnMhSimpan"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 7B: MODAL ATUR KATEGORI (daftar) + SUB MODAL FORM KATEGORI
+         Fungsi: modal daftar kategori (Kode, Kategori, Status) dengan tombol
+         "Tambah Kategori". Klik baris = sub modal untuk mengubah status
+         Aktif / Non-Aktif. Sub modal dibuka bergantian dengan modal daftar
+         (modal daftar ditutup sementara, lalu muncul lagi saat sub modal ditutup).
+         ============================================================ -->
+    <div class="modal fade" id="modalKategori" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Atur Kategori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="mkMessage" class="alert d-none py-2 small" role="alert"></div>
+                    <div class="mb-3">
+                        <button type="button" class="btn-tool btn-tool-primary" id="btnTambahKategori">
+                            <i class="fa-solid fa-plus"></i><span>Tambah Kategori</span>
+                        </button>
+                    </div>
+                    <div class="db-table-wrapper" style="max-height: 55vh;">
+                        <table class="db-table">
+                            <thead>
+                                <tr>
+                                    <th>Kode</th>
+                                    <th>Kategori</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="kategoriTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalKategoriForm" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalKategoriFormTitle">Tambah Kategori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="mkfMessage" class="alert d-none py-2 small" role="alert"></div>
+                    <form id="formKategori" novalidate>
+                        <div class="mb-3">
+                            <label class="md-label" for="kfKode">Kode <span class="req-mark" id="kfKodeStar">*</span></label>
+                            <input type="text" class="md-input" id="kfKode" maxlength="10" autocomplete="off" required placeholder="Contoh: ATK">
+                        </div>
+                        <div class="mb-3">
+                            <label class="md-label" for="kfKategori">Kategori <span class="req-mark" id="kfKategoriStar">*</span></label>
+                            <input type="text" class="md-input" id="kfKategori" maxlength="100" autocomplete="off" required>
+                        </div>
+                        <div class="mb-1 d-none" id="kfStatusGroup">
+                            <span class="md-label">Status <span class="req-mark">*</span></span>
+                            <div class="md-radio-group">
+                                <label><input type="radio" name="kfStatus" value="true"> Aktif</label>
+                                <label><input type="radio" name="kfStatus" value="false"> Non-Aktif</label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" id="btnKfBatal">Batal</button>
+                    <button type="submit" form="formKategori" class="btn btn-primary" id="btnKfSimpan"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 8: SCRIPT
+         Fungsi: Bootstrap (modal), XLSX (download Excel), Supabase (database).
+         PERLU DICEK: path ke supabase.js dan data-barang.js mengikuti pola
+         sisa_wrapping.html. Sesuaikan jika letak file berbeda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/assets/data-barang.js"></script>
+</body>
+</html>

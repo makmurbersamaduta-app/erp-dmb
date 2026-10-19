@@ -10,6 +10,7 @@
 
 let directoryEmployees = [];
 let directoryAssignments = [];
+let directoryAssignmentsByEmp = new Map(); // index: employee_id -> daftar assignment (terbaru di atas)
 let masterCache = {
     branches: [],
     cost_centers: [],
@@ -85,23 +86,28 @@ document.addEventListener("DOMContentLoaded", async () => {
 // ============================================================================
 // HELPER PENCARIAN ASSIGNMENT TERBARU KARYAWAN
 // ============================================================================
+function buildAssignmentIndex() {
+    directoryAssignmentsByEmp = new Map();
+    directoryAssignments.forEach(a => {
+        const key = String(a.employee_id);
+        if (!directoryAssignmentsByEmp.has(key)) directoryAssignmentsByEmp.set(key, []);
+        directoryAssignmentsByEmp.get(key).push(a);
+    });
+    // Urut terbaru di atas: start_date lalu created_at (BUKAN id, karena id = uuid acak)
+    directoryAssignmentsByEmp.forEach(list => {
+        list.sort((x, y) => {
+            const sx = x.start_date || "", sy = y.start_date || "";
+            if (sx !== sy) return sy.localeCompare(sx);
+            return (y.created_at || "").localeCompare(x.created_at || "");
+        });
+    });
+}
+
 function getEmployeeAssignment(empId, empNik) {
-    if (!directoryAssignments || directoryAssignments.length === 0) return null;
-    
-    // Prioritaskan penempatan yang sedang aktif (is_active = true)
-    let found = directoryAssignments.find(a => 
-        (String(a.employee_id) === String(empId) || (empNik && String(a.employee_id) === String(empNik))) && 
-        a.is_active !== false
-    );
-
-    // Jika tidak ada assignment aktif (misal karyawan resign/non-aktif), ambil record penempatan terakhir
-    if (!found) {
-        found = directoryAssignments.find(a => 
-            String(a.employee_id) === String(empId) || (empNik && String(a.employee_id) === String(empNik))
-        );
-    }
-
-    return found;
+    const list = directoryAssignmentsByEmp.get(String(empId));
+    if (!list || list.length === 0) return null;
+    // Prioritaskan assignment aktif; kalau tidak ada, ambil yang paling baru
+    return list.find(a => a.is_active !== false) || list[0];
 }
 
 // ============================================================================
@@ -396,6 +402,23 @@ function fillSelectOptions(elementId, list, valKey, textKey, defaultText) {
     el.innerHTML = html;
 }
 
+async function fetchAllRows(table, orderCol) {
+    let all = [];
+    let from = 0;
+    const PAGE = 1000;
+    while (true) {
+        const { data, error } = await supabaseClient
+            .schema('hrd').from(table).select('*')
+            .order(orderCol, { ascending: true })
+            .range(from, from + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+        from += data.length; // maju sesuai jumlah yang benar-benar diterima
+    }
+    return all;
+}
+
 async function loadDirectoryData() {
     const tbody = document.getElementById("tableBody");
     if (tbody) {
@@ -409,27 +432,14 @@ async function loadDirectoryData() {
     }
 
     try {
-        // Fetch data karyawan dari schema hrd.employees
-        const { data: emps, error: errEmp } = await supabaseClient
-            .schema('hrd')
-            .from('employees')
-            .select('*')
-            .order('id', { ascending: true });
-        
-        if (errEmp) throw errEmp;
-
-        // Fetch penempatan dari schema hrd.employee_assignments
-        // Diurutkan secara DESCENDING berdasarkan ID agar record rehire/penempatan terbaru berada di paling atas
-        const { data: assigns, error: errAssign } = await supabaseClient
-            .schema('hrd')
-            .from('employee_assignments')
-            .select('*')
-            .order('id', { ascending: false });
-        
-        if (errAssign) throw errAssign;
+        // Ambil SEMUA baris (Supabase membatasi 1 request = max 1000 baris)
+        const emps = await fetchAllRows('employees', 'id');
+        const assigns = await fetchAllRows('employee_assignments', 'id');
+        console.log(`[Directory] employees: ${emps.length} baris, assignments: ${assigns.length} baris`);
 
         directoryEmployees = emps || [];
         directoryAssignments = assigns || [];
+        buildAssignmentIndex();
 
         renderDirectoryTable();
 
@@ -701,41 +711,34 @@ function goToDirectoryPage(page) {
 // PERHITUNGAN KARTU DASHBOARD STATISTIK DENGAN FILTER
 function updateStatisticsCardsFiltered(filteredList) {
     const cardTotal = document.getElementById("cardTotalEmp");
-    const cardNew = document.getElementById("cardNewThisMonth");
-    const cardResign = document.getElementById("cardResignThisMonth");
+    const cardIn = document.getElementById("cardEmpIn");
+    const cardOut = document.getElementById("cardEmpOut");
 
     const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-    let totalActive = 0;
-    let countNewThisMonth = 0;
-    let countResignThisMonth = 0;
+    let totalActive = 0, countIn = 0, countOut = 0;
 
     filteredList.forEach(emp => {
         if (emp.is_active !== false) totalActive++;
+        const list = directoryAssignmentsByEmp.get(String(emp.id)) || [];
 
-        const empAssigns = directoryAssignments.filter(a => String(a.employee_id) === String(emp.id) || String(a.employee_id) === String(emp.nik_karyawan));
-        
-        empAssigns.forEach(a => {
-            if (a.start_date) {
-                const sDate = new Date(a.start_date);
-                if (sDate.getFullYear() === curYear && sDate.getMonth() === curMonth) {
-                    countNewThisMonth++;
-                }
-            }
-            if (a.end_date) {
-                const eDate = new Date(a.end_date);
-                if (eDate.getFullYear() === curYear && eDate.getMonth() === curMonth) {
-                    countResignThisMonth++;
-                }
-            }
-        });
+        // MASUK: ada assignment BUKAN mutasi (hire/rehire) dengan start_date bulan ini
+        const masuk = list.some(a =>
+            String(a.action_type || "").toUpperCase() !== "MUTATION" &&
+            (a.start_date || "").startsWith(ym));
+        if (masuk) countIn++;
+
+        // KELUAR: karyawan non-aktif dengan end_date bulan ini
+        if (emp.is_active === false) {
+            const keluar = list.some(a => (a.end_date || "").startsWith(ym));
+            if (keluar) countOut++;
+        }
     });
 
     if (cardTotal) cardTotal.textContent = totalActive;
-    if (cardNew) cardNew.textContent = countNewThisMonth;
-    if (cardResign) cardResign.textContent = countResignThisMonth;
+    if (cardIn) cardIn.textContent = countIn;
+    if (cardOut) cardOut.textContent = countOut;
 }
 
 // ============================================================================
@@ -1373,6 +1376,56 @@ function exportDirectoryToExcel() {
     const ws = XLSX.utils.json_to_sheet(exportRows);
     XLSX.utils.book_append_sheet(wb, ws, "Data Karyawan");
 
+    // Sheet ke-2: Data Mutasi
+    const mutRows = buildMutationExportRows(directorySortedFiltered);
+    const wsMut = XLSX.utils.json_to_sheet(mutRows, { header: MUTATION_HEADERS });
+    XLSX.utils.book_append_sheet(wb, wsMut, "Data Mutasi");
+
     const todayStr = new Date().toISOString().split('T')[0];
     XLSX.writeFile(wb, `Export_Direktori_Karyawan_${todayStr}.xlsx`);
+}
+
+// ============================================================================
+// DATA MUTASI UNTUK SHEET KE-2 EXPORT
+// Aturan: action_type = MUTATION, status_karyawan PKWT/PKWTT,
+// dan kalau karyawan pernah REHIRE -> hanya mutasi pada/setelah tanggal REHIRE terakhir.
+// ============================================================================
+const MUTATION_HEADERS = ["NIK Karyawan", "Nama", "Cabang", "Cost Center", "Departemen", "Area", "Jabatan", "Tanggal Awal Mutasi", "Tanggal Akhir Mutasi"];
+
+function buildMutationExportRows(employees) {
+    const rows = [];
+    employees.forEach(emp => {
+        const list = directoryAssignmentsByEmp.get(String(emp.id)) || [];
+
+        const rehireDates = list
+            .filter(a => String(a.action_type || "").toUpperCase() === "REHIRE" && a.start_date)
+            .map(a => a.start_date).sort();
+        const lastRehire = rehireDates.length ? rehireDates[rehireDates.length - 1] : null;
+
+        // Status karyawan = yang sama dengan kolom "Status Karyawan" di sheet Data Karyawan
+        // (diambil dari assignment aktif/terbaru), bukan dari status di baris mutasi.
+        const cur = getEmployeeAssignment(emp.id, emp.nik_karyawan);
+        const st = String(cur?.status_karyawan || "").toUpperCase().trim();
+        if (st !== "PKWT" && st !== "PKWTT") return;
+
+        list.forEach(a => {
+            if (String(a.action_type || "").toUpperCase() !== "MUTATION") return;
+            if (lastRehire && (a.start_date || "") < lastRehire) return;
+
+            rows.push({
+                "NIK Karyawan": emp.nik_karyawan || "-",
+                "Nama": emp.nama || "-",
+                "Cabang": masterCache.branches.find(b => b.id == a.branch_id)?.branch_name || "-",
+                "Cost Center": masterCache.cost_centers.find(c => c.id == a.costcenter_id)?.costcenter_name || "-",
+                "Departemen": masterCache.departments.find(d => d.id == a.departemen_id)?.department_name || "-",
+                "Area": masterCache.areas.find(x => x.id == a.area_id)?.area_name || "-",
+                "Jabatan": masterCache.jabatans.find(j => j.id == a.jabatan_id)?.jabatan_name || "-",
+                "Tanggal Awal Mutasi": a.start_date || "",
+                "Tanggal Akhir Mutasi": a.end_date || ""
+            });
+        });
+    });
+    rows.sort((x, y) => String(x["NIK Karyawan"]).localeCompare(String(y["NIK Karyawan"])) ||
+                        String(x["Tanggal Awal Mutasi"]).localeCompare(String(y["Tanggal Awal Mutasi"])));
+    return rows;
 }

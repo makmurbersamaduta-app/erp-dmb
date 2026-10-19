@@ -228,10 +228,11 @@ async function handleLogin(username, password, isRememberMe = false) {
             roleName: roleName,
             isSuperAdmin: isSuperAdmin,
             
+            branchId: assignmentData?.branch_id || null,
             departmentId: assignmentData?.departemen_id || userData.dep_id || null,
             bagianId: assignmentData?.bagian_id || null,
             jabatanId: assignmentData?.jabatan_id || null,
-            areaId: userData.area_id || null,
+            areaId: assignmentData?.area_id || null,
             
             managedZoneIds: managedZoneIds,
             allowedAreaIds: allowedAreaIds,
