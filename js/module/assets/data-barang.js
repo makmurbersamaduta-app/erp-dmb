@@ -601,7 +601,7 @@ async function insertHargaBaru(barangId, p, username) {
 // KELOMPOK 11: FOTO (KOMPRESI + UPLOAD)
 // Fungsi: mengecilkan foto (sisi terpanjang maks 640 px, JPEG kualitas 50%, turun otomatis sampai ~50 KB),
 // mengunggah ke bucket "data-barang", dan menghapus foto lama bila perlu.
-// Yang disimpan di photo_path adalah URL publik foto.
+// Nama file = kode barang (ATK0001.jpg). Yang disimpan di photo_path adalah URL publik foto.
 // ===================================================
 function canvasToJpegBlob(canvas, quality) {
     return new Promise((resolve, reject) => {
@@ -647,12 +647,35 @@ function compressImage(file) {
     });
 }
 
-async function uploadFoto(file) {
-    const blob = await compressImage(file);
-    const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const { error } = await supabaseClient.storage.from(BUCKET_FOTO).upload(path, blob, { contentType: "image/jpeg", upsert: false });
+// Nama file foto = kode barang, contoh: ATK0001.jpg
+// (selalu .jpg karena foto dikonversi ke JPEG saat dikompres)
+function fotoPathForKode(kode) {
+    return `${String(kode).trim().replace(/[^A-Za-z0-9_-]+/g, "_")}.jpg`;
+}
+
+// Alamat publik foto untuk sebuah kode barang (tanpa mengunggah apa pun)
+function fotoUrlForKode(kode) {
+    return supabaseClient.storage.from(BUCKET_FOTO).getPublicUrl(fotoPathForKode(kode)).data.publicUrl;
+}
+
+// Dua alamat dianggap sama jika file-nya sama (bagian setelah "?" diabaikan)
+function samaFoto(a, b) {
+    return String(a || "").split("?")[0] === String(b || "").split("?")[0];
+}
+
+// Mengunggah foto yang sudah dikompres dengan nama KODE.jpg.
+// upsert: true = menimpa file lama bernama sama (dipakai saat foto diganti).
+// cacheControl 60 detik: foto yang diganti tidak "tersangkut" lama di cache browser.
+async function uploadFotoBlob(blob, kode) {
+    const { error } = await supabaseClient.storage.from(BUCKET_FOTO)
+        .upload(fotoPathForKode(kode), blob, { contentType: "image/jpeg", upsert: true, cacheControl: "60" });
     if (error) throw error;
-    return supabaseClient.storage.from(BUCKET_FOTO).getPublicUrl(path).data.publicUrl;
+    return fotoUrlForKode(kode);
+}
+
+async function uploadFoto(file, kode) {
+    const blob = await compressImage(file);
+    return uploadFotoBlob(blob, kode);
 }
 
 async function removeFotoByUrl(url) {
@@ -934,15 +957,24 @@ async function saveBarangAdd() {
 
     const btn = $("btnMbSimpan");
     setBusy(btn, true, "Menyimpan...");
-    let fotoUrl = null;
     let barangId = null;
+    let fotoUploaded = false;
+    let kode = $("fKode").value;
+
+    // Membatalkan barang yang sudah terlanjur tersimpan (dan fotonya) jika langkah berikutnya gagal
+    async function batalkanBarang(pesan) {
+        const { error: errDel } = await db().from("data_barang").delete().eq("id", barangId);
+        if (fotoUploaded) await removeFotoByUrl(fotoUrlForKode(kode));
+        if (errDel) throw new Error(`${pesan} dan barang ${kode} tidak bisa dibatalkan otomatis. Hubungi admin.`);
+        throw new Error(`${pesan}, penambahan barang dibatalkan.`);
+    }
 
     try {
-        // 1. Kompres + upload foto
-        fotoUrl = await uploadFoto($("fFoto").files[0]);
+        // 1. Kompres foto dulu (gagal cepat jika file bukan gambar)
+        const fotoBlob = await compressImage($("fFoto").files[0]);
 
-        // 2. Simpan data_barang (ulang sampai 3x jika kode bentrok)
-        let kode = $("fKode").value;
+        // 2. Simpan data_barang (ulang sampai 3x jika kode bentrok).
+        //    photo_path langsung diisi alamat foto yang akan diunggah (KODE.jpg).
         for (let attempt = 0; attempt < 3; attempt++) {
             const { data, error } = await db().from("data_barang").insert({
                 created_at: new Date().toISOString(),
@@ -953,7 +985,7 @@ async function saveBarangAdd() {
                 deskripsi: v.deskripsi,
                 level_approval: v.level,
                 estimasi_masa_pakai: v.estimasi,
-                photo_path: fotoUrl,
+                photo_path: fotoUrlForKode(kode),
                 kategori_barang_id: Number(v.kategoriId),
                 ...v.avail,
                 is_active: true
@@ -968,18 +1000,21 @@ async function saveBarangAdd() {
             throw error;
         }
 
-        // 3. Simpan harga
+        // 3. Unggah foto dengan nama KODE.jpg. Kode ini sudah resmi milik barang baru
+        //    (insert berhasil), jadi aman menimpa file sisa dengan nama yang sama.
+        try {
+            await uploadFotoBlob(fotoBlob, kode);
+            fotoUploaded = true;
+        } catch (errFoto) {
+            await batalkanBarang(`Foto gagal diunggah (${errFoto.message})`);
+        }
+
+        // 4. Simpan harga
         const calc = computePrices(v.supplier, v.margin, v.estimasi);
         try {
             await insertHargaBaru(barangId, { supplier: v.supplier, margin: v.margin, ...calc }, username);
         } catch (errHarga) {
-            // Rollback: hapus barang yang barusan dibuat agar tidak ada barang tanpa harga
-            const { error: errDel } = await db().from("data_barang").delete().eq("id", barangId);
-            await removeFotoByUrl(fotoUrl);
-            if (errDel) {
-                throw new Error(`Harga gagal disimpan (${errHarga.message}) dan barang ${kode} tidak bisa dibatalkan otomatis. Hubungi admin.`);
-            }
-            throw new Error("Harga gagal disimpan, penambahan barang dibatalkan: " + errHarga.message);
+            await batalkanBarang(`Harga gagal disimpan (${errHarga.message})`);
         }
 
         bootstrap.Modal.getOrCreateInstance($("modalBarang")).hide();
@@ -987,7 +1022,6 @@ async function saveBarangAdd() {
         await afterDataChanged();
     } catch (err) {
         console.error("Gagal menambah barang:", err);
-        if (fotoUrl && !barangId) await removeFotoByUrl(fotoUrl);
         showMsg("mbMessage", "Gagal menyimpan: " + err.message, "danger");
     } finally {
         setBusy(btn, false);
@@ -1035,7 +1069,7 @@ async function saveBarangEdit() {
             ...v.avail
         };
         if (newFile) {
-            newFotoUrl = await uploadFoto(newFile);
+            newFotoUrl = await uploadFoto(newFile, row.kode_barang);   // menimpa KODE.jpg lama bila ada
             payload.photo_path = newFotoUrl;
         }
 
@@ -1043,13 +1077,14 @@ async function saveBarangEdit() {
             .update(payload).eq("id", row.id).eq("is_active", true).select("id");
         if (error) throw error;
         if (!data || data.length === 0) {
-            if (newFotoUrl) await removeFotoByUrl(newFotoUrl);
+            if (newFotoUrl && !samaFoto(newFotoUrl, row.photo_path)) await removeFotoByUrl(newFotoUrl);
             showMsg("mbMessage", "Tidak ada data yang tersimpan. Kemungkinan barang sudah tidak aktif, atau akun ini tidak punya izin mengubah data.", "danger");
             return;
         }
 
-        // Foto lama dibersihkan setelah data baru berhasil tersimpan
-        if (newFotoUrl && row.photo_path) await removeFotoByUrl(row.photo_path);
+        // Foto lama (dengan nama berbeda, mis. nama acak dari versi sebelumnya) dibersihkan setelah data baru tersimpan.
+        // Jika namanya sama (KODE.jpg), file sudah tertimpa dan TIDAK boleh dihapus.
+        if (newFotoUrl && row.photo_path && !samaFoto(newFotoUrl, row.photo_path)) await removeFotoByUrl(row.photo_path);
 
         // Estimasi berubah -> hitung ulang amortisasi, simpan sebagai harga baru
         let warn = "";
@@ -1069,7 +1104,7 @@ async function saveBarangEdit() {
         await afterDataChanged();
     } catch (err) {
         console.error("Gagal menyimpan perubahan:", err);
-        if (newFotoUrl) await removeFotoByUrl(newFotoUrl);
+        if (newFotoUrl && !samaFoto(newFotoUrl, row.photo_path)) await removeFotoByUrl(newFotoUrl);
         showMsg("mbMessage", "Gagal menyimpan: " + err.message, "danger");
     } finally {
         setBusy(btn, false);

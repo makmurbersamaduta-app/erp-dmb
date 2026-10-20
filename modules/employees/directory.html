@@ -34,40 +34,25 @@
                     <i class="fa-solid fa-bars"></i>
                 </button>
                 <img src="../../assets/images/logo-dmb.jpg" alt="Logo DMB" class="header-logo-img" onerror="this.style.display='none'">
-                <h6 class="mb-0 fw-semibold text-secondary small">Control & Management Center</h6>
-            </div>
-
-            <div class="dropdown">
-                <button class="btn btn-light dropdown-toggle d-flex align-items-center py-1 px-2 border-0 bg-transparent" type="button" data-bs-toggle="dropdown">
-                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 34px; height: 34px; font-weight: 600;">
-                        <i class="fa-solid fa-user"></i>
-                    </div>
-                    <div class="text-start me-2 d-none d-sm-block">
-                        <div class="fw-bold small lh-1" id="headerUserName">Pengguna ERP</div>
-                        <div class="text-muted" style="font-size: 0.72rem;" id="headerUserRole">User</div>
-                    </div>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
-                    <li><a class="dropdown-item small text-danger fw-bold" href="#" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
-                </ul>
-            </div>
-        </header>
-
-        <main class="content-body">
-
-            <div class="d-flex justify-content-between align-items-center mb-3">
                 <div>
                     <h5 class="fw-bold mb-0 text-dark">Data Karyawan (Directory)</h5>
                     <p class="text-muted small mb-0">Kelola informasi personal, penempatan, mutasi, dan status kerja karyawan.</p>
                 </div>
-                <div class="d-flex gap-2">
-                    <a href="employee_create.html" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-1">
-                        <i class="fa-solid fa-user-plus"></i>
-                        <span>Tambah Karyawan</span>
-                    </a>
-                    
+
+            </div>
+
+            <div class="d-flex align-items-center py-1 px-2">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 34px; height: 34px; font-weight: 600;">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+                <div class="text-start d-none d-sm-block">
+                    <div class="fw-bold small lh-1" id="headerUserName">Pengguna ERP</div>
+                    <div class="text-muted" style="font-size: 0.72rem;" id="headerUserRole">User</div>
                 </div>
             </div>
+        </header>
+
+        <main class="content-body">
 
             <div class="row g-3 mb-3">
                 <div class="col-12 col-md-4">
@@ -165,6 +150,13 @@
                         <button class="btn btn-success btn-sm fw-medium d-flex align-items-center gap-1" id="btnExport">
                             <i class="fa-solid fa-file-excel"></i><span>Export</span>
                         </button>
+                <div class="d-flex gap-2">
+                    <a href="employee_create.html" class="btn btn-primary btn-sm fw-semibold d-flex align-items-center gap-1">
+                        <i class="fa-solid fa-user-plus"></i>
+                        <span>Tambah Karyawan</span>
+                    </a>
+                    
+                </div>
                     </div>
                 </div>
             </div>

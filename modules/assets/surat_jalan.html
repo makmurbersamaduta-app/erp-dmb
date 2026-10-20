@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surat Jalan - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: ikon Font Awesome, font Inter, dan seluruh gaya halaman
+         (ditulis di sini, tanpa CSS proyek). Prefix "ct-" = gaya halaman.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --ct-primary: #2b6cb0;
+            --ct-primary-dark: #1e4e8c;
+            --ct-bg-soft: #e1ecf5;
+            --ct-border: #d3dfea;
+            --ct-text-main: #1f2d3d;
+            --ct-text-muted: #6b7c93;
+            --ct-danger: #d64545;
+            --ct-radius: 8px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex; flex-direction: column;
+            font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--ct-text-main);
+        }
+
+        /* --- Bar atas: Kembali (kiri) + tab cabang (kanan) --- */
+        .ct-topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--ct-border); flex-shrink: 0;
+        }
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-border); background: var(--ct-bg-soft); color: var(--ct-primary-dark);
+            font-size: 14px; font-weight: 600; text-decoration: none; transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--ct-primary); color: #fff; }
+        .ct-tabs { display: flex; gap: 6px; background: var(--ct-bg-soft); padding: 4px; border-radius: 10px; }
+        .ct-tabs[hidden] { display: none; }
+        .ct-tab {
+            border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+            font-size: 14px; font-weight: 600; color: var(--ct-text-muted); cursor: pointer; font-family: inherit;
+        }
+        .ct-tab:hover { color: var(--ct-primary-dark); }
+        .ct-tab.active { background: var(--ct-primary); color: #fff; }
+
+        /* --- Area utama & judul --- */
+        .ct-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+        .ct-title-block { text-align: center; margin-bottom: 14px; flex-shrink: 0; }
+        .ct-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .ct-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--ct-primary); }
+
+        /* --- Toolbar: search + filter --- */
+        .ct-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .ct-search-wrapper { position: relative; flex: 1; max-width: 360px; min-width: 200px; }
+        .ct-search-wrapper i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--ct-text-muted); font-size: 13px; }
+        .ct-search-input {
+            width: 100%; border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            padding: 8px 12px 8px 34px; font-size: 14px; outline: none; background: #fff; font-family: inherit;
+        }
+        .ct-search-input:focus { border-color: var(--ct-primary); }
+        .btn-tool {
+            display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--ct-border);
+            border-radius: var(--ct-radius); padding: 8px 16px; font-size: 14px; color: var(--ct-text-main);
+            cursor: pointer; font-family: inherit;
+        }
+        .btn-tool:hover { border-color: var(--ct-primary); color: var(--ct-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* --- Panel filter --- */
+        .ct-filter-wrapper { position: relative; }
+        .filter-count-badge { background: var(--ct-primary); color: #fff; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 7px; }
+        .ct-filter-panel {
+            position: absolute; top: calc(100% + 6px); left: 0; width: 320px; background: #fff;
+            border: 1px solid var(--ct-border); border-radius: var(--ct-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12); z-index: 60; max-height: 480px; overflow-y: auto;
+        }
+        .ct-filter-panel[hidden] { display: none; }
+        .filter-group { border-bottom: 1px solid var(--ct-border); padding: 4px 14px; }
+        .filter-group-header {
+            width: 100%; display: flex; align-items: center; justify-content: space-between; background: none; border: none;
+            padding: 10px 0; font-size: 12.5px; font-weight: 700; color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .filter-group-header i { font-size: 11px; color: var(--ct-text-muted); transition: transform 0.15s ease; }
+        .filter-group-header.expanded i { transform: rotate(180deg); }
+        .filter-group-body { display: none; flex-direction: column; padding-bottom: 10px; }
+        .filter-group-body.expanded { display: flex; }
+        .filter-inline-search { width: 100%; border: 1px solid var(--ct-border); border-radius: 6px; padding: 6px 10px; font-size: 12.5px; outline: none; margin-bottom: 8px; font-family: inherit; }
+        .filter-inline-search:focus, .filter-date:focus { border-color: var(--ct-primary); }
+        .filter-checkbox-list { max-height: 160px; overflow-y: auto; }
+        .filter-checkbox-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; cursor: pointer; }
+        .filter-checkbox-item input { accent-color: var(--ct-primary); cursor: pointer; }
+        .filter-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .filter-date-label { font-size: 11.5px; color: var(--ct-text-muted); margin-bottom: 3px; display: block; }
+        .filter-date { width: 100%; border: 1px solid var(--ct-border); border-radius: 6px; padding: 6px 8px; font-size: 12.5px; outline: none; font-family: inherit; }
+        .filter-panel-footer {
+            display: flex; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--ct-border);
+            background: var(--ct-bg-soft); position: sticky; bottom: 0;
+        }
+        .btn-filter-reset { background: none; border: none; font-size: 13px; color: var(--ct-text-muted); cursor: pointer; font-family: inherit; }
+        .btn-filter-reset:hover { color: var(--ct-danger); }
+        .btn-filter-apply { background: var(--ct-primary); color: #fff; border: none; border-radius: 6px; padding: 6px 16px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+        .btn-filter-apply:hover { background: var(--ct-primary-dark); }
+
+        /* --- Tabel (header sticky) --- */
+        .ct-table-wrapper { background: #fff; border: 1px solid var(--ct-border); border-radius: var(--ct-radius); overflow: auto; flex: 1; min-height: 0; }
+        .ct-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .ct-table thead th {
+            position: sticky; top: 0; z-index: 10; height: 40px; background: var(--ct-bg-soft); color: var(--ct-text-main);
+            font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap; border-bottom: 2px solid var(--ct-border);
+        }
+        .ct-table tbody td { padding: 9px 14px; border-bottom: 1px solid var(--ct-border); vertical-align: middle; white-space: nowrap; }
+        .ct-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center !important; }
+        .col-dl { text-align: center !important; width: 110px; }
+        .btn-dl {
+            display: inline-flex; align-items: center; gap: 6px; border: 1px solid #c0392b; background: #fff; color: #c0392b;
+            border-radius: 6px; padding: 5px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-dl:hover { background: #c0392b; color: #fff; }
+        .btn-dl:disabled { opacity: 0.6; cursor: not-allowed; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--ct-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--ct-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .ct-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--ct-border); background: #fff; border-radius: 6px; font-size: 13px;
+            color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .pagination-btn:hover { border-color: var(--ct-primary); }
+        .pagination-btn.active { background: var(--ct-primary); border-color: var(--ct-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ct-page-info { font-size: 12.5px; color: var(--ct-text-muted); margin-left: 10px; }
+
+        .ct-toast {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 200;
+            background: #1f2d3d; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; max-width: 90vw;
+        }
+
+        @media (max-width: 640px) {
+            .ct-topbar, .ct-main { padding-left: 12px; padding-right: 12px; }
+            .ct-filter-panel { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS
+         Fungsi: tombol "Kembali" ke catalog.html (kiri) dan tab cabang (kanan).
+         Tab hanya tampil untuk role Maintenance dan Superadmin (diatur JS).
+         Makassar = branch_id 2, Surabaya = branch_id 1.
+         ============================================================ -->
+    <header class="ct-topbar">
+        <a href="../assets/catalog.html" class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+
+        <!-- KELOMPOK 3: JUDUL (baris kedua berganti sesuai cabang, diatur JS) -->
+        <div class="ct-title-block">
+            <h1 class="ct-title">Surat Jalan</h1>
+            <div class="ct-subtitle" id="branchTitle">Makassar</div>
+        </div>
+
+        <div class="ct-tabs" id="branchTabs" role="tablist" hidden>
+            <button type="button" class="ct-tab active" data-branch="2" role="tab">Makassar</button>
+            <button type="button" class="ct-tab" data-branch="1" role="tab">Surabaya</button>
+        </div>
+    </header>
+
+    <main class="ct-main">
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Search (kode batch, area) dan Filter (tanggal kirim
+             dari-sampai, departemen, area, periode).
+             ======================================================== -->
+        <div class="ct-toolbar">
+            <div class="ct-search-wrapper">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" class="ct-search-input" id="searchInput" placeholder="Cari kode batch atau area..." autocomplete="off">
+            </div>
+
+            <div class="ct-filter-wrapper">
+                <button type="button" class="btn-tool" id="btnFilterToggle">
+                    <i class="fa-solid fa-filter"></i><span>Filter</span>
+                    <span class="filter-count-badge" id="filterCountBadge" hidden>0</span>
+                </button>
+                <div class="ct-filter-panel" id="filterPanel" hidden>
+                    <div class="filter-group">
+                        <div class="filter-group-header" style="cursor: default;"><span>Tanggal Kirim</span></div>
+                        <div class="filter-group-body expanded" style="padding-bottom: 12px;">
+                            <div class="filter-date-row">
+                                <div><label class="filter-date-label" for="fltDari">Dari</label><input type="date" class="filter-date" id="fltDari"></div>
+                                <div><label class="filter-date-label" for="fltSampai">Sampai</label><input type="date" class="filter-date" id="fltSampai"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="filterGroups"></div>
+                    <div class="filter-panel-footer">
+                        <button type="button" class="btn-filter-reset" id="btnFilterReset">Reset</button>
+                        <button type="button" class="btn-filter-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL UTAMA
+             Fungsi: satu baris per batch barang keluar, tanggal terbaru di
+             atas. Tombol PDF mengunduh surat jalan A4 untuk batch itu.
+             Header tabel sticky. Isi dibuat oleh surat_jalan.js.
+             ======================================================== -->
+        <div class="ct-table-wrapper">
+            <table class="ct-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th class="col-dl" style="text-align:center;">Surat Jalan</th>
+                        <th>Tanggal Kirim</th>
+                        <th>Kode Transaksi</th>
+                        <th>Pemohon</th>
+                        <th>Departemen</th>
+                        <th>Area</th>
+                        <th>Periode</th>
+                    </tr>
+                </thead>
+                <tbody id="sjTableBody">
+                    <tr class="row-loading"><td colspan="8"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 6: PAGINATION (maksimal 100 baris per halaman) -->
+        <div class="ct-pagination" id="sjPagination"></div>
+    </main>
+
+    <div class="ct-toast" id="ctToast"></div>
+
+    <!-- ============================================================
+         KELOMPOK 7: SCRIPT
+         Fungsi: jsPDF + jsPDF-AutoTable (membuat file PDF di browser),
+         Supabase (database), lalu surat_jalan.js.
+         PERLU DICEK: path supabase.js dan surat_jalan.js. Samakan dengan
+         path yang sudah berjalan di catalog.html Anda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/assets/surat_jalan.js"></script>
+</body>
+</html>

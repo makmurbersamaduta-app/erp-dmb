@@ -4,7 +4,7 @@
  * Module: Employee Directory
  * File: directory.js
  * Deskripsi: Logika Utama Tabel Direktori, RBAC, Filter, Statistika, 
- * Modal Mutasi (Auto NIK), Modal Resign & Navigasi Rehire.
+ * Modal Mutasi (Generate NIK manual), Modal Resign & Navigasi Rehire.
  * ============================================================================
  */
 
@@ -46,6 +46,8 @@ const ALL_COLUMNS = [
     { key: "area", label: "Area", default: false },
     { key: "bagian", label: "Bagian", default: false },
     { key: "status_karyawan", label: "Status Karyawan", default: true },
+    { key: "tgl_masuk", label: "Tanggal Masuk", default: true },
+    { key: "tgl_keluar", label: "Tanggal Keluar", default: true },
     { key: "status_data", label: "Status Data", default: true },
     { key: "aksi", label: "Aksi", default: true }
 ];
@@ -108,6 +110,41 @@ function getEmployeeAssignment(empId, empNik) {
     if (!list || list.length === 0) return null;
     // Prioritaskan assignment aktif; kalau tidak ada, ambil yang paling baru
     return list.find(a => a.is_active !== false) || list[0];
+}
+
+// ----------------------------------------------------------------------------
+// TANGGAL MASUK / KELUAR
+// Masuk  = start_date REHIRE terakhir; kalau tidak pernah rehire -> start_date
+//          paling awal dari assignment BUKAN MUTATION; fallback: paling awal apa pun.
+// Keluar = hanya untuk karyawan non-aktif: end_date paling akhir dari assignment.
+// ----------------------------------------------------------------------------
+function getTanggalMasuk(emp) {
+    const list = directoryAssignmentsByEmp.get(String(emp.id)) || [];
+    const type = a => String(a.action_type || "").toUpperCase();
+    const dates = arr => arr.map(a => a.start_date).filter(Boolean).sort();
+
+    const rehire = dates(list.filter(a => type(a) === "REHIRE"));
+    if (rehire.length) return rehire[rehire.length - 1];
+
+    const nonMut = dates(list.filter(a => type(a) !== "MUTATION"));
+    if (nonMut.length) return nonMut[0];
+
+    const all = dates(list);
+    return all.length ? all[0] : "";
+}
+
+function getTanggalKeluar(emp) {
+    if (emp.is_active !== false) return "";
+    const list = directoryAssignmentsByEmp.get(String(emp.id)) || [];
+    const ends = list.map(a => a.end_date).filter(Boolean).sort();
+    return ends.length ? ends[ends.length - 1] : "";
+}
+
+// "2026-10-19" -> "19/10/2026" (hanya untuk tampilan tabel)
+function formatTanggalDirectory(dateStr) {
+    if (!dateStr) return "-";
+    const p = String(dateStr).split("-");
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : dateStr;
 }
 
 // ============================================================================
@@ -284,6 +321,17 @@ function initColumnPreferences() {
         visibleColumnKeys = ALL_COLUMNS.filter(c => c.default).map(c => c.key);
     }
 
+    // Kolom baru (Tanggal Masuk/Keluar): user yang sudah punya pengaturan kolom
+    // tersimpan tidak akan melihatnya otomatis. Tambahkan SEKALI saja; setelah itu
+    // pilihan user (centang/tidak) dihormati.
+    if (!localStorage.getItem("dir_cols_v2")) {
+        ["tgl_masuk", "tgl_keluar"].forEach(k => {
+            if (!visibleColumnKeys.includes(k)) visibleColumnKeys.push(k);
+        });
+        localStorage.setItem("dir_visible_columns", JSON.stringify(visibleColumnKeys));
+        localStorage.setItem("dir_cols_v2", "1");
+    }
+
     const modalManage = document.getElementById("modalManageColumns");
     if (modalManage) {
         modalManage.addEventListener("show.bs.modal", renderColumnChecklist);
@@ -346,7 +394,7 @@ function renderTableHeader() {
 
             if (col.key === "no") { widthStyle = 'style="width: 50px;"'; alignClass = "text-center"; }
             else if (col.key === "nik") { widthStyle = 'style="width: 120px;"'; alignClass = "text-center"; }
-            else if (col.key === "status_karyawan" || col.key === "status_data") { alignClass = "text-center"; }
+            else if (col.key === "status_karyawan" || col.key === "status_data" || col.key === "tgl_masuk" || col.key === "tgl_keluar") { alignClass = "text-center"; }
             else if (col.key === "aksi") { widthStyle = 'style="width: 100px;"'; alignClass = "text-center"; }
 
             html += `<th class="${alignClass}" ${widthStyle}>${col.label}</th>`;
@@ -655,6 +703,8 @@ function renderDirectoryTableRows() {
                 else if (col.key === "area") html += `<td>${areaObj?.area_name || '-'}</td>`;
                 else if (col.key === "bagian") html += `<td>${bagObj?.bagian_name || '-'}</td>`;
                 else if (col.key === "status_karyawan") html += `<td class="text-center">${assign?.status_karyawan || '-'}</td>`;
+                else if (col.key === "tgl_masuk") html += `<td class="text-center">${formatTanggalDirectory(getTanggalMasuk(emp))}</td>`;
+                else if (col.key === "tgl_keluar") html += `<td class="text-center">${formatTanggalDirectory(getTanggalKeluar(emp))}</td>`;
                 else if (col.key === "status_data") html += `<td class="text-center">${statusBadge}</td>`;
                 else if (col.key === "aksi") html += `<td class="text-center">${actionDropdown}</td>`;
             }
@@ -804,7 +854,7 @@ function navigateToRehire(empId) {
 }
 
 // ============================================================================
-// 8. LOGIKA DAN FORM MODAL MUTASI (DENGAN AUTO GENERATE NIK)
+// 8. LOGIKA DAN FORM MODAL MUTASI (NIK DIGENERATE MANUAL VIA TOMBOL)
 // ============================================================================
 function openMutasiModal(empId) {
     const emp = directoryEmployees.find(e => String(e.id) === String(empId));
@@ -836,6 +886,11 @@ function openMutasiModal(empId) {
 
     document.getElementById("mut_start_date").value = new Date().toISOString().split('T')[0];
 
+    // NIK lama tetap ditampilkan; tidak digenerate otomatis.
+    // Ganti hanya jika perlu, lewat tombol "Generate".
+    const nikInput = document.getElementById("mut_nik_karyawan");
+    if (nikInput) nikInput.value = emp.nik_karyawan || "";
+
     onMutasiStatusOrBranchChange();
 
     new bootstrap.Modal(document.getElementById("modalMutasiKaryawan")).show();
@@ -859,11 +914,10 @@ function onMutasiStatusOrBranchChange() {
     const isBoronganActive = prevStatus.includes("borongan") || newStatus.includes("borongan");
     if (containerBagian) containerBagian.style.display = isBoronganActive ? "block" : "none";
     if (containerStg) containerStg.style.display = isBoronganActive ? "block" : "none";
-
-    triggerAutoGenerateNik();
 }
 
-function triggerAutoGenerateNik() {
+// Dipanggil HANYA oleh tombol "Generate" di samping kolom NIK
+function generateNikMutasi() {
     const statusVal = document.getElementById("mut_status_karyawan")?.value || "";
     const branchId = document.getElementById("mut_branch")?.value || "1";
     const deptId = document.getElementById("mut_dept")?.value || "1";
@@ -958,7 +1012,13 @@ async function handleSaveMutasi(e) {
     const statusKaryawan = document.getElementById("mut_status_karyawan").value;
     const startDate = document.getElementById("mut_start_date").value;
     const noAbsenStg = document.getElementById("mut_no_absen_stg")?.value || null;
-    const editedNik = document.getElementById("mut_nik_karyawan")?.value || null;
+    // NIK hanya dipakai kalau kolom NIK sedang ditampilkan (Borongan/Reliver -> PKWT/PKWTT)
+    const nikContainer = document.getElementById("mut_nik_container");
+    const nikVisible = nikContainer && nikContainer.style.display !== "none";
+    const empLama = directoryEmployees.find(x => String(x.id) === String(empId));
+    const nikInputVal = nikVisible ? (document.getElementById("mut_nik_karyawan")?.value.trim() || null) : null;
+    // Hanya dianggap "diganti" kalau BEDA dari NIK lama
+    const editedNik = (nikInputVal && nikInputVal !== (empLama?.nik_karyawan || "")) ? nikInputVal : null;
 
     const btn = document.getElementById("btnSaveMutasi");
     btn.disabled = true;
@@ -1179,10 +1239,10 @@ function injectActionModals() {
                                     </select>
                                 </div>
                                 <div class="col-md-6" id="mut_nik_container" style="display: none;">
-                                    <label class="form-label small fw-bold">NIK Karyawan Baru</label>
+                                    <label class="form-label small fw-bold">NIK Karyawan</label>
                                     <div class="input-group input-group-sm">
                                         <input type="text" id="mut_nik_karyawan" class="form-control form-control-sm">
-                                        <button type="button" class="btn btn-outline-secondary" onclick="triggerAutoGenerateNik()"><i class="fa-solid fa-rotate me-1"></i>Auto</button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="generateNikMutasi()"><i class="fa-solid fa-wand-magic-sparkles me-1"></i>Generate</button>
                                     </div>
                                 </div>
                             </div>
@@ -1218,7 +1278,7 @@ function injectActionModals() {
                                 </div>
                                 <div class="col-md-6 mb-2">
                                     <label class="form-label small fw-bold">Tanggal Efektif Mutasi <span class="text-danger">*</span></label>
-                                    <input type="date" id="mut_start_date" class="form-control form-control-sm" onchange="triggerAutoGenerateNik()" required>
+                                    <input type="date" id="mut_start_date" class="form-control form-control-sm" required>
                                 </div>
                             </div>
                         </div>
@@ -1361,8 +1421,8 @@ function exportDirectoryToExcel() {
             "BPJS Ketenagakerjaan": emp.bpjs_ketenagakerjaan || "-",
             "BPJS Kesehatan": emp.bpjs_kesehatan || "-",
             "Status Karyawan": assign?.status_karyawan || "-",
-            "Tanggal Masuk": assign?.start_date || "-",
-            "Tanggal Keluar": assign?.end_date || "",      // kosong kalau NULL, sesuai permintaan
+            "Tanggal Masuk": getTanggalMasuk(emp) || "-",
+            "Tanggal Keluar": getTanggalKeluar(emp) || "",      // kosong kalau NULL, sesuai permintaan
             "Cabang": branchObj?.branch_name || "-",
             "Departemen": deptObj?.department_name || "-",
             "Cost Center": ccObj?.costcenter_name || "-",

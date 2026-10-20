@@ -33,7 +33,7 @@ const RPC_NEXT_KODE = "next_kode_batch";
 
 // Cabang: branch_id -> nama tab
 const BRANCHES = { 2: "Makassar", 1: "Surabaya" };
-const DEFAULT_BRANCH = 2;
+const DEFAULT_BRANCH = 2;   // Makassar
 
 // Sesi login & hak akses
 const SESSION_KEY = "erp_session";          // key sesi login di browser (JSON)
@@ -43,6 +43,10 @@ const SESSION_BRANCH_FIELDS = ["branchId", "branch_id"];
 
 // Pencarian Kode Barang (Non-Request) hanya menampilkan barang yang tidak bernilai false di kolom cabang.
 const BATASI_BARANG_PER_CABANG = true;
+
+// Hanya permintaan dengan status ini yang muncul di dropdown "Kode Request"
+// (harus sama persis dengan penulisan status di ga.request_batch, termasuk huruf besar/kecil).
+const REQUEST_STATUS_SIAP_KIRIM = "Disetujui";
 const BRANCH_FLAG_COLUMN = { 2: "is_makassar", 1: "is_surabaya" };
 
 // Filter di panel Filter: key -> judul (jenis di view stock_out_opsi_filter)
@@ -220,7 +224,7 @@ function setupTabs() {
             const id = parseInt(btn.dataset.branch, 10);
             if (!state.canSwitch || id === state.branchId) return;
             state.branchId = id;
-            state.page = 2;
+            state.page = 1;
             state.filters = { department: [], area: [], periode: [], kategori: [] };
             updateTabUi();
             updateFilterBadge();
@@ -680,6 +684,7 @@ async function ensureRequestOpts() {
     const { data, error } = await ga().from(VIEW_REQUEST_OPEN)
         .select("id, kode_batch, pemohon, nama_pemohon, department_id, department_name, area_id, area_name, periode_permintaan")
         .eq("branch_id", state.branchId)
+        .eq("status", REQUEST_STATUS_SIAP_KIRIM)
         .eq("ada_sisa", true)
         .order("kode_batch", { ascending: false });
     if (error) throw error;
@@ -691,7 +696,7 @@ function populateRequestSelect() {
     sel.innerHTML = `<option value="">Pilih Kode Request</option>` +
         (M.requestOpts || []).map(o =>
             `<option value="${esc(o.id)}">${esc(o.kode_batch)}, ${esc(o.nama_pemohon || o.pemohon || "-")}</option>`).join("");
-    if ((M.requestOpts || []).length === 0) showMsg("Tidak ada permintaan aktif yang masih menunggu pengiriman di cabang ini.", "info");
+    if ((M.requestOpts || []).length === 0) showMsg(`Tidak ada permintaan berstatus "${REQUEST_STATUS_SIAP_KIRIM}" yang masih menunggu pengiriman di cabang ini.`, "info");
 }
 
 async function ensurePemohonOpts() {

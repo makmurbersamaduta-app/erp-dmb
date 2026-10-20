@@ -10,7 +10,9 @@
 let currentEmpId = null;
 let currentAssignmentId = null;
 let hasCareerHistory = false; // Flag penanda apakah karyawan punya riwayat Mutasi / Resign
-let originalNikKaryawan = ""; // NIK saat data pertama kali dimuat, untuk deteksi perubahan NIK
+let originalNikKaryawan = "";
+let isResigned = false;   // true jika karyawan non-aktif (resign) -> form terkunci permanen
+let dataLoaded = false;    // true setelah data karyawan selesai dimuat // NIK saat data pertama kali dimuat, untuk deteksi perubahan NIK
 
 let masterBranches = [];
 let masterCostCenters = [];
@@ -75,6 +77,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     // 4. Setup Event Listeners UI
     setupEventListeners();
+
+    // Form dikunci dulu sampai data selesai dimuat
+    setFormLocked(true);
 
     // 5. Load Master Data & Detail Karyawan
     try {
@@ -157,6 +162,11 @@ async function loadMasterData() {
 function populateSelect(elemId, items, valKey, textKey, defaultText) {
     const el = document.getElementById(elemId);
     if (!el) return;
+
+    // Simpan pilihan saat ini, supaya tidak hilang saat daftar opsi dibangun ulang
+    // (penyebab Area/Bagian ter-reset ketika "Tanggal Masuk" diisi)
+    const previousValue = el.value;
+
     el.innerHTML = `<option value="">${defaultText}</option>`;
     (items || []).forEach(item => {
         const opt = document.createElement("option");
@@ -164,6 +174,12 @@ function populateSelect(elemId, items, valKey, textKey, defaultText) {
         opt.textContent = item[textKey];
         el.appendChild(opt);
     });
+
+    // Kembalikan pilihan lama HANYA jika masih ada di daftar baru
+    // (mis. ganti Cabang -> Area milik cabang lama otomatis kosong, memang seharusnya begitu)
+    if (previousValue && Array.from(el.options).some(o => o.value === String(previousValue))) {
+        el.value = previousValue;
+    }
 }
 
 function resetSelect(elemId, defaultText) {
@@ -239,7 +255,7 @@ async function loadEmployeeData(empId) {
     // Cek apakah ada record yang memiliki action_type Mutasi atau Resign
     hasCareerHistory = (allAssignments || []).some(a => {
         const action = String(a.action_type || "").toUpperCase();
-        return action.includes("MUTASI") || action.includes("RESIGN");
+        return action.includes("MUTASI") || action.includes("MUTATION") || action.includes("RESIGN");
     });
 
     // Atur Status Readonly NIK Karyawan berdasarkan ada/tidaknya riwayat Mutasi / Resign
@@ -255,8 +271,11 @@ async function loadEmployeeData(empId) {
     }
 
     // C. Ambil Record Assignment Aktif Karyawan
-    const activeAssign = (allAssignments || []).find(a => a.is_active) || 
-        (allAssignments && allAssignments.length > 0 ? allAssignments[allAssignments.length - 1] : null);
+    // Urutkan terbaru dulu (start_date, lalu created_at) agar pilihan tidak bergantung urutan acak dari database
+    const sortedAssign = [...(allAssignments || [])].sort((a, b) =>
+        (b.start_date || "").localeCompare(a.start_date || "") ||
+        (b.created_at || "").localeCompare(a.created_at || ""));
+    const activeAssign = sortedAssign.find(a => a.is_active) || sortedAssign[0] || null;
 
     if (activeAssign) {
         currentAssignmentId = activeAssign.id;
@@ -277,11 +296,60 @@ async function loadEmployeeData(empId) {
         setInputValue("area_id", activeAssign.area_id);
 
         setInputValue("departemen_id", activeAssign.departemen_id);
-        if (activeAssign.status_karyawan === "Borongan") {
-            setInputValue("bagian_id", activeAssign.bagian_id);
+        setInputValue("bagian_id", activeAssign.bagian_id);
+        if (activeAssign.bagian_id && !document.getElementById("bagian_id")?.value) {
+            console.warn("[Edit] bagian_id", activeAssign.bagian_id, "tidak ditemukan di master public.bagians");
         }
         setInputValue("jabatan_id", activeAssign.jabatan_id);
         setInputValue("start_date", activeAssign.start_date);
+    }
+
+    // D. Tanggal Keluar: hanya tampil jika karyawan sudah non-aktif (resign)
+    isResigned = emp.is_active === false;
+    const endDateBox = document.getElementById("container_end_date");
+    if (endDateBox) {
+        if (isResigned) {
+            const ends = (allAssignments || []).map(a => a.end_date).filter(Boolean).sort();
+            setInputValue("end_date", ends.length ? ends[ends.length - 1] : "");
+            endDateBox.style.display = "block";
+        } else {
+            endDateBox.style.display = "none";
+        }
+    }
+
+    // E. Semua field terkunci saat halaman dibuka (resign -> terkunci permanen)
+    dataLoaded = true;
+    setFormLocked(true);
+}
+
+// ==============================================================================
+// LOCK / UNLOCK FORM
+// ==============================================================================
+function setFormLocked(locked) {
+    document.querySelectorAll("#formCreateEmployee input, #formCreateEmployee select, #formCreateEmployee textarea")
+        .forEach(el => { el.disabled = locked; });
+    // Catatan: atribut readonly lama (NIK jika ada riwayat mutasi, PTKP, Alamat Domisili = KTP)
+    // tidak disentuh, jadi tetap berlaku setelah form dibuka.
+
+    const btnEdit = document.getElementById("btnEdit");
+    const btnSubmit = document.getElementById("btnSubmit");
+    if (btnEdit) btnEdit.classList.toggle("d-none", !(locked && dataLoaded && !isResigned));
+    if (btnSubmit) btnSubmit.classList.toggle("d-none", locked || isResigned);
+
+    const notice = document.getElementById("lockNotice");
+    if (notice) {
+        if (!dataLoaded) {
+            notice.classList.add("d-none");
+        } else if (isResigned) {
+            notice.className = "alert alert-secondary small mb-3";
+            notice.innerHTML = '<i class="fa-solid fa-lock me-1"></i> Karyawan ini sudah non-aktif (resign). Data hanya dapat dilihat dan tidak bisa diubah.';
+        } else if (locked) {
+            notice.className = "alert alert-info small mb-3";
+            notice.innerHTML = '<i class="fa-solid fa-lock me-1"></i> Mode lihat saja. Klik tombol <b>Edit</b> untuk mengubah data.';
+        } else {
+            notice.className = "alert alert-warning small mb-3";
+            notice.innerHTML = '<i class="fa-solid fa-pen me-1"></i> Mode edit aktif.';
+        }
     }
 }
 
@@ -338,12 +406,9 @@ async function handlePlacementAndFiltering(triggerAutoNik = true) {
     // 2. Filter Area berdasarkan Branch & Cost Center
     handleAreaFiltering();
 
-    // 3. Filter Bagian khusus Status "Borongan" (POIN 3)
-    if (statusVal === "Borongan") {
-        populateSelect("bagian_id", masterBagians, "id", "bagian_name", "-- Pilih Bagian --");
-    } else {
-        resetSelect("bagian_id", "-- Pilih Bagian --");
-    }
+    // 3. Bagian: daftar SELALU diisi (tidak lagi hanya untuk "Borongan"),
+    //    agar data bagian karyawan non-Borongan tetap ter-load dan tidak hilang.
+    populateSelect("bagian_id", masterBagians, "id", "bagian_name", "-- Pilih Bagian --");
 
     // 4. Update NIK Otomatis (HANYA JIKA BELUM ADA DATA MUTASI / RESIGN) (POIN 1b & POIN 2)
     if (!hasCareerHistory && triggerAutoNik) {
@@ -352,6 +417,26 @@ async function handlePlacementAndFiltering(triggerAutoNik = true) {
 }
 
 // Generate NIK Otomatis berdasarkan 3 Aturan Format NIK
+// Ambil SEMUA NIK yang cocok dengan pola LIKE, bertahap per 1000 baris.
+// (Supabase membatasi 1 request = max 1000 baris; tanpa ini NIK tertinggi bisa terlewat.)
+async function fetchNikList(likePattern) {
+    const PAGE = 1000;
+    let all = [];
+    while (true) {
+        const { data, error } = await supabaseClient
+            .schema('hrd')
+            .from('employees')
+            .select('nik_karyawan')
+            .like('nik_karyawan', likePattern)
+            .order('nik_karyawan', { ascending: true })
+            .range(all.length, all.length + PAGE - 1);
+        if (error) throw error; // JANGAN generate NIK dari data yang gagal dimuat
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+    }
+    return all;
+}
+
 async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
     const nikInput = document.getElementById("nik_karyawan");
     if (!nikInput) return;
@@ -361,10 +446,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
         // a. STATUS = "Borongan" (Format: A001 -> A999 -> B001)
         if (statusKaryawan === "Borongan") {
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan');
+            const emps = await fetchNikList('____'); // semua NIK 4 karakter (format Borongan: huruf + 3 angka)
 
             let currentLetter = 'A';
             let maxSeq = 0;
@@ -384,6 +466,10 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 }
             });
 
+            if (maxSeq >= 999 && currentLetter === 'Z') {
+                alert('Urutan NIK Borongan sudah mencapai Z999. Hubungi administrator.');
+                return;
+            }
             if (maxSeq >= 999) {
                 currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
                 maxSeq = 1;
@@ -403,11 +489,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
             const prefix = `DMBR${branchId}${deptId}${yy}${mm}`;
 
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan')
-                .like('nik_karyawan', `${prefix}%`);
+            const emps = await fetchNikList(`${prefix}%`);
 
             let maxSeq = 0;
             (emps || []).forEach(e => {
@@ -417,7 +499,11 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
             });
 
-            const nextSeq = maxSeq >= 999 ? 1 : maxSeq + 1;
+            if (maxSeq >= 999) {
+                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
+                return;
+            }
+            const nextSeq = maxSeq + 1;
             generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
         }
         // c. STATUS KARYAWAN LAINNYA (PKWTT, PKWT, DLL) (Format: DMB + branch_id + dept_id + YY + MM + Seq 001)
@@ -430,11 +516,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
             const prefix = `DMB${branchId}${deptId}${yy}${mm}`;
 
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan')
-                .like('nik_karyawan', `${prefix}%`);
+            const emps = await fetchNikList(`${prefix}%`);
 
             let maxSeq = 0;
             (emps || []).forEach(e => {
@@ -444,7 +526,11 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
             });
 
-            const nextSeq = maxSeq >= 999 ? 1 : maxSeq + 1;
+            if (maxSeq >= 999) {
+                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
+                return;
+            }
+            const nextSeq = maxSeq + 1;
             generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
         }
 
@@ -478,6 +564,19 @@ function setupEventListeners() {
         const el = document.getElementById(id);
         if (el) {
             el.addEventListener("change", () => handlePlacementAndFiltering(true));
+        }
+    });
+
+    // Tombol Edit: buka kunci form (tidak berlaku untuk karyawan resign)
+    document.getElementById("btnEdit")?.addEventListener("click", () => {
+        if (!isResigned) setFormLocked(false);
+    });
+
+    // Jika status diganti (oleh user) menjadi selain Borongan, kosongkan Bagian
+    document.getElementById("status_karyawan")?.addEventListener("change", (e) => {
+        if (e.target.value !== "Borongan") {
+            const b = document.getElementById("bagian_id");
+            if (b) b.value = "";
         }
     });
 
@@ -527,6 +626,7 @@ function handleAlamatKtpInput() {
 // ==============================================================================
 async function handleFormSubmit(e) {
     e.preventDefault();
+    if (isResigned) return; // karyawan resign tidak boleh diubah
 
     const btnSubmit = document.getElementById("btnSubmit");
     if (!btnSubmit) return;
@@ -575,7 +675,7 @@ async function handleFormSubmit(e) {
             costcenter_id: document.getElementById("costcenter_id").value || null,
             departemen_id: document.getElementById("departemen_id").value || null,
             area_id: document.getElementById("area_id").value || null,
-            bagian_id: statusKaryawanVal === "Borongan" ? (document.getElementById("bagian_id").value || null) : null,
+            bagian_id: document.getElementById("bagian_id").value || null,
             jabatan_id: document.getElementById("jabatan_id").value || null,
             status_karyawan: statusKaryawanVal,
             start_date: document.getElementById("start_date").value || null

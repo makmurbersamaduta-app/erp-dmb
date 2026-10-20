@@ -118,13 +118,24 @@ async function loadMasterDropdowns() {
 function populateSelect(elemId, items, valKey, textKey, defaultText) {
     const el = document.getElementById(elemId);
     if (!el) return;
+
+    // Simpan pilihan saat ini, supaya tidak hilang saat daftar opsi dibangun ulang
+    // (penyebab Area/Bagian ter-reset ketika "Tanggal Masuk" diisi)
+    const previousValue = el.value;
+
     el.innerHTML = `<option value="">${defaultText}</option>`;
-    items.forEach(item => {
+    (items || []).forEach(item => {
         const opt = document.createElement("option");
         opt.value = item[valKey];
         opt.textContent = item[textKey];
         el.appendChild(opt);
     });
+
+    // Kembalikan pilihan lama HANYA jika masih ada di daftar baru
+    // (mis. ganti Cabang -> Area milik cabang lama otomatis kosong, memang seharusnya begitu)
+    if (previousValue && Array.from(el.options).some(o => o.value === String(previousValue))) {
+        el.value = previousValue;
+    }
 }
 
 function resetSelect(elemId, defaultText) {
@@ -277,6 +288,26 @@ async function handlePlacementAndFiltering() {
 // ---------------------------------------------------
 // GENERATE NIK OTOMATIS BERDASARKAN 3 ATURAN (Poin 4)
 // ---------------------------------------------------
+// Ambil SEMUA NIK yang cocok dengan pola LIKE, bertahap per 1000 baris.
+// (Supabase membatasi 1 request = max 1000 baris; tanpa ini NIK tertinggi bisa terlewat.)
+async function fetchNikList(likePattern) {
+    const PAGE = 1000;
+    let all = [];
+    while (true) {
+        const { data, error } = await supabaseClient
+            .schema('hrd')
+            .from('employees')
+            .select('nik_karyawan')
+            .like('nik_karyawan', likePattern)
+            .order('nik_karyawan', { ascending: true })
+            .range(all.length, all.length + PAGE - 1);
+        if (error) throw error; // JANGAN generate NIK dari data yang gagal dimuat
+        if (!data || data.length === 0) break;
+        all = all.concat(data);
+    }
+    return all;
+}
+
 async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
     const nikInput = document.getElementById("nik_karyawan");
     if (!nikInput) return;
@@ -286,10 +317,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
         // a. STATUS = "Borongan" (Format: A001 -> A999 -> B001)
         if (statusKaryawan === "Borongan") {
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan');
+            const emps = await fetchNikList('____'); // semua NIK 4 karakter (format Borongan: huruf + 3 angka)
 
             let currentLetter = 'A';
             let maxSeq = 0;
@@ -309,6 +337,10 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 }
             });
 
+            if (maxSeq >= 999 && currentLetter === 'Z') {
+                alert('Urutan NIK Borongan sudah mencapai Z999. Hubungi administrator.');
+                return;
+            }
             if (maxSeq >= 999) {
                 currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
                 maxSeq = 1;
@@ -328,11 +360,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
             const prefix = `DMBR${branchId}${deptId}${yy}${mm}`;
 
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan')
-                .like('nik_karyawan', `${prefix}%`);
+            const emps = await fetchNikList(`${prefix}%`);
 
             let maxSeq = 0;
             (emps || []).forEach(e => {
@@ -342,7 +370,11 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
             });
 
-            const nextSeq = maxSeq >= 999 ? 1 : maxSeq + 1;
+            if (maxSeq >= 999) {
+                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
+                return;
+            }
+            const nextSeq = maxSeq + 1;
             generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
         } 
         // c. STATUS KARYAWAN LAINNYA (PKWTT, PKWT, DLL) (Format: DMB + branch_id + dept_id + YY + MM + Seq 001)
@@ -355,11 +387,7 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
 
             const prefix = `DMB${branchId}${deptId}${yy}${mm}`;
 
-            const { data: emps } = await supabaseClient
-                .schema('hrd')
-                .from('employees')
-                .select('nik_karyawan')
-                .like('nik_karyawan', `${prefix}%`);
+            const emps = await fetchNikList(`${prefix}%`);
 
             let maxSeq = 0;
             (emps || []).forEach(e => {
@@ -369,7 +397,11 @@ async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
                 if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
             });
 
-            const nextSeq = maxSeq >= 999 ? 1 : maxSeq + 1;
+            if (maxSeq >= 999) {
+                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
+                return;
+            }
+            const nextSeq = maxSeq + 1;
             generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
         }
 
