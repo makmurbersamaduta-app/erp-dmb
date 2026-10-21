@@ -928,6 +928,9 @@ function renderZonaDropdowns() {
     const deptSel = document.getElementById("zc_departemen_id");
     if (deptSel) deptSel.innerHTML = deptOptions;
 
+    const szDeptSel = document.getElementById("sz_departemen_id");
+    if (szDeptSel) szDeptSel.innerHTML = deptOptions;
+
     const areaOptions = areaList.map(a => `<option value="${a.id}">${a.area_name}</option>`).join("");
     const areaSel = document.getElementById("zc_area_id");
     if (areaSel) areaSel.innerHTML = areaOptions;
@@ -1153,7 +1156,8 @@ async function loadSupervisorZonesList() {
     const { data, error } = await supabaseClient
         .from("supervisor_zones")
         .select("*")
-        .order("zona_id", { ascending: true });
+        .order("zona_id", { ascending: true })
+        .order("departemen_id", { ascending: true });
 
     if (error) {
         document.getElementById("supervisorZonesTableBody").innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error: ${error.message}</td></tr>`;
@@ -1189,10 +1193,9 @@ function renderSupervisorZonesTable(employeeMap) {
         return;
     }
 
-    const levelLabel = { 1: "1 - Utama", 2: "2 - Eskalasi" };
-
     tbody.innerHTML = supervisorZonesList.map(sz => {
         const zona = zonaList.find(z => z.id === sz.zona_id);
+        const dept = departmentList.find(d => d.id === sz.departemen_id);
         const emp = employeeMap[sz.employee_id];
         const empLabel = emp ? `${emp.nama} (${emp.nik_karyawan})` : sz.employee_id;
 
@@ -1200,7 +1203,7 @@ function renderSupervisorZonesTable(employeeMap) {
             <tr class="text-center">
                 <td class="text-start fw-semibold">${empLabel}</td>
                 <td>${zona ? zona.zona_name : '-'}</td>
-                <td><span class="badge bg-primary-subtle text-primary">${levelLabel[sz.approval_level] || sz.approval_level}</span></td>
+                <td>${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
                 <td>${sz.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
                 <td>
                     <button class="btn btn-sm btn-light text-primary me-1" onclick="openSupervisorZoneModal(${sz.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -1261,35 +1264,38 @@ function openSupervisorZoneModal(editId = null) {
     const title = document.getElementById("modalSupervisorZoneTitle");
     const searchWrapper = document.getElementById("sz_employee_search_wrapper");
     const zonaWrapper = document.getElementById("sz_zona_wrapper");
+    const deptWrapper = document.getElementById("sz_dept_wrapper");
 
     if (editId === null) {
         // ---- MODE TAMBAH ----
         if (title) title.textContent = "Tambah Supervisor Zona";
         searchWrapper.classList.remove("d-none");
         zonaWrapper.classList.remove("d-none");
+        deptWrapper.classList.remove("d-none");
         document.getElementById("sz_edit_id").value = "";
         renderZonaDropdowns();
 
     } else {
-        // ---- MODE EDIT -- Karyawan & Zona DIKUNCI ----
+        // ---- MODE EDIT -- Karyawan, Zona & Departemen DIKUNCI ----
         const sz = supervisorZonesList.find(x => x.id === editId);
         if (!sz) { alert("Data tidak ditemukan."); return; }
 
         const zona = zonaList.find(z => z.id === sz.zona_id);
+        const dept = departmentList.find(d => d.id === sz.departemen_id);
 
         if (title) title.textContent = "Edit Supervisor Zona";
         searchWrapper.classList.add("d-none");
         zonaWrapper.classList.add("d-none");
+        deptWrapper.classList.add("d-none");
 
         document.getElementById("sz_edit_id").value = sz.id;
         document.getElementById("sz_selected_employee_id").value = sz.employee_id;
-        document.getElementById("sz_approval_level").value = sz.approval_level;
         document.getElementById("sz_is_active").value = sz.is_active ? "true" : "false";
 
         // Tampilkan info identitas yg dikunci sebagai teks info saja
         const infoEl = document.getElementById("sz_employee_selected_display");
         infoEl.classList.remove("d-none");
-        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">Zona: <strong>${zona?.zona_name || '-'}</strong> (tidak bisa diubah di sini -- hapus & buat baru kalau perlu pindah)</div>`;
+        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">Zona: <strong>${zona?.zona_name || '-'}</strong> | Departemen: <strong>${dept?.department_name || '-'}</strong> (tidak bisa diubah di sini -- hapus & buat baru kalau perlu pindah)</div>`;
     }
 
     new bootstrap.Modal(document.getElementById("modalSupervisorZone")).show();
@@ -1298,7 +1304,6 @@ function openSupervisorZoneModal(editId = null) {
 async function handleSaveSupervisorZone(e) {
     if (e) e.preventDefault();
 
-    const approvalLevel = parseInt(document.getElementById("sz_approval_level").value);
     const isActive = document.getElementById("sz_is_active").value === "true";
 
     const btnSubmit = e.target.querySelector("button[type='submit']");
@@ -1310,10 +1315,10 @@ async function handleSaveSupervisorZone(e) {
 
     try {
         if (editingSupervisorZoneId !== null) {
-            // ---- UPDATE -- hanya approval_level & status ----
+            // ---- UPDATE -- hanya status ----
             const { error } = await supabaseClient
                 .from("supervisor_zones")
-                .update({ approval_level: approvalLevel, is_active: isActive })
+                .update({ is_active: isActive })
                 .eq("id", editingSupervisorZoneId);
             if (error) throw error;
 
@@ -1321,15 +1326,28 @@ async function handleSaveSupervisorZone(e) {
             // ---- INSERT BARU ----
             const employeeId = document.getElementById("sz_selected_employee_id").value;
             const zonaId = parseInt(document.getElementById("sz_zona_id").value);
+            const departemenId = parseInt(document.getElementById("sz_departemen_id").value);
 
             if (!employeeId) {
                 throw new Error("Pilih karyawan dari hasil pencarian dulu.");
+            }
+            if (!departemenId) {
+                throw new Error("Pilih departemen dulu.");
+            }
+
+            // Cek duplikat: 1 zona + 1 departemen hanya boleh punya 1 supervisor aktif
+            if (isActive) {
+                const dup = supervisorZonesList.find(x =>
+                    x.is_active && x.zona_id === zonaId && x.departemen_id === departemenId);
+                if (dup) {
+                    throw new Error("Zona + Departemen ini sudah punya supervisor aktif. Nonaktifkan atau hapus dulu supervisor lama.");
+                }
             }
 
             const { error } = await supabaseClient.from("supervisor_zones").insert([{
                 employee_id: employeeId,
                 zona_id: zonaId,
-                approval_level: approvalLevel,
+                departemen_id: departemenId,
                 is_active: isActive
             }]);
 

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Security - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: Bootstrap (hanya untuk grid kolom), ikon Font Awesome, font Inter,
+         dan seluruh gaya halaman. Gaya ditulis di sini (tanpa memuat CSS proyek
+         ../css/*.css) supaya tidak ada error path. Prefix "sc-" = security.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --sc-primary: #2b6cb0;
+            --sc-primary-dark: #1e4e8c;
+            --sc-bg-soft: #e1ecf5;
+            --sc-border: #d3dfea;
+            --sc-text-main: #1f2d3d;
+            --sc-text-muted: #6b7c93;
+            --sc-warning: #d9822b;
+            --sc-danger: #d64545;
+            --sc-success: #2f9e44;
+            --sc-radius: 10px;
+        }
+
+        body { font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--sc-text-main); }
+
+        /* --- Header: tombol kembali bulat + judul --- */
+        .sc-header {
+            display: flex; align-items: center; gap: 16px;
+            padding: 16px 24px; background: #fff; border-bottom: 1px solid var(--sc-border);
+        }
+        .btn-back {
+            display: flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px; border-radius: 50%;
+            border: 1px solid var(--sc-border); background: var(--sc-bg-soft);
+            color: var(--sc-primary-dark); cursor: pointer; text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--sc-primary); color: #fff; }
+        .sc-header-title { font-size: 18px; font-weight: 600; margin: 0; }
+
+        .sc-main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+        .dummy-badge {
+            font-size: 11px; font-weight: 600; color: var(--sc-warning);
+            background: #fdf1e2; border: 1px solid #f3d9b3; border-radius: 999px;
+            padding: 2px 10px; margin-left: 8px;
+        }
+
+        .section-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; margin-top: 28px; }
+        .sc-main > .section-title:first-child { margin-top: 0; }
+
+        /* --- Menu ikon --- */
+        .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+        .menu-btn {
+            display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+            background: #fff; border: 1px solid var(--sc-border); border-radius: var(--sc-radius);
+            padding: 18px 12px; text-decoration: none; color: var(--sc-text-main);
+            transition: border-color 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease; cursor: pointer;
+        }
+        .menu-btn:hover {
+            border-color: var(--sc-primary); transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(43, 108, 176, 0.1); color: var(--sc-primary-dark);
+        }
+        .menu-btn-icon {
+            width: 42px; height: 42px; border-radius: 11px; background: var(--sc-bg-soft); color: var(--sc-primary);
+            display: flex; align-items: center; justify-content: center; font-size: 18px;
+        }
+        .menu-btn-label { font-size: 12.5px; font-weight: 600; text-align: center; line-height: 1.3; }
+
+        /* --- Kartu grafik --- */
+        .chart-card {
+            background: #fff; border: 1px solid var(--sc-border); border-radius: var(--sc-radius);
+            padding: 20px; height: 100%;
+        }
+        .chart-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+        .chart-card-title { font-size: 15px; font-weight: 600; margin: 0; }
+        .chart-card-note { font-size: 12px; color: var(--sc-text-muted); margin-top: 2px; }
+        .chart-canvas-wrapper { position: relative; height: 280px; }
+
+        .sc-select {
+            border: 1px solid var(--sc-border); border-radius: 8px; padding: 5px 10px;
+            font-size: 13px; font-family: inherit; background: #fff; color: var(--sc-text-main); outline: none;
+        }
+        .sc-select:focus { border-color: var(--sc-primary); }
+
+        /* --- Keterangan warna (grafik rekap patroli) --- */
+        .sc-legend { display: flex; gap: 14px; font-size: 12px; color: var(--sc-text-muted); margin-top: 4px; }
+        .sc-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+        .sc-dot-blue { background: #2b6cb0; }
+        .sc-dot-orange { background: #d9822b; }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: HEADER
+         Fungsi: tombol kembali dan judul halaman.
+         PERLU DICEK: path ke index.html. Contoh dashboard_stg.html memakai
+         ../../../index.html karena foldernya 3 tingkat; sesuaikan dengan
+         lokasi file ini.
+         ============================================================ -->
+    <header class="sc-header">
+        <a href="../../../index.html" class="btn-back" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <h1 class="sc-header-title">Dashboard Security</h1>
+    </header>
+
+    <main class="sc-main">
+
+        <!-- ========================================================
+             KELOMPOK 3: MENU
+             Fungsi: empat tombol ikon ke halaman-halaman security.
+             Tombol dengan href="#" berarti halamannya belum dibuat; isi href
+             nya setelah halaman tersedia.
+             PERLU DICEK: halaman titik-patroli.html dan laporan_patroli.html
+             saya asumsikan satu folder dengan file ini.
+             ======================================================== -->
+        <div class="section-title">Menu</div>
+        <div class="menu-grid">
+            <a href="../../../modules/operations/security/titik-patroli.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-location-dot"></i></div>
+                <div class="menu-btn-label">Titik Patroli</div>
+            </a>
+            <a href="../../../modules/operations/security/laporan-patroli.html" class="menu-btn">
+                <div class="menu-btn-icon"><i class="fa-solid fa-route"></i></div>
+                <div class="menu-btn-label">Laporan Patroli</div>
+            </a>
+            <a href="#" class="menu-btn" title="Lokasi halaman akan disetting kemudian">
+                <div class="menu-btn-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <div class="menu-btn-label">Laporan Kejadian<br>(Kejadian Menonjol)</div>
+            </a>
+            <a href="#" class="menu-btn" title="Lokasi halaman akan disetting kemudian">
+                <div class="menu-btn-icon"><i class="fa-solid fa-file-pdf"></i></div>
+                <div class="menu-btn-label">Laporan Bulanan<br>(PDF Mitra Kerja)</div>
+            </a>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: GRAFIK
+             Fungsi: empat grafik. Seluruh datanya masih DUMMY (dibuat di
+             dashboard-security.js, Kelompok 3). Isi grafik dibuat oleh
+             Chart.js ke dalam elemen <canvas>.
+             ======================================================== -->
+        <div class="section-title">Grafik <span class="dummy-badge">Data Dummy</span></div>
+        <div class="row g-3">
+
+            <!-- Grafik 1: Inspeksi Area -->
+            <div class="col-12 col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <h2 class="chart-card-title">Inspeksi Area</h2>
+                            <div class="chart-card-note">Total kunjungan per area, per bulan</div>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper"><canvas id="chartInspeksi"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Grafik 2: Absensi Karyawan (ada pilihan bulan) -->
+            <div class="col-12 col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <h2 class="chart-card-title">Absensi Karyawan</h2>
+                            <div class="chart-card-note">Ijin, sakit, alpha, dan cuti per tanggal</div>
+                        </div>
+                        <select id="absensiMonth" class="sc-select" aria-label="Pilih bulan"></select>
+                    </div>
+                    <div class="chart-canvas-wrapper"><canvas id="chartAbsensi"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Grafik 3: Pelanggaran -->
+            <div class="col-12 col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <h2 class="chart-card-title">Pelanggaran</h2>
+                            <div class="chart-card-note">Total pelanggaran per jenis pelanggaran</div>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper"><canvas id="chartPelanggaran"></canvas></div>
+                </div>
+            </div>
+
+            <!-- Grafik 4: Rekap Patroli -->
+            <div class="col-12 col-lg-6">
+                <div class="chart-card">
+                    <div class="chart-card-head">
+                        <div>
+                            <h2 class="chart-card-title">Rekap Patroli</h2>
+                            <div class="chart-card-note">Area yang paling sering dan paling jarang dipatroli</div>
+                            <div class="sc-legend">
+                                <span><span class="sc-dot sc-dot-blue"></span>Paling sering</span>
+                                <span><span class="sc-dot sc-dot-orange"></span>Paling jarang</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper"><canvas id="chartRekapPatroli"></canvas></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 5: SCRIPT
+         Fungsi: Chart.js (grafik), lalu skrip halaman.
+         Supabase belum dimuat karena semua data masih dummy.
+         PERLU DICEK: path dashboard-security.js. Saya menebak folder
+         js/module/security/, samakan dengan lokasi file Anda.
+         ============================================================ -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="../../../js/module/operations/security/security.js"></script>
+</body>
+</html>

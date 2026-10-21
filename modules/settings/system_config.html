@@ -278,7 +278,7 @@
                                 <tr>
                                     <th>Nama Supervisor</th>
                                     <th>Zona</th>
-                                    <th style="width: 150px;">Approval Level</th>
+                                    <th>Departemen</th>
                                     <th style="width: 100px;">Status</th>
                                     <th style="width: 100px;">Aksi</th>
                                 </tr>
@@ -546,12 +546,9 @@
                             <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
                             <select id="sz_zona_id" class="form-select form-select-sm"></select>
                         </div>
-                        <div class="col-12 mb-2">
-                            <label class="small fw-bold">Approval Level <span class="text-danger">*</span></label>
-                            <select id="sz_approval_level" class="form-select form-select-sm">
-                                <option value="1">1 - Utama</option>
-                                <option value="2">2 - Eskalasi</option>
-                            </select>
+                        <div class="col-12 mb-2" id="sz_dept_wrapper">
+                            <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
+                            <select id="sz_departemen_id" class="form-select form-select-sm"></select>
                         </div>
                         <div class="col-12">
                             <label class="small fw-bold">Status</label>

@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rekap Permintaan - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: Bootstrap (hanya untuk modal), ikon Font Awesome, font Inter,
+         dan seluruh gaya halaman (ditulis di sini, tanpa CSS proyek).
+         Prefix "ct-" = gaya halaman (sama dengan catalog.html).
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --ct-primary: #2b6cb0;
+            --ct-primary-dark: #1e4e8c;
+            --ct-bg-soft: #e1ecf5;
+            --ct-border: #d3dfea;
+            --ct-text-main: #1f2d3d;
+            --ct-text-muted: #6b7c93;
+            --ct-danger: #d64545;
+            --ct-radius: 8px;
+            --ct-head-h: 40px;           /* tinggi satu baris header tabel (header 2 tingkat) */
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex; flex-direction: column;
+            font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--ct-text-main);
+        }
+
+        /* --- Bar atas: Kembali (kiri) + tab cabang (kanan) --- */
+        .ct-topbar {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--ct-border); flex-shrink: 0;
+        }
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-border); background: var(--ct-bg-soft); color: var(--ct-primary-dark);
+            font-size: 14px; font-weight: 600; text-decoration: none; transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--ct-primary); color: #fff; }
+        .ct-tabs { display: flex; gap: 6px; background: var(--ct-bg-soft); padding: 4px; border-radius: 10px; }
+        .ct-tabs[hidden] { display: none; }
+        .ct-tab {
+            border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+            font-size: 14px; font-weight: 600; color: var(--ct-text-muted); cursor: pointer; font-family: inherit;
+        }
+        .ct-tab:hover { color: var(--ct-primary-dark); }
+        .ct-tab.active { background: var(--ct-primary); color: #fff; }
+
+        /* --- Area utama & judul --- */
+        .ct-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+        .ct-title-block { text-align: center; margin-bottom: 14px; flex-shrink: 0; }
+        .ct-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .ct-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--ct-primary); }
+
+        /* --- Toolbar: Download (kiri), Close Request (kanan) --- */
+        .ct-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .btn-tool {
+            display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--ct-border);
+            border-radius: var(--ct-radius); padding: 8px 16px; font-size: 14px; color: var(--ct-text-main);
+            cursor: pointer; font-family: inherit;
+        }
+        .btn-tool:hover { border-color: var(--ct-primary); color: var(--ct-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-close-req {
+            display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-danger); background: #fff; color: var(--ct-danger);
+            font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-close-req:hover { background: var(--ct-danger); color: #fff; }
+        .btn-close-req[hidden] { display: none; }
+
+        /* --- Tabel (header 2 tingkat, sticky) --- */
+        .ct-table-wrapper { background: #fff; border: 1px solid var(--ct-border); border-radius: var(--ct-radius); overflow: auto; flex: 1; min-height: 0; }
+        .ct-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .ct-table thead th {
+            position: sticky; z-index: 10; height: var(--ct-head-h); background: var(--ct-bg-soft); color: var(--ct-text-main);
+            font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap; border-bottom: 1px solid var(--ct-border);
+        }
+        .ct-table thead tr:first-child th { top: 0; }
+        .ct-table thead tr:nth-child(2) th { top: var(--ct-head-h); border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-span-2 { border-bottom: 2px solid var(--ct-border); }
+        .ct-table thead th.th-group { text-align: center; }
+        .ct-table tbody td { padding: 10px 14px; border-bottom: 1px solid var(--ct-border); vertical-align: middle; white-space: nowrap; }
+        .ct-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center !important; }
+        .col-qty { text-align: right !important; min-width: 100px; }
+        .selisih-neg { color: #d10000; font-weight: 700; }
+        .qty-zero { color: var(--ct-text-muted); }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--ct-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--ct-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .ct-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--ct-border); background: #fff; border-radius: 6px; font-size: 13px;
+            color: var(--ct-text-main); cursor: pointer; font-family: inherit;
+        }
+        .pagination-btn:hover { border-color: var(--ct-primary); }
+        .pagination-btn.active { background: var(--ct-primary); border-color: var(--ct-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .ct-page-info { font-size: 12.5px; color: var(--ct-text-muted); margin-left: 10px; }
+
+        /* --- Tombol aksi (rata kanan di bawah tabel) --- */
+        .ct-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; flex-shrink: 0; }
+        .btn-action {
+            display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: var(--ct-radius);
+            border: 1px solid var(--ct-primary); background: var(--ct-primary); color: #fff;
+            font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .btn-action:hover { background: var(--ct-primary-dark); border-color: var(--ct-primary-dark); }
+
+        /* --- Modal Close Request --- */
+        .md-label { font-size: 12.5px; font-weight: 600; color: var(--ct-text-muted); margin-bottom: 4px; display: block; }
+        .md-input {
+            width: 100%; border: 1px solid var(--ct-border); border-radius: 6px; padding: 8px 10px; font-size: 14px;
+            color: var(--ct-text-main); background: #fff; outline: none; font-family: inherit;
+        }
+        .md-input:focus { border-color: var(--ct-primary); }
+        .md-input[readonly] { background: #f4f7fb; }
+        .rc-table-wrap { border: 1px solid var(--ct-border); border-radius: 8px; max-height: 300px; overflow: auto; }
+        .rc-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .rc-table thead th { position: sticky; top: 0; background: var(--ct-bg-soft); padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 2px solid var(--ct-border); }
+        .rc-table td { padding: 8px 12px; border-bottom: 1px solid var(--ct-border); }
+        .rc-table td.num, .rc-table th.num { text-align: right; }
+        .rc-table tr.rc-empty td { text-align: center; padding: 22px; color: var(--ct-text-muted); }
+
+        .ct-toast {
+            position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2000;
+            background: #1f2d3d; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; max-width: 90vw;
+        }
+
+        @media (max-width: 640px) {
+            .ct-topbar, .ct-main { padding-left: 12px; padding-right: 12px; }
+            .ct-actions { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS
+         Fungsi: tombol "Kembali" ke index.html (kiri) dan tab cabang (kanan).
+         Tab hanya tampil untuk role Maintenance dan Superadmin (diatur JS).
+         Makassar = branch_id 2, Surabaya = branch_id 1.
+         ============================================================ -->
+    <header class="ct-topbar">
+        <a href="index.html" class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+
+        <!-- KELOMPOK 3: JUDUL (baris kedua berganti sesuai cabang, diatur JS) -->
+        <div class="ct-title-block">
+            <h1 class="ct-title">Rekap Permintaan</h1>
+            <div class="ct-subtitle" id="branchTitle">Makassar</div>
+        </div>
+
+        <div class="ct-tabs" id="branchTabs" role="tablist" hidden>
+            <button type="button" class="ct-tab active" data-branch="2" role="tab">Makassar</button>
+            <button type="button" class="ct-tab" data-branch="1" role="tab">Surabaya</button>
+        </div>
+    </header>
+
+    <main class="ct-main">
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Download Excel (kiri) dan Close Request (kanan, hanya
+             muncul untuk Maintenance dan Superadmin).
+             ======================================================== -->
+        <div class="ct-toolbar">
+            <button type="button" class="btn-tool" id="btnDownload"><i class="fa-solid fa-file-arrow-down"></i><span>Download</span></button>
+            <button type="button" class="btn-close-req" id="btnCloseRequest" hidden><i class="fa-solid fa-circle-xmark"></i> Close Request</button>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL UTAMA
+             Fungsi: rekap barang yang masih diminta (permintaan Disetujui,
+             aktif, belum terkirim) beserta stok dan selisihnya.
+             Header 2 tingkat dan sticky. Isi dibuat oleh rekap-permintaan.js.
+             ======================================================== -->
+        <div class="ct-table-wrapper">
+            <table class="ct-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2" class="th-span-2 col-no">No</th>
+                        <th rowspan="2" class="th-span-2">Kode Artikel</th>
+                        <th rowspan="2" class="th-span-2">Nama Barang</th>
+                        <th colspan="3" class="th-group">Qty Barang</th>
+                        <th rowspan="2" class="th-span-2">Satuan</th>
+                    </tr>
+                    <tr>
+                        <th class="th-group">Permintaan</th>
+                        <th class="th-group">Stock</th>
+                        <th class="th-group">Selisih</th>
+                    </tr>
+                </thead>
+                <tbody id="rekapTableBody">
+                    <tr class="row-loading"><td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 6: PAGINATION (maksimal 100 baris per halaman) -->
+        <div class="ct-pagination" id="rekapPagination"></div>
+
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 8: MODAL CLOSE REQUEST
+         Fungsi: pilih satu permintaan (Kode Permintaan), lalu data dan rincian
+         barang yang belum terkirim tampil readonly. Tombol "Close Request"
+         menonaktifkan permintaan (is_active = false).
+         ============================================================ -->
+    <div class="modal fade" id="modalClose" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="rcTitle">Close Request</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="rcMessage" class="alert d-none py-2 small" role="alert"></div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="md-label" for="rcKode">Kode Permintaan</label>
+                            <select class="md-input" id="rcKode"><option value="">Pilih Kode Permintaan</option></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="md-label" for="rcPemohon">Pemohon</label>
+                            <input type="text" class="md-input" id="rcPemohon" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="md-label" for="rcTanggal">Tanggal Permintaan</label>
+                            <input type="text" class="md-input" id="rcTanggal" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="md-label" for="rcPeriode">Periode Permintaan</label>
+                            <input type="text" class="md-input" id="rcPeriode" readonly>
+                        </div>
+                    </div>
+
+                    <div class="rc-table-wrap">
+                        <table class="rc-table">
+                            <thead>
+                                <tr>
+                                    <th>Kode Barang</th>
+                                    <th>Nama Barang</th>
+                                    <th class="num">Qty (sisa)</th>
+                                    <th>Satuan</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rcTbody">
+                                <tr class="rc-empty"><td colspan="4">Pilih Kode Permintaan untuk menampilkan rincian barang.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-danger" id="btnRcSubmit" disabled><i class="fa-solid fa-circle-xmark"></i> Close Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="ct-toast" id="ctToast"></div>
+
+    <!-- ============================================================
+         KELOMPOK 9: SCRIPT
+         Fungsi: Bootstrap (modal), XLSX (download Excel), Supabase (database),
+         lalu rekap-permintaan.js.
+         PERLU DICEK: path supabase.js dan rekap-permintaan.js. Samakan dengan
+         path yang sudah berjalan di catalog.html Anda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/assets/rekap-permintaan.js"></script>
+</body>
+</html>

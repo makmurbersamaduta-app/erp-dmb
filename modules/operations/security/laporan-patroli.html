@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Patroli - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: ikon Font Awesome, font Inter, dan seluruh gaya halaman.
+         Prefix "lp-" = laporan patroli. Tema warna sama dengan catalog.html.
+         Semua kelas halaman ini berawalan "lp-" supaya tidak bentrok dengan
+         kelas di base.css / components.css / layout.css / style.css.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS proyek (urutan sama dengan dashboard_stg.html). Dimuat SEBELUM <style> di bawah.
+         PERLU DICEK: path ../../../css/ saya tebak (halaman 3 tingkat di dalam modules/operations/security/). -->
+    <link href="../../../css/base.css" rel="stylesheet">
+    <link href="../../../css/components.css" rel="stylesheet">
+    <link href="../../../css/layout.css" rel="stylesheet">
+    <link href="../../../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --lp-primary: #2b6cb0;
+            --lp-primary-dark: #1e4e8c;
+            --lp-bg-soft: #e1ecf5;
+            --lp-border: #d3dfea;
+            --lp-text-main: #1f2d3d;
+            --lp-text-muted: #6b7c93;
+            --lp-danger: #d64545;
+            --lp-radius: 8px;
+            --lp-head-h: 40px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            display: flex;
+            flex-direction: column;
+            font-family: 'Inter', sans-serif;
+            background: #f4f7fb;
+            color: var(--lp-text-main);
+        }
+
+        /* --- Bar paling atas: Kembali (kiri) + judul (tengah) + tab cabang (kanan) --- */
+        .lp-topbar {
+            display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px;
+            padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--lp-border); flex-shrink: 0;
+        }
+        /* Kolom ditetapkan eksplisit: judul tetap di kolom tengah walau tab cabang disembunyikan */
+        .lp-topbar .btn-back { grid-column: 1; justify-self: start; }
+        .lp-title-block { grid-column: 2; }
+        .btn-back {
+            display: inline-flex; align-items: center; gap: 8px;
+            padding: 8px 16px; border-radius: var(--lp-radius);
+            border: 1px solid var(--lp-border); background: var(--lp-bg-soft);
+            color: var(--lp-primary-dark); font-size: 14px; font-weight: 600; text-decoration: none;
+            transition: background 0.15s ease;
+        }
+        .btn-back:hover { background: var(--lp-primary); color: #fff; }
+
+        .lp-tabs { grid-column: 3; justify-self: end; display: flex; gap: 6px; background: var(--lp-bg-soft); padding: 4px; border-radius: 10px; }
+        .lp-tabs[hidden] { display: none; }
+        .lp-tab {
+            border: none; background: transparent; padding: 7px 20px; border-radius: 7px;
+            font-size: 14px; font-weight: 600; color: var(--lp-text-muted); cursor: pointer; font-family: inherit;
+        }
+        .lp-tab:hover { color: var(--lp-primary-dark); }
+        .lp-tab.active { background: var(--lp-primary); color: #fff; }
+
+        /* --- Area utama --- */
+        .lp-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+
+        /* --- Judul di tengah --- */
+        .lp-title-block { text-align: center; }
+        .lp-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .lp-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--lp-primary); }
+
+        /* --- Toolbar: Atur Titik Patroli (kiri), Filter + Download (kanan) --- */
+        .lp-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .lp-toolbar-right { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+
+        .btn-tool {
+            display: inline-flex; align-items: center; gap: 8px;
+            background: #fff; border: 1px solid var(--lp-border); border-radius: var(--lp-radius);
+            padding: 8px 16px; font-size: 14px; color: var(--lp-text-main); cursor: pointer; font-family: inherit;
+        }
+        .btn-tool:hover { border-color: var(--lp-primary); color: var(--lp-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+        .lp-badge {
+            min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px;
+            background: var(--lp-primary); color: #fff; font-size: 12px; font-weight: 600;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .lp-badge[hidden] { display: none; }
+
+        /* --- Panel filter (muncul di bawah tombol Filter) --- */
+        .lp-filter-wrap { position: relative; }
+        .lp-filter-panel {
+            position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 320px;
+            background: #fff; border: 1px solid var(--lp-border); border-radius: var(--lp-radius);
+            box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12); padding: 16px;
+        }
+        .lp-filter-panel[hidden] { display: none; }
+        .lp-field { margin-bottom: 12px; }
+        .lp-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--lp-text-muted); margin-bottom: 4px; }
+        .lp-field select, .lp-field input[type="date"] {
+            width: 100%; border: 1px solid var(--lp-border); border-radius: var(--lp-radius);
+            padding: 8px 10px; font-size: 14px; font-family: inherit; background: #fff; outline: none;
+        }
+        .lp-field select:focus, .lp-field input[type="date"]:focus { border-color: var(--lp-primary); }
+        .lp-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .lp-filter-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+        .lp-btn-plain {
+            padding: 8px 14px; border-radius: var(--lp-radius); border: 1px solid var(--lp-border);
+            background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--lp-text-main);
+        }
+        .lp-btn-plain:hover { border-color: var(--lp-primary); }
+        .lp-btn-primary {
+            padding: 8px 16px; border-radius: var(--lp-radius); border: 1px solid var(--lp-primary);
+            background: var(--lp-primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+        }
+        .lp-btn-primary:hover { background: var(--lp-primary-dark); border-color: var(--lp-primary-dark); }
+
+        /* --- Tabel (header sticky) --- */
+        .lp-table-wrapper {
+            background: #fff; border: 1px solid var(--lp-border); border-radius: var(--lp-radius);
+            overflow: auto; flex: 1; min-height: 0;
+        }
+        .lp-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .lp-table thead th {
+            position: sticky; top: 0; z-index: 10; height: var(--lp-head-h);
+            background: var(--lp-bg-soft); color: var(--lp-text-main);
+            font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap;
+            border-bottom: 2px solid var(--lp-border);
+        }
+        .lp-table tbody td { padding: 10px 14px; border-bottom: 1px solid var(--lp-border); vertical-align: middle; white-space: nowrap; }
+        .lp-table tbody tr:hover { background: #f7fafc; }
+        .col-no { width: 50px; text-align: center !important; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--lp-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--lp-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .lp-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn {
+            min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--lp-border); background: #fff; border-radius: 6px;
+            font-size: 13px; color: var(--lp-text-main); cursor: pointer; font-family: inherit;
+        }
+        .pagination-btn:hover { border-color: var(--lp-primary); }
+        .pagination-btn.active { background: var(--lp-primary); border-color: var(--lp-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .lp-page-info { font-size: 12.5px; color: var(--lp-text-muted); margin-left: 10px; }
+
+        @media (max-width: 640px) {
+            .lp-topbar, .lp-main { padding-left: 12px; padding-right: 12px; }
+            .lp-filter-panel { width: 280px; }
+            .lp-title { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS + JUDUL
+         Fungsi: tombol "Kembali" (ke index.html), judul "Laporan Patroli"
+         dengan nama cabang di bawahnya, dan tab cabang di kanan.
+         Tab Makassar = branch_id 2, Surabaya = branch_id 1.
+         Tab hanya tampil untuk Maintenance dan Superadmin (diatur JS).
+         ============================================================ -->
+    <header class="lp-topbar">
+        <a href="../../operations/security/security.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+
+        <div class="lp-title-block">
+            <h1 class="lp-title">Laporan Patroli</h1>
+            <div class="lp-subtitle" id="branchTitle">Makassar</div>
+        </div>
+
+        <div class="lp-tabs" id="branchTabs" role="tablist" hidden>
+            <button type="button" class="lp-tab active" data-branch="2" role="tab">Makassar</button>
+            <button type="button" class="lp-tab" data-branch="1" role="tab">Surabaya</button>
+        </div>
+    </header>
+
+    <main class="lp-main">
+
+        <!-- ========================================================
+             KELOMPOK 3: TOOLBAR
+             Fungsi: semua tombol rata kanan, urutan kiri ke kanan:
+             "Atur Titik Patroli" (membuka titik-patroli.html), Filter (panel:
+             Area, Titik Patroli, Tanggal dari-sampai), lalu Download Excel
+             (mengikuti filter yang sedang aktif).
+             ======================================================== -->
+        <div class="lp-toolbar">
+            <div class="lp-toolbar-right">
+                <div class="lp-filter-wrap">
+                    <button type="button" class="btn-tool" id="btnFilter">
+                        <i class="fa-solid fa-filter"></i>
+                        <span>Filter</span>
+                        <span class="lp-badge" id="filterBadge" hidden>0</span>
+                    </button>
+
+                    <div class="lp-filter-panel" id="filterPanel" hidden>
+                        <div class="lp-field">
+                            <label for="fArea">Area</label>
+                            <select id="fArea"><option value="">Semua Area</option></select>
+                        </div>
+                        <div class="lp-field">
+                            <label for="fTitik">Titik Patroli</label>
+                            <select id="fTitik"><option value="">Semua Titik</option></select>
+                        </div>
+                        <div class="lp-field">
+                            <label>Tanggal</label>
+                            <div class="lp-date-row">
+                                <input type="date" id="fFrom" aria-label="Tanggal dari">
+                                <input type="date" id="fTo" aria-label="Tanggal sampai">
+                            </div>
+                        </div>
+                        <div class="lp-filter-actions">
+                            <button type="button" class="lp-btn-plain" id="btnFilterReset">Reset</button>
+                            <button type="button" class="lp-btn-primary" id="btnFilterApply">Terapkan</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn-tool" id="btnDownload">
+                    <i class="fa-solid fa-file-arrow-down"></i>
+                    <span>Download Excel</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: TABEL
+             Fungsi: daftar hasil scan patroli, terbaru di paling atas.
+             Isi tabel dibuat oleh laporan_patroli.js.
+             Judul kolom "Waktu Patroli" otomatis diberi WIB/WITA sesuai cabang.
+             ======================================================== -->
+        <div class="lp-table-wrapper">
+            <table class="lp-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th>Tanggal</th>
+                        <th id="thWaktu">Waktu Patroli</th>
+                        <th>Area</th>
+                        <th>Titik Patroli</th>
+                        <th>Petugas</th>
+                    </tr>
+                </thead>
+                <tbody id="patroliTableBody">
+                    <tr class="row-loading"><td colspan="6"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 5: PAGINATION (100 baris per halaman, diatur JS) -->
+        <div class="lp-pagination" id="patroliPagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 6: SCRIPT
+         Fungsi: XLSX (download Excel), Supabase (database), lalu skrip halaman.
+         PERLU DICEK: path laporan_patroli.js di bawah. Saya menebak folder
+         js/module/security/. Samakan dengan lokasi file Anda yang sebenarnya.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../../js/supabase.js"></script>
+    <script src="../../../js/module/operations/security/laporan-patroli.js"></script>
+</body>
+</html>
