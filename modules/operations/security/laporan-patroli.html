@@ -14,6 +14,8 @@
          ============================================================ -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet: peta untuk modal "Lokasi Scan Patroli" -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" rel="stylesheet">
 
     <!-- CSS proyek (urutan sama dengan dashboard_stg.html). Dimuat SEBELUM <style> di bawah.
          PERLU DICEK: path ../../../css/ saya tebak (halaman 3 tingkat di dalam modules/operations/security/). -->
@@ -154,6 +156,42 @@
         .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .lp-page-info { font-size: 12.5px; color: var(--lp-text-muted); margin-left: 10px; }
 
+        /* --- Baris yang bisa diklik (membuka peta lokasi scan) + ikon pin di kolom Titik Patroli --- */
+        .lp-table tbody tr.lp-row-click { cursor: pointer; }
+        .lp-pin { margin-left: 6px; color: var(--lp-primary); font-size: 13px; }
+        .lp-pin.off { color: #c3ccd8; }
+
+        /* --- Modal peta lokasi scan --- */
+        .lp-overlay {
+            position: fixed; inset: 0; z-index: 200; background: rgba(31, 45, 61, 0.5);
+            display: flex; align-items: center; justify-content: center; padding: 16px;
+        }
+        .lp-overlay[hidden] { display: none; }
+        .lp-modal {
+            background: #fff; border-radius: 12px; width: 100%; max-width: 640px; max-height: 94vh;
+            display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(31, 45, 61, 0.28); overflow: hidden;
+        }
+        .lp-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--lp-border); }
+        .lp-modal-title { margin: 0; font-size: 17px; font-weight: 700; }
+        .lp-modal-close { border: none; background: transparent; font-size: 18px; color: var(--lp-text-muted); cursor: pointer; padding: 4px 8px; }
+        .lp-modal-close:hover { color: var(--lp-text-main); }
+        .lp-modal-body { padding: 16px 20px; overflow-y: auto; }
+        .lp-modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 20px; background: #f8fafc; border-top: 1px solid var(--lp-border); }
+        a.lp-btn-plain { text-decoration: none; display: inline-block; }
+        a.lp-btn-plain[hidden] { display: none; }
+        .lp-info { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 0 0 14px; font-size: 13.5px; }
+        .lp-info dt { color: var(--lp-text-muted); font-weight: 600; }
+        .lp-info dd { margin: 0; font-weight: 500; word-break: break-word; }
+        .lp-map { height: 340px; border: 1px solid var(--lp-border); border-radius: var(--lp-radius); position: relative; z-index: 0; isolation: isolate; }
+        .lp-map[hidden] { display: none; }
+        .lp-map-empty {
+            padding: 28px 16px; text-align: center; color: var(--lp-text-muted); font-size: 14px; line-height: 1.55;
+            background: #f8fafc; border: 1px dashed var(--lp-border); border-radius: var(--lp-radius);
+        }
+        .lp-map-empty[hidden] { display: none; }
+        .lp-map-note { margin-top: 10px; font-size: 12px; color: var(--lp-text-muted); line-height: 1.5; }
+        .lp-map-pin { color: var(--lp-danger); font-size: 34px; line-height: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+
         @media (max-width: 640px) {
             .lp-topbar, .lp-main { padding-left: 12px; padding-right: 12px; }
             .lp-filter-panel { width: 280px; }
@@ -237,6 +275,8 @@
              Fungsi: daftar hasil scan patroli, terbaru di paling atas.
              Isi tabel dibuat oleh laporan_patroli.js.
              Judul kolom "Waktu Patroli" otomatis diberi WIB/WITA sesuai cabang.
+             Klik sebuah baris untuk membuka peta lokasi petugas saat scan (modal
+             di Kelompok 5B). Ikon pin biru = lokasi tercatat, abu-abu = tidak ada.
              ======================================================== -->
         <div class="lp-table-wrapper">
             <table class="lp-table">
@@ -261,13 +301,45 @@
     </main>
 
     <!-- ============================================================
+         KELOMPOK 5B: MODAL PETA LOKASI SCAN
+         Fungsi: menampilkan titik lokasi petugas saat scan patroli (dari kolom
+         titik_map, format "latitude,longitude") di peta, beserta info titik,
+         area, petugas, dan waktu scan. Diisi oleh laporan-patroli.js.
+         ============================================================ -->
+    <div class="lp-overlay" id="mapOverlay" hidden>
+        <div class="lp-modal" role="dialog" aria-modal="true" aria-labelledby="mapModalTitle">
+            <div class="lp-modal-head">
+                <h2 class="lp-modal-title" id="mapModalTitle">Lokasi Scan Patroli</h2>
+                <button type="button" class="lp-modal-close" id="btnMapClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="lp-modal-body">
+                <dl class="lp-info">
+                    <dt>Titik Patroli</dt><dd id="mapInfoTitik">-</dd>
+                    <dt>Area</dt><dd id="mapInfoArea">-</dd>
+                    <dt>Petugas</dt><dd id="mapInfoPetugas">-</dd>
+                    <dt>Waktu Scan</dt><dd id="mapInfoWaktu">-</dd>
+                    <dt>Koordinat</dt><dd id="mapInfoKoordinat">-</dd>
+                </dl>
+                <div class="lp-map" id="lpMap"></div>
+                <div class="lp-map-empty" id="mapEmpty" hidden></div>
+                <div class="lp-map-note" id="mapNote">Posisi berasal dari GPS HP petugas saat scan. Akurasinya bisa meleset beberapa meter, dan lebih besar di dalam gedung atau area beratap.</div>
+            </div>
+            <div class="lp-modal-foot">
+                <a class="lp-btn-plain" id="btnMapGoogle" href="#" target="_blank" rel="noopener" hidden>Buka di Google Maps</a>
+                <button type="button" class="lp-btn-primary" id="btnMapCloseFoot">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
          KELOMPOK 6: SCRIPT
-         Fungsi: XLSX (download Excel), Supabase (database), lalu skrip halaman.
+         Fungsi: XLSX (download Excel), Leaflet (peta), Supabase (database), lalu skrip halaman.
          PERLU DICEK: path laporan_patroli.js di bawah. Saya menebak folder
          js/module/security/. Samakan dengan lokasi file Anda yang sebenarnya.
          ============================================================ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script src="../../../js/supabase.js"></script>
     <script src="../../../js/module/operations/security/laporan-patroli.js"></script>
 </body>

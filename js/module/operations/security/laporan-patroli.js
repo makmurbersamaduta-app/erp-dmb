@@ -3,7 +3,8 @@
 // Halaman "Laporan Patroli" (sumber data: security.laporan_patroli)
 // Fitur: tab cabang (Makassar / Surabaya), filter (area, titik patroli,
 //        rentang tanggal), download Excel (mengikuti filter), tabel dengan
-//        pagination 100 baris, data terbaru di paling atas.
+//        pagination 100 baris, data terbaru di paling atas, klik baris untuk
+//        melihat lokasi scan petugas di peta.
 // ===================================================
 
 // ===================================================
@@ -35,6 +36,13 @@ const BRANCH_TZ = {
     2: { zone: "Asia/Makassar",  label: "WITA", offset: "+08:00" }
 };
 
+// Peta lokasi scan (Leaflet + OpenStreetMap). Ganti MAP_TILE_URL jika ingin
+// memakai penyedia peta lain. Pemakaian tile OpenStreetMap gratis cocok untuk
+// pemakaian internal yang ringan.
+const MAP_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const MAP_ATTRIBUTION = "&copy; OpenStreetMap contributors";
+const MAP_ZOOM = 18;                         // tingkat zoom saat peta dibuka (makin besar makin dekat)
+
 // Halaman pengaturan titik (satu folder dengan halaman ini).
 // Cabang yang sedang dibuka ikut dikirim sebagai ?branch_id=
 const TITIK_PAGE = "titik-patroli.html";
@@ -60,6 +68,7 @@ const state = {
     titikMap: new Map(),      // id titik -> baris titik
     areaMap: new Map(),       // area_id -> area_name
     nameCache: new Map(),     // nik_karyawan -> nama (disimpan supaya tidak cari ulang)
+    pageRows: new Map(),      // baris halaman aktif (id -> data mentah), dipakai saat baris diklik
     reqId: 0                  // penanda permintaan terbaru, supaya hasil lama tidak menimpa hasil baru
 };
 
@@ -117,6 +126,18 @@ function areaName(id) {
     return state.areaMap.get(String(id)) || `Area ${id}`;
 }
 
+// Membaca kolom titik_map berformat "latitude,longitude" (contoh: -5.147665,119.432732).
+// Hasil: { lat, lng }, atau null jika kosong / bukan koordinat yang valid.
+function parseLatLng(text) {
+    if (!text) return null;
+    const m = String(text).trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+    if (!m) return null;
+    const lat = parseFloat(m[1]);
+    const lng = parseFloat(m[2]);
+    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat, lng };
+}
+
 // Mengambil SEMUA baris dari satu query dengan cara bertahap per 1000 baris,
 // supaya tidak terkena batas 1000 baris dari Supabase.
 // buildQuery(from, to) harus mengembalikan query yang sudah memakai .range(from, to).
@@ -166,7 +187,8 @@ function getSessionBranchId(session) {
 function blockPage(message) {
     $("branchTitle").textContent = "-";
     $("patroliTableBody").innerHTML = `<tr class="row-empty"><td colspan="6">${esc(message)}</td></tr>`;
-    ["btnAturTitik", "btnFilter", "btnDownload"].forEach(id => { $(id).disabled = true; });
+    // Hanya tombol yang ada di halaman (btnAturTitik sudah dihapus dari HTML)
+    ["btnFilter", "btnDownload"].forEach(id => { const el = $(id); if (el) el.disabled = true; });
 }
 
 // ===================================================
@@ -208,7 +230,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setupTabs();
     setupFilter();
     setupDownload();
-    setupAturTitik();
+    setupMapModal();
     updateTabUi();
     loadBranch();
 });
@@ -450,7 +472,9 @@ function toDisplayRow(r) {
         tanggal: dt.tanggal,
         waktu: dt.waktu,
         area: areaName(r.area_id),
-        titik: (titik && (titik.titik_patroli || titik.kode_titik)) || r.titik_map || "",
+        // titik_map sekarang berisi koordinat lokasi scan, bukan nama titik. Hanya dipakai
+        // sebagai nama cadangan untuk data lama jika isinya bukan koordinat.
+        titik: (titik && (titik.titik_patroli || titik.kode_titik)) || (parseLatLng(r.titik_map) ? "" : (r.titik_map || "")),
         petugas: state.nameCache.get(nik) || nik   // jika nama tidak ditemukan, tampilkan NIK
     };
 }
@@ -462,6 +486,7 @@ function toDisplayRow(r) {
 // ===================================================
 function renderTable(rows, offset) {
     const tbody = $("patroliTableBody");
+    state.pageRows = new Map(rows.map(r => [String(r.id), r]));
     if (rows.length === 0) {
         tbody.innerHTML = `<tr class="row-empty"><td colspan="6">${activeFilterCount() ? "Tidak ada data yang cocok dengan filter." : "Belum ada data patroli untuk cabang ini."}</td></tr>`;
         return;
@@ -469,13 +494,15 @@ function renderTable(rows, offset) {
     const dash = `<span class="data-empty-cell">-</span>`;
     tbody.innerHTML = rows.map((r, i) => {
         const d = toDisplayRow(r);
+        const hasLoc = !!parseLatLng(r.titik_map);
+        const pin = `<i class="fa-solid fa-location-dot lp-pin${hasLoc ? "" : " off"}" title="${hasLoc ? "Klik baris untuk melihat lokasi scan" : "Lokasi scan tidak tercatat"}"></i>`;
         return `
-            <tr>
+            <tr class="lp-row-click" data-id="${esc(r.id)}">
                 <td class="col-no">${offset + i + 1}</td>
                 <td>${esc(d.tanggal)}</td>
                 <td>${esc(d.waktu)}</td>
                 <td>${d.area ? esc(d.area) : dash}</td>
-                <td>${d.titik ? esc(d.titik) : dash}</td>
+                <td>${d.titik ? esc(d.titik) : dash}${pin}</td>
                 <td>${d.petugas ? esc(d.petugas) : dash}</td>
             </tr>`;
     }).join("");
@@ -564,11 +591,92 @@ async function handleDownload() {
 }
 
 // ===================================================
-// KELOMPOK 11: TOMBOL ATUR TITIK PATROLI
-// Fungsi: membuka titik-patroli.html sambil membawa cabang yang sedang dibuka.
+// KELOMPOK 11: PETA LOKASI SCAN (MODAL)
+// Fungsi: klik sebuah baris pada tabel membuka modal berisi peta yang
+// menandai titik lokasi petugas saat scan (kolom titik_map, format
+// "latitude,longitude"), plus info titik, area, petugas, dan waktu scan
+// (zona waktu cabang). Tombol "Buka di Google Maps" membuka lokasi yang sama.
+// Jika lokasi tidak tercatat (data lama atau GPS tidak terbaca saat scan),
+// modal menampilkan keterangan, bukan peta.
+// Peta dibuat sekali lalu dipakai ulang di setiap pembukaan.
 // ===================================================
-function setupAturTitik() {
-    $("btnAturTitik").addEventListener("click", () => {
-        window.location.href = `${TITIK_PAGE}?branch_id=${state.branchId}`;
+let leafletMap = null;
+let leafletMarker = null;
+
+function setupMapModal() {
+    // Satu pendengar klik untuk semua baris tabel
+    $("patroliTableBody").addEventListener("click", (e) => {
+        const tr = e.target.closest("tr.lp-row-click");
+        if (!tr) return;
+        if (window.getSelection && String(window.getSelection()).trim()) return;   // sedang memilih/menyalin teks
+        const row = state.pageRows.get(tr.dataset.id);
+        if (row) openMapModal(row);
     });
+    $("btnMapClose").addEventListener("click", closeMapModal);
+    $("btnMapCloseFoot").addEventListener("click", closeMapModal);
+    $("mapOverlay").addEventListener("click", (e) => { if (e.target === $("mapOverlay")) closeMapModal(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMapModal(); });
+}
+
+function closeMapModal() { $("mapOverlay").hidden = true; }
+
+function openMapModal(row) {
+    const d = toDisplayRow(row);
+    const dt = splitDateTime(row.created_at);
+    const loc = parseLatLng(row.titik_map);
+
+    $("mapInfoTitik").textContent = d.titik || "-";
+    $("mapInfoArea").textContent = d.area || "-";
+    $("mapInfoPetugas").textContent = d.petugas || "-";
+    $("mapInfoWaktu").textContent = `${dt.tanggal} ${dt.waktu} ${branchTz().label}`;
+
+    const mapBox = $("lpMap");
+    const empty = $("mapEmpty");
+    const google = $("btnMapGoogle");
+
+    if (!loc) {
+        $("mapInfoKoordinat").textContent = "-";
+        mapBox.hidden = true;
+        google.hidden = true;
+        $("mapNote").hidden = true;
+        empty.hidden = false;
+        empty.textContent = "Lokasi scan tidak tercatat pada data ini. Kemungkinan data dibuat sebelum fitur lokasi ada, atau GPS HP tidak terbaca saat scan.";
+        $("mapOverlay").hidden = false;
+        return;
+    }
+
+    $("mapInfoKoordinat").textContent = `${loc.lat.toFixed(6)}, ${loc.lng.toFixed(6)}`;
+    google.href = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+    google.hidden = false;
+    $("mapNote").hidden = false;
+    $("mapOverlay").hidden = false;               // modal harus tampil dulu agar peta punya ukuran
+
+    if (typeof L === "undefined") {
+        mapBox.hidden = true;
+        empty.hidden = false;
+        empty.textContent = "Library peta gagal dimuat (periksa koneksi internet). Lokasi tetap bisa dibuka lewat tombol Google Maps.";
+        return;
+    }
+    empty.hidden = true;
+    mapBox.hidden = false;
+    showOnMap(loc.lat, loc.lng);
+}
+
+function showOnMap(lat, lng) {
+    if (!leafletMap) {
+        leafletMap = L.map("lpMap");
+        L.tileLayer(MAP_TILE_URL, { maxZoom: 19, attribution: MAP_ATTRIBUTION }).addTo(leafletMap);
+    }
+    // Penanda berbentuk pin memakai ikon Font Awesome (tidak butuh file gambar tambahan)
+    const icon = L.divIcon({
+        className: "lp-map-pin",
+        html: '<i class="fa-solid fa-location-dot"></i>',
+        iconSize: [34, 40],
+        iconAnchor: [17, 38]
+    });
+    if (!leafletMarker) leafletMarker = L.marker([lat, lng], { icon }).addTo(leafletMap);
+    else leafletMarker.setLatLng([lat, lng]);
+
+    leafletMap.invalidateSize();                  // ukuran peta dihitung ulang karena modal baru saja tampil
+    leafletMap.setView([lat, lng], MAP_ZOOM);
 }
