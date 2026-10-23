@@ -70,6 +70,33 @@
             z-index: 10;
             box-shadow: inset 0 -1px 0 #dee2e6; /* Menjaga garis border bawah header tetap konsisten saat di-scroll */
         }
+
+        /* 3. LAYOUT SIDEBAR (menggantikan tab bar di atas) */
+        .config-layout {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        .config-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 100px; /* tepat di bawah header yang di-freeze */
+        }
+        .config-sidebar .nav-link {
+            width: 100%;
+            text-align: left;
+        }
+        .config-content {
+            flex: 1 1 auto;
+            min-width: 0; /* supaya tabel lebar tidak mendorong layout keluar layar */
+        }
+        @media (max-width: 991.98px) {
+            .config-layout { flex-direction: column; }
+            .config-sidebar { width: 100%; position: static; }
+            .config-sidebar .nav { flex-direction: row !important; flex-wrap: nowrap; overflow-x: auto; }
+            .config-sidebar .nav-link { width: auto; white-space: nowrap; }
+        }
     </style>
 </head>
 <body>
@@ -98,32 +125,41 @@
         </header>
     </div>
 
-    <!-- TAB NAVIGASI SUB-PAGE -->
-    <ul class="nav nav-pills gap-2 mb-3 bg-white p-2 rounded-3 border shadow-sm" id="configSubPageTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="tab-roles-btn" data-bs-toggle="pill" data-bs-target="#subpage-roles" type="button" role="tab">
-                <i class="fa-solid fa-user-gear me-2"></i>1. Peran Pengguna
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tab-menus-btn" data-bs-toggle="pill" data-bs-target="#subpage-menus" type="button" role="tab">
-                <i class="fa-solid fa-bars-staggered me-2"></i>2. Menu Aplikasi
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tab-permissions-btn" data-bs-toggle="pill" data-bs-target="#subpage-permissions" type="button" role="tab">
-                <i class="fa-solid fa-shield-halved me-2"></i>3. Matriks Hak Akses
-            </button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tab-zona-btn" data-bs-toggle="pill" data-bs-target="#subpage-zona" type="button" role="tab">
-                <i class="fa-solid fa-map-location-dot me-2"></i>4. Zona & Approval
-            </button>
-        </li>
-    </ul>
+    <div class="config-layout">
+
+    <!-- SIDEBAR NAVIGASI SUB-PAGE -->
+    <aside class="config-sidebar">
+        <ul class="nav nav-pills flex-column gap-1 bg-white p-2 rounded-3 border shadow-sm" id="configSubPageTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-roles-btn" data-bs-toggle="pill" data-bs-target="#subpage-roles" type="button" role="tab">
+                    <i class="fa-solid fa-user-gear me-2"></i>1. Peran Pengguna
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-menus-btn" data-bs-toggle="pill" data-bs-target="#subpage-menus" type="button" role="tab">
+                    <i class="fa-solid fa-bars-staggered me-2"></i>2. Menu Aplikasi
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-permissions-btn" data-bs-toggle="pill" data-bs-target="#subpage-permissions" type="button" role="tab">
+                    <i class="fa-solid fa-shield-halved me-2"></i>3. Matriks Hak Akses
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-zona-btn" data-bs-toggle="pill" data-bs-target="#subpage-zona" type="button" role="tab">
+                    <i class="fa-solid fa-map me-2"></i>4. Daftar Zona
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-zonacov-btn" data-bs-toggle="pill" data-bs-target="#subpage-zonacov" type="button" role="tab">
+                    <i class="fa-solid fa-diagram-project me-2"></i>5. Zona Coverage
+                </button>
+            </li>
+        </ul>
+    </aside>
 
     <!-- KONTEN SUB-PAGE (TAB PANES) -->
-    <div class="tab-content" id="configSubPageContent">
+    <div class="tab-content config-content" id="configSubPageContent">
 
         <!-- SUB-PAGE 1: PERAN PENGGUNA -->
         <div class="tab-pane fade show active" id="subpage-roles" role="tabpanel">
@@ -215,19 +251,18 @@
             </div>
         </div>
 
-        <!-- SUB-PAGE 4: ZONA & APPROVAL ROUTING -->
+        <!-- SUB-PAGE 4: DAFTAR ZONA (referensi saja, tanpa CRUD) -->
         <div class="tab-pane fade" id="subpage-zona" role="tabpanel">
-
-            <!-- BAGIAN A: ZONA (referensi saja, tanpa CRUD) -->
-            <div class="config-card shadow-sm mb-3">
+            <div class="config-card shadow-sm">
                 <div class="config-card-header bg-light">
                     <span><i class="fa-solid fa-map text-primary me-2"></i>Daftar Zona (Referensi)</span>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive-scroll" style="max-height: 220px; min-height: auto;">
+                    <div class="table-responsive-scroll">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="text-center">
                                 <tr>
+                                    <th style="width: 60px;">No</th>
                                     <th>Nama Zona</th>
                                     <th style="width: 150px;">Kode Zona</th>
                                     <th style="width: 120px;">Status</th>
@@ -238,18 +273,21 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- BAGIAN B: CAKUPAN ZONA (zona_coverage) -->
-            <div class="config-card shadow-sm mb-3">
+        <!-- SUB-PAGE 5: ZONA COVERAGE (zona_coverage) -->
+        <div class="tab-pane fade" id="subpage-zonacov" role="tabpanel">
+            <div class="config-card shadow-sm">
                 <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
-                    <span><i class="fa-solid fa-diagram-project text-primary me-2"></i>Cakupan Zona (Departemen + Area &rarr; Zona)</span>
-                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openZonaCoverageModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Cakupan</button>
+                    <span><i class="fa-solid fa-diagram-project text-primary me-2"></i>Zona Coverage (Departemen + Area &rarr; Zona)</span>
+                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openZonaCoverageModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Zona Coverage</button>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive-scroll">
                         <table class="table table-hover align-middle mb-0">
                             <thead class="text-center">
                                 <tr>
+                                    <th style="width: 60px;">No</th>
                                     <th style="width: 130px;">Kode</th>
                                     <th>Zona</th>
                                     <th>Departemen</th>
@@ -264,35 +302,11 @@
                     </div>
                 </div>
             </div>
-
-            <!-- BAGIAN C: SUPERVISOR ZONA (supervisor_zones) -->
-            <div class="config-card shadow-sm">
-                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
-                    <span><i class="fa-solid fa-user-shield text-primary me-2"></i>Supervisor per Zona (Approval Routing)</span>
-                    <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openSupervisorZoneModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Supervisor</button>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive-scroll">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="text-center">
-                                <tr>
-                                    <th>Nama Supervisor</th>
-                                    <th>Zona</th>
-                                    <th>Departemen</th>
-                                    <th style="width: 100px;">Status</th>
-                                    <th style="width: 100px;">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="supervisorZonesTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
         </div>
 
-    </div>
-</div>
+    </div><!-- /tab-content -->
+    </div><!-- /config-layout -->
+</div><!-- /full-container -->
 
 <!-- MODAL ROLE -->
 <div class="modal fade" id="modalRole" tabindex="-1">
@@ -478,7 +492,7 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom py-2">
-                <h6 class="modal-title fw-bold" id="modalZonaCoverageTitle">Tambah Cakupan Zona</h6>
+                <h6 class="modal-title fw-bold" id="modalZonaCoverageTitle">Tambah Zona Coverage</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="formZonaCoverage">
@@ -498,7 +512,7 @@
                             <select id="zc_area_id" class="form-select form-select-sm"></select>
                         </div>
                         <div class="col-12 mb-2">
-                            <label class="small fw-bold">Kode Cakupan <span class="badge bg-secondary-subtle text-secondary">Otomatis</span></label>
+                            <label class="small fw-bold">Kode Zona Coverage <span class="badge bg-secondary-subtle text-secondary">Otomatis</span></label>
                             <input type="text" id="zc_code_preview" class="form-control form-control-sm bg-light fw-bold" readonly>
                         </div>
                         <div class="col-12 mb-2">
@@ -508,51 +522,6 @@
                         <div class="col-12">
                             <label class="small fw-bold">Status</label>
                             <select id="zc_is_active" class="form-select form-select-sm">
-                                <option value="true">Aktif</option>
-                                <option value="false">Non-Aktif</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer border-top py-2">
-                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL SUPERVISOR ZONA -->
-<div class="modal fade" id="modalSupervisorZone" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header border-bottom py-2">
-                <h6 class="modal-title fw-bold" id="modalSupervisorZoneTitle">Tambah Supervisor Zona</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="formSupervisorZone">
-                <div class="modal-body">
-                    <input type="hidden" id="sz_edit_id" value="">
-                    <input type="hidden" id="sz_selected_employee_id" value="">
-                    <div class="row g-2">
-                        <div class="col-12 mb-2" id="sz_employee_search_wrapper">
-                            <label class="small fw-bold">Cari Karyawan (NIK / Nama) <span class="text-danger">*</span></label>
-                            <input type="text" id="sz_employee_search" class="form-control form-control-sm" placeholder="Ketik min. 3 huruf..." oninput="handleSupervisorEmployeeSearch()" autocomplete="off">
-                            <div id="sz_employee_search_results" class="list-group mt-1" style="max-height: 180px; overflow-y:auto;"></div>
-                        </div>
-                        <div class="col-12 mb-2" id="sz_employee_selected_display" class="d-none"></div>
-                        <div class="col-12 mb-2" id="sz_zona_wrapper">
-                            <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
-                            <select id="sz_zona_id" class="form-select form-select-sm"></select>
-                        </div>
-                        <div class="col-12 mb-2" id="sz_dept_wrapper">
-                            <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
-                            <select id="sz_departemen_id" class="form-select form-select-sm"></select>
-                        </div>
-                        <div class="col-12">
-                            <label class="small fw-bold">Status</label>
-                            <select id="sz_is_active" class="form-select form-select-sm">
                                 <option value="true">Aktif</option>
                                 <option value="false">Non-Aktif</option>
                             </select>

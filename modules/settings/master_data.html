@@ -9,83 +9,200 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../css/style.css">
     <style>
-        .nav-pills .nav-link { color: #64748b; font-weight: 500; border-radius: 8px; padding: 8px 16px; font-size: 0.88rem; }
-        .nav-pills .nav-link.active { background-color: #0d6efd; color: #ffffff; font-weight: 600; }
+        body {
+            background-color: #f8fafc;
+        }
+
+        #full-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px 20px 20px;
+        }
+
+        /* 1. FREEZE / STICKY HEADER UTAMA (sama dengan system_config) */
+        .sticky-main-header {
+            position: sticky;
+            top: 0;
+            z-index: 1030;
+            background-color: #f8fafc;
+            padding-top: 15px;
+            padding-bottom: 15px;
+        }
+
+        /* CARD */
+        .config-card {
+            background: #ffffff;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .config-card-header {
+            padding: 14px 20px;
+            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        /* NAV SIDEBAR */
+        .nav-pills .nav-link {
+            font-weight: 600;
+            color: #64748b;
+            border-radius: 8px;
+            padding: 8px 16px;
+            transition: all 0.2s ease;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #0d6efd;
+            color: #ffffff;
+            box-shadow: 0 4px 6px -1px rgba(13, 110, 253, 0.2);
+        }
+
+        /* 2. FREEZE / STICKY TABEL HEADER */
+        .table-responsive-scroll {
+            max-height: calc(100vh - 280px);
+            min-height: 350px;
+            overflow-y: auto;
+        }
+        .table-responsive-scroll table thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f8fafc !important;
+            z-index: 10;
+            box-shadow: inset 0 -1px 0 #dee2e6;
+        }
+
+        /* 3. LAYOUT SIDEBAR */
+        .config-layout {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        .config-sidebar {
+            width: 240px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 100px;
+        }
+        .config-sidebar .nav-link {
+            width: 100%;
+            text-align: left;
+        }
+        .config-content {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        @media (max-width: 991.98px) {
+            .config-layout { flex-direction: column; }
+            .config-sidebar { width: 100%; position: static; }
+            .config-sidebar .nav { flex-direction: row !important; flex-wrap: nowrap; overflow-x: auto; }
+            .config-sidebar .nav-link { width: auto; white-space: nowrap; }
+        }
     </style>
 </head>
 <body>
-<div id="wrapper">
-    <aside id="sidebar">
-        <div class="sidebar-brand">
-            <i class="fa-solid fa-layer-group text-primary me-2"></i>
-            <span>DMB ERP SYSTEM</span>
-        </div>
-        <ul class="sidebar-menu" id="dynamicSidebarMenu">
-            </ul>
-    </aside>
 
-    <div id="main-wrapper">
-        <header id="header">
-            <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-sm btn-light d-lg-none me-1" id="sidebarToggle" onclick="document.getElementById('sidebar').classList.toggle('show')"><i class="fa-solid fa-bars"></i></button>
-                <img src="../../assets/images/logo-dmb.jpg" alt="Logo" class="header-logo-img" onerror="this.style.display='none'">
-                <h6 class="mb-0 fw-semibold text-secondary small">Control & Management Center</h6>
+<div id="full-container">
+
+    <!-- HEADER UTAMA (POSISI FROZEN / STICKY) -- sama dengan system_config -->
+    <div class="sticky-main-header">
+        <header class="d-flex justify-content-between align-items-center bg-white p-3 rounded-3 shadow-sm border mb-0">
+            <div class="d-flex align-items-center gap-3">
+                <a href="../../index.html" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Kembali</span>
+                </a>
+                <div class="vr"></div>
+                <h6 class="mb-0 fw-bold text-dark">Pusat Pengaturan Master Data</h6>
             </div>
-            <div class="dropdown">
-                <button class="btn btn-light py-1 px-2 border-0 bg-transparent dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                    <i class="fa-solid fa-user text-primary me-1"></i> Admin
-                </button>
-                <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0 mt-2">
-                    <li><a class="dropdown-item small text-danger fw-bold" href="#" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar</a></li>
-                </ul>
+            <div class="d-flex align-items-center gap-2">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+                    <i class="fa-solid fa-database"></i>
+                </div>
+                <div class="text-start d-none d-sm-block">
+                    <div class="fw-bold small lh-1">Master Data</div>
+                </div>
             </div>
         </header>
+    </div>
 
-        <main class="content-body">
-            <div class="mb-3">
-                <h5 class="fw-bold text-dark mb-0">Pusat Pengaturan Master Data</h5>
-            </div>
+    <div class="config-layout">
 
-            <ul class="nav nav-pills gap-1 bg-white p-2 rounded-3 border shadow-sm mb-3 overflow-x-auto flex-nowrap" id="masterTab">
-                <li class="nav-item"><button class="nav-link active" onclick="switchMasterTab('branches')"><i class="fa-solid fa-building me-1"></i> Cabang</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('departments')"><i class="fa-solid fa-sitemap me-1"></i> Departemen</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('cost_centers')"><i class="fa-solid fa-calculator me-1"></i> Cost Center</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('jabatans')"><i class="fa-solid fa-user-tie me-1"></i> Jabatan</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('bagians')"><i class="fa-solid fa-layer-group me-1"></i> Bagian</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('areas')"><i class="fa-solid fa-map-location-dot me-1"></i> Area Kerja</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('zonas')"><i class="fa-solid fa-earth-asia me-1"></i> Zona</button></li>
-                <li class="nav-item"><button class="nav-link" onclick="switchMasterTab('supervisor_zones')"><i class="fa-solid fa-user-shield me-1"></i> Zona Supervisor</button></li>
+        <!-- SIDEBAR NAVIGASI MASTER DATA (menggantikan tab bar atas & sidebar utama) -->
+        <aside class="config-sidebar">
+            <ul class="nav nav-pills flex-column gap-1 bg-white p-2 rounded-3 border shadow-sm" id="masterTab">
+                <li class="nav-item"><button class="nav-link active" data-entity="branches" onclick="switchMasterTab('branches')"><i class="fa-solid fa-building me-2"></i>Cabang</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="departments" onclick="switchMasterTab('departments')"><i class="fa-solid fa-sitemap me-2"></i>Departemen</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="cost_centers" onclick="switchMasterTab('cost_centers')"><i class="fa-solid fa-calculator me-2"></i>Cost Center</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="jabatans" onclick="switchMasterTab('jabatans')"><i class="fa-solid fa-user-tie me-2"></i>Jabatan</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="bagians" onclick="switchMasterTab('bagians')"><i class="fa-solid fa-layer-group me-2"></i>Bagian</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="areas" onclick="switchMasterTab('areas')"><i class="fa-solid fa-map-location-dot me-2"></i>Area Kerja</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="zonas" onclick="switchMasterTab('zonas')"><i class="fa-solid fa-earth-asia me-2"></i>Zona</button></li>
+                <li class="nav-item"><button class="nav-link" data-entity="supervisor_zones" onclick="switchMasterTab('supervisor_zones')"><i class="fa-solid fa-user-shield me-2"></i>Zona Supervisor</button></li>
             </ul>
+        </aside>
 
-            <div class="card border-0 shadow-sm rounded-3">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom flex-wrap gap-2">
-                    <h6 class="fw-bold mb-0 text-dark" id="masterTableTitle"><i class="fa-solid fa-list me-2"></i>Daftar Cabang</h6>
-                    
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="input-group input-group-sm" style="width: 150px;">
-                            <span class="input-group-text bg-light"><i class="fa-solid fa-filter"></i></span>
-                            <select id="filterStatus" class="form-select form-select-sm" onchange="renderMasterTable()">
-                                <option value="active" selected>Data Aktif</option>
-                                <option value="inactive">Non-Aktif</option>
-                                <option value="all">Semua Status</option>
-                            </select>
+        <div class="config-content">
+
+            <!-- PANEL GENERIK: dipakai semua menu kecuali Zona Supervisor -->
+            <div id="genericPane">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span id="masterTableTitle"><i class="fa-solid fa-list me-2"></i>Daftar Cabang</span>
+
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="input-group input-group-sm" style="width: 150px;">
+                                <span class="input-group-text bg-light"><i class="fa-solid fa-filter"></i></span>
+                                <select id="filterStatus" class="form-select form-select-sm" onchange="renderMasterTable()">
+                                    <option value="active" selected>Data Aktif</option>
+                                    <option value="inactive">Non-Aktif</option>
+                                    <option value="all">Semua Status</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openCreateMasterModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Data</button>
                         </div>
-                        <button class="btn btn-primary btn-sm fw-semibold" onclick="openCreateMasterModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Data</button>
                     </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="bg-light"><tr id="masterTableHeader"></tr></thead>
-                            <tbody id="masterTableBody"></tbody>
-                        </table>
+                    <div class="card-body p-0">
+                        <div class="table-responsive-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="bg-light"><tr id="masterTableHeader"></tr></thead>
+                                <tbody id="masterTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
-        </main>
+
+            <!-- PANEL SUPERVISOR ZONA (tampilan dari system_config) -->
+            <div id="supervisorPane" class="d-none">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
+                        <span><i class="fa-solid fa-user-shield text-primary me-2"></i>Supervisor per Zona (Approval Routing)</span>
+                        <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openSupervisorZoneModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Supervisor</button>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="text-center">
+                                    <tr>
+                                        <th style="width: 60px;">No</th>
+                                        <th>Nama Supervisor</th>
+                                        <th>Zona</th>
+                                        <th>Departemen</th>
+                                        <th style="width: 100px;">Status</th>
+                                        <th style="width: 100px;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="supervisorZonesTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
     </div>
 </div>
 
+<!-- MODAL FORM MASTER DATA (generik) -->
 <div class="modal fade" id="modalMasterForm" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -105,11 +222,55 @@
     </div>
 </div>
 
+<!-- MODAL SUPERVISOR ZONA (dipindahkan dari system_config) -->
+<div class="modal fade" id="modalSupervisorZone" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalSupervisorZoneTitle">Tambah Supervisor Zona</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formSupervisorZone">
+                <div class="modal-body">
+                    <input type="hidden" id="sz_edit_id" value="">
+                    <input type="hidden" id="sz_selected_employee_id" value="">
+                    <div class="row g-2">
+                        <div class="col-12 mb-2" id="sz_employee_search_wrapper">
+                            <label class="small fw-bold">Cari Karyawan (NIK / Nama) <span class="text-danger">*</span></label>
+                            <input type="text" id="sz_employee_search" class="form-control form-control-sm" placeholder="Ketik min. 3 huruf..." oninput="handleSupervisorEmployeeSearch()" autocomplete="off">
+                            <div id="sz_employee_search_results" class="list-group mt-1" style="max-height: 180px; overflow-y:auto;"></div>
+                        </div>
+                        <div class="col-12 mb-2 d-none" id="sz_employee_selected_display"></div>
+                        <div class="col-12 mb-2" id="sz_zona_wrapper">
+                            <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
+                            <select id="sz_zona_id" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-12 mb-2" id="sz_dept_wrapper">
+                            <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
+                            <select id="sz_departemen_id" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-12">
+                            <label class="small fw-bold">Status</label>
+                            <select id="sz_is_active" class="form-select form-select-sm">
+                                <option value="true">Aktif</option>
+                                <option value="false">Non-Aktif</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="../../js/supabase.js"></script>
 <script src="../../js/auth.js"></script>
-<script src="../../js/sidebar.js"></script>
 <script src="../../js/module/settings/master_data.js"></script>
 </body>
 </html>

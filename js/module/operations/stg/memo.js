@@ -29,7 +29,7 @@ const NAMA_BULAN_ID = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "
 // terbuka untuk semua authenticated -- kalau butuh penegakan
 // yang sesungguhnya, perlu RLS row-level tambahan terpisah.
 // ===================================================
-const ROLE_FULL_ACCESS = [1, 2, 4];   // Maintenance, Superadmin, Supervisor
+const ROLE_FULL_ACCESS = [1, 2, 12];   // Maintenance, Superadmin, Supervisor
 const ROLE_KARU_STG = 8;              // Data Memo semua data, Pending hanya milik sendiri
 const ROLE_ADMIN_STG = 6;             // Data Memo + lihat Pending (TANPA buka modal/edit)
 const ROLE_ADMIN = 3;                 // Data Memo saja, Pending tidak bisa diakses sama sekali

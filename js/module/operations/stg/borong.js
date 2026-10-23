@@ -21,7 +21,7 @@ const SHIFT_LABELS = { "1": "1 (Satu)", "2": "2 (Dua)", "3": "3 (Tiga)" };
 const ROLE_MAINTENANCE = 1;
 const ROLE_SUPERADMIN = 2;
 const ROLE_ADMIN = 3;
-const ROLE_SUPERVISOR = 4;
+const ROLE_SUPERVISOR = 12;
 const ROLE_ADMIN_STG = 6;
 const ROLE_KARU_STG = 8;
 

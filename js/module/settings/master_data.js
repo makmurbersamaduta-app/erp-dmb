@@ -6,19 +6,36 @@ document.addEventListener("DOMContentLoaded", async () => {
     checkAuthGuard();
     await loadCurrentMasterEntity();
     setupFormSubmit();
+
+    // Form Supervisor Zona (panel terpisah dari form generik)
+    const formSupervisorZone = document.getElementById("formSupervisorZone");
+    if (formSupervisorZone) {
+        formSupervisorZone.addEventListener("submit", handleSaveSupervisorZone);
+    }
 });
 
+// Pindah menu sidebar. Menu "supervisor_zones" memakai panel sendiri
+// (#supervisorPane), sedangkan menu lain memakai panel generik (#genericPane).
 function switchMasterTab(entityName) {
-    document.querySelectorAll('.nav-pills .nav-link').forEach(btn => btn.classList.remove('active'));
-    const targetBtn = document.querySelector(`button[onclick="switchMasterTab('${entityName}')"]`);
+    document.querySelectorAll('#masterTab .nav-link').forEach(btn => btn.classList.remove('active'));
+    const targetBtn = document.querySelector(`#masterTab button[data-entity="${entityName}"]`);
     if (targetBtn) targetBtn.classList.add('active');
-    
+
     currentEntity = entityName;
-    
-    // Kembalikan filter ke "active" setiap pindah tab
+
+    const isSupervisor = entityName === "supervisor_zones";
+    document.getElementById("genericPane").classList.toggle("d-none", isSupervisor);
+    document.getElementById("supervisorPane").classList.toggle("d-none", !isSupervisor);
+
+    if (isSupervisor) {
+        loadSupervisorZonesList();
+        return;
+    }
+
+    // Kembalikan filter ke "active" setiap pindah menu
     const filterEl = document.getElementById("filterStatus");
     if (filterEl) filterEl.value = "active";
-    
+
     loadCurrentMasterEntity();
 }
 
@@ -34,12 +51,6 @@ async function ensureMasterCacheLoaded() {
         masterCache.zonas = await fetchTableData("zonas");
     } else if (currentEntity === "cost_centers") {
         masterCache.branches = await fetchTableData("branches");
-    } else if (currentEntity === "supervisor_zones") {
-        masterCache.employees = await fetchTableData("employees", "hrd");
-        masterCache.assignments = await fetchTableData("employee_assignments", "hrd");
-        masterCache.departments = await fetchTableData("departments");
-        masterCache.jabatans = await fetchTableData("jabatans");
-        masterCache.zonas = await fetchTableData("zonas");
     }
 }
 
@@ -83,7 +94,6 @@ function renderMasterTable() {
         bagians: "Daftar Bagian", 
         areas: "Daftar Area Kerja", 
         zonas: "Daftar Zona", 
-        supervisor_zones: "Daftar Zona Supervisor" 
     };
     
     const titleEl = document.getElementById("masterTableTitle");
@@ -97,7 +107,6 @@ function renderMasterTable() {
     else if (currentEntity === "bagians") headerHtml += `<th>Nama Bagian</th>`;
     else if (currentEntity === "areas") headerHtml += `<th>Nama Area</th><th>Cost Center</th><th>Zona</th>`;
     else if (currentEntity === "zonas") headerHtml += `<th>Nama Zona</th>`;
-    else if (currentEntity === "supervisor_zones") headerHtml += `<th>NIK Supervisor</th><th>Nama Karyawan</th><th>Departemen</th><th>Jabatan</th><th>Zona Tanggung Jawab</th>`;
     
     headerHtml += `<th class="text-center">Status</th><th style="width: 100px;" class="text-center">Aksi</th>`;
     headerEl.innerHTML = headerHtml;
@@ -155,20 +164,6 @@ function renderMasterTable() {
             bodyHtml += `<td>${row.area_name||'-'}</td><td>${cc?.costcenter_name||'-'}</td><td>${zn?.zona_name||'-'}</td>`;
         }
         else if (currentEntity === "zonas") bodyHtml += `<td>${row.zona_name||'-'}</td>`;
-        else if (currentEntity === "supervisor_zones") {
-            // Pencarian karyawan fleksibel (mencocokkan NIK Karyawan atau ID)
-            const emp = (masterCache.employees||[]).find(e => e.nik_karyawan == row.employee_id || e.id == row.employee_id || e.nik_karyawan == row.nik_karyawan);
-            const assign = (masterCache.assignments||[]).find(a => (a.employee_id == emp?.id || a.employee_id == emp?.nik_karyawan) && a.is_active !== false);
-            const dept = (masterCache.departments||[]).find(d => d.id == assign?.departemen_id);
-            const jab = (masterCache.jabatans||[]).find(j => j.id == assign?.jabatan_id);
-            const zn = (masterCache.zonas||[]).find(z => z.id == row.zona_id || z.id == row.zona_id);
-            
-            bodyHtml += `<td><strong>${emp?.nik_karyawan || row.employee_id || '-'}</strong></td>
-                        <td>${emp?.nama || '-'}</td>
-                        <td>${dept?.department_name || '-'}</td>
-                        <td>${jab?.jabatan_name || '-'}</td>
-                        <td><strong>${zn?.zona_name || '-'}</strong></td>`;
-        }
 
         bodyHtml += `
             <td class="text-center">${statusBadge}</td>
@@ -188,7 +183,7 @@ async function openCreateMasterModal() {
     renderModalFields({});
     
     // Pastikan input kunci/kode bisa diisi saat Tambah Data
-    const codeInput = document.getElementById("f_code") || document.getElementById("f_emp");
+    const codeInput = document.getElementById("f_code");
     if (codeInput) {
         codeInput.removeAttribute("readonly");
         codeInput.removeAttribute("disabled");
@@ -209,7 +204,7 @@ async function openEditMasterModal(id) {
         renderModalFields(data);
         
         // Lock field utama/kode saat Edit Data
-        const codeInput = document.getElementById("f_code") || document.getElementById("f_emp");
+        const codeInput = document.getElementById("f_code");
         if (codeInput) {
             if (codeInput.tagName === "SELECT") {
                 codeInput.setAttribute("disabled", "disabled");
@@ -254,64 +249,6 @@ function renderModalFields(row) {
     } else if (currentEntity === "zonas") {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.zona_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Zona <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.zona_name||''}" required></div>`;
-    } else if (currentEntity === "supervisor_zones") {
-        // 1. Cari ID Jabatan yang mengandung kata "Supervisor" atau "SPV" (Case-Insensitive)
-        const supervisorJabatans = (masterCache.jabatans || []).filter(j => 
-            j.jabatan_name && (
-                j.jabatan_name.toLowerCase().includes("supervisor") || 
-                j.jabatan_name.toLowerCase().includes("spv")
-            )
-        ).map(j => j.id);
-
-        // 2. Filter penempatan (assignments) aktif yang berjabatan Supervisor
-        const activeSpvAssignments = (masterCache.assignments || []).filter(a => 
-            a.is_active !== false && supervisorJabatans.some(jid => jid == a.jabatan_id)
-        );
-
-        // 3. Dapatkan daftar ID & NIK karyawan yang berjabatan Supervisor aktif
-        const spvEmpIds = activeSpvAssignments.map(a => a.employee_id);
-
-        // 4. Filter karyawan aktif berjabatan Supervisor + sertakan karyawan yang sedang diedit
-        const filteredEmployees = (masterCache.employees || []).filter(e => {
-            const isSpv = spvEmpIds.some(id => id == e.id || id == e.nik_karyawan);
-            const isCurrentEdit = row.employee_id == e.nik_karyawan || row.employee_id == e.id || row.nik_karyawan == e.nik_karyawan;
-            return (e.is_active !== false && isSpv) || isCurrentEdit;
-        });
-
-        // 5. Opsi dropdown Karyawan (Menghubungkan NIK Karyawan)
-        const empOpts = filteredEmployees.length > 0 
-            ? filteredEmployees.map(e => {
-                const selected = (row.employee_id == e.nik_karyawan || row.employee_id == e.id || row.nik_karyawan == e.nik_karyawan) ? 'selected' : '';
-                // NIK Karyawan digunakan sebagai value utama sesuai instruksi
-                const optVal = e.nik_karyawan || e.id;
-                return `<option value="${optVal}" ${selected}>${e.nama} (${e.nik_karyawan || 'No NIK'})</option>`;
-            }).join('')
-            : `<option value="" disabled>-- Tidak ada karyawan berjabatan Supervisor aktif --</option>`;
-
-        const selectedZoneId = row.zona_id || row.zona_id;
-        const znOpts = (masterCache.zonas || [])
-            .filter(z => z.is_active !== false)
-            .map(z => `<option value="${z.id}" ${selectedZoneId == z.id ? 'selected' : ''}>${z.zona_name}</option>`)
-            .join('');
-
-        html = `
-            <div class="mb-3">
-                <label class="small fw-bold">Karyawan (Supervisor via NIK) <span class="text-danger">*</span></label>
-                <select id="f_emp" class="form-select" required>
-                    <option value="">-- Pilih Supervisor --</option>
-                    ${empOpts}
-                </select>
-                <div class="form-text text-muted" style="font-size: 0.75rem;">
-                    * Terhubung berbasis NIK Karyawan. Hanya menampilkan karyawan berjabatan Supervisor/SPV aktif.
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="small fw-bold">Zona Tanggung Jawab <span class="text-danger">*</span></label>
-                <select id="f_zn" class="form-select" required>
-                    <option value="">-- Pilih Zona --</option>
-                    ${znOpts}
-                </select>
-            </div>`;
     }
     document.getElementById("modalMasterFields").innerHTML = html;
 }
@@ -335,7 +272,7 @@ function setupFormSubmit() {
             let payload = {};
 
             // Mengambil nilai element (walaupun di-disabled)
-            const codeEl = document.getElementById("f_code") || document.getElementById("f_emp");
+            const codeEl = document.getElementById("f_code");
             const codeVal = codeEl ? codeEl.value : "";
             const nameVal = document.getElementById("f_name")?.value || "";
 
@@ -361,13 +298,6 @@ function setupFormSubmit() {
                 };
             } else if (currentEntity === "zonas") {
                 payload = { zona_code: codeVal, zona_name: nameVal };
-            } else if (currentEntity === "supervisor_zones") {
-                const empVal = document.getElementById("f_emp")?.value;
-                const znVal = document.getElementById("f_zn")?.value;
-                payload = { 
-                    employee_id: empVal ? empVal : null, // Disimpan sebagai NIK (String) tanpa parseInt
-                    zona_id: znVal ? parseInt(znVal) : null 
-                };
             }
 
             let resultError = null;
@@ -415,5 +345,338 @@ async function toggleActiveStatus(id, currentStatus) {
         await loadCurrentMasterEntity();
     } catch (e) {
         alert("Gagal merubah status: " + (e.message || e));
+    }
+}
+
+// ===================================================
+// SUPERVISOR ZONA (dipindahkan dari system_config.js)
+// Pengaturan & tampilan sama dengan versi lama, ditambah:
+//  - kolom No (nomor urut menerus lintas cabang)
+//  - pengelompokan per cabang (cabang diambil dari penempatan AKTIF karyawan)
+// ===================================================
+
+// ---------------------------------------------------
+// S1. STATE
+// ---------------------------------------------------
+let supervisorZonesList = [];
+let svZonaList = [];
+let svDeptList = [];
+let svBranchList = [];
+let svEmployeeMap = {};        // { employee_id: {id, nama, nik_karyawan} }
+let svBranchByEmployee = {};   // { employee_id: branch_id } dari hrd.employee_assignments aktif
+let svSearchResults = [];      // hasil pencarian karyawan terakhir (dipilih lewat nomor indeks)
+let editingSupervisorZoneId = null;
+let supervisorSearchTimeout = null;
+let isSupervisorSubmitting = false;
+
+// ---------------------------------------------------
+// S2. LOAD DATA
+// ---------------------------------------------------
+async function loadSupervisorZonesList() {
+    const tbody = document.getElementById("supervisorZonesTableBody");
+    if (!tbody) return;
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>`;
+
+    try {
+        const [zonas, depts, branches, szRes] = await Promise.all([
+            fetchTableData("zonas"),
+            fetchTableData("departments"),
+            fetchTableData("branches"),
+            supabaseClient.from("supervisor_zones").select("*")
+                .order("zona_id", { ascending: true })
+                .order("departemen_id", { ascending: true })
+        ]);
+        if (szRes.error) throw szRes.error;
+
+        svZonaList = zonas;
+        svDeptList = depts;
+        svBranchList = branches;
+        supervisorZonesList = szRes.data || [];
+        svEmployeeMap = {};
+        svBranchByEmployee = {};
+
+        // supervisor_zones.employee_id (uuid) merujuk ke hrd.employees (schema BEDA),
+        // jadi diambil lewat query terpisah lalu digabung manual di JS.
+        const employeeIds = [...new Set(supervisorZonesList.map(sz => sz.employee_id))];
+        if (employeeIds.length > 0) {
+            const [empRes, asgRes] = await Promise.all([
+                supabaseClient.schema("hrd").from("employees")
+                    .select("id, nama, nik_karyawan").in("id", employeeIds),
+                supabaseClient.schema("hrd").from("employee_assignments")
+                    .select("employee_id, branch_id, start_date")
+                    .eq("is_active", true).in("employee_id", employeeIds)
+            ]);
+            if (empRes.error) throw empRes.error;
+            if (asgRes.error) throw asgRes.error;
+
+            (empRes.data || []).forEach(e => { svEmployeeMap[e.id] = e; });
+
+            // Kalau ada >1 penempatan aktif, pakai yang start_date-nya paling baru
+            // (diurutkan naik, jadi yang terakhir menimpa yang sebelumnya).
+            (asgRes.data || [])
+                .sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")))
+                .forEach(a => { svBranchByEmployee[a.employee_id] = a.branch_id; });
+        }
+
+        renderSupervisorZoneDropdowns();
+        renderSupervisorZonesTable();
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Gagal memuat data: ${err.message || err}</td></tr>`;
+    }
+}
+
+// Isi dropdown Zona (hanya zona aktif) & Departemen di modal Supervisor
+function renderSupervisorZoneDropdowns() {
+    const zonaOptions = svZonaList
+        .filter(z => z.is_active !== false)
+        .map(z => `<option value="${z.id}">${z.zona_name} (${z.zona_code})</option>`)
+        .join("");
+    const deptOptions = svDeptList
+        .map(d => `<option value="${d.id}">${d.department_name}</option>`)
+        .join("");
+
+    const zonaSel = document.getElementById("sz_zona_id");
+    if (zonaSel) zonaSel.innerHTML = zonaOptions;
+    const deptSel = document.getElementById("sz_departemen_id");
+    if (deptSel) deptSel.innerHTML = deptOptions;
+}
+
+// ---------------------------------------------------
+// S3. TAMPILAN TABEL (kolom No + grup per cabang)
+// ---------------------------------------------------
+function renderSupervisorZonesTable() {
+    const tbody = document.getElementById("supervisorZonesTableBody");
+    if (!tbody) return;
+
+    if (supervisorZonesList.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Belum ada supervisor terdaftar.</td></tr>`;
+        return;
+    }
+
+    // Tentukan cabang tiap baris, lalu urutkan per nama cabang ("Tanpa Cabang" paling bawah)
+    const rows = supervisorZonesList.map(sz => {
+        const branchId = svBranchByEmployee[sz.employee_id] ?? null;
+        const br = branchId !== null ? svBranchList.find(b => b.id == branchId) : null;
+        return { sz, branchId: br ? br.id : null, branchName: br ? br.branch_name : "Tanpa Cabang" };
+    });
+    rows.sort((a, b) => {
+        if (a.branchId === null && b.branchId !== null) return 1;
+        if (b.branchId === null && a.branchId !== null) return -1;
+        return a.branchName.localeCompare(b.branchName, "id");
+    });
+
+    let html = "";
+    let lastBranchId;   // undefined di awal supaya header kelompok pertama tetap tercetak
+    rows.forEach(({ sz, branchId, branchName }, idx) => {
+        if (branchId !== lastBranchId) {
+            html += `<tr class="table-group-header"><td colspan="6" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
+            lastBranchId = branchId;
+        }
+
+        const zona = svZonaList.find(z => z.id === sz.zona_id);
+        const dept = svDeptList.find(d => d.id === sz.departemen_id);
+        const emp = svEmployeeMap[sz.employee_id];
+        const empLabel = emp ? `${emp.nama} (${emp.nik_karyawan})` : sz.employee_id;
+
+        html += `
+            <tr class="text-center">
+                <td>${idx + 1}</td>
+                <td class="text-start fw-semibold">${empLabel}</td>
+                <td>${zona ? zona.zona_name : '-'}</td>
+                <td>${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
+                <td>${sz.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
+                <td>
+                    <button class="btn btn-sm btn-light text-primary me-1" onclick="openSupervisorZoneModal(${sz.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
+                    <button class="btn btn-sm btn-light text-danger" onclick="deleteSupervisorZone(${sz.id})" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+                </td>
+            </tr>`;
+    });
+
+    tbody.innerHTML = html;
+}
+
+// ---------------------------------------------------
+// S4. PENCARIAN KARYAWAN (bukan dropdown biasa -- bisa ribuan baris)
+// Debounce 300ms supaya tidak query tiap ketikan huruf.
+// ---------------------------------------------------
+function handleSupervisorEmployeeSearch() {
+    clearTimeout(supervisorSearchTimeout);
+    const query = document.getElementById("sz_employee_search").value.trim();
+    const resultsEl = document.getElementById("sz_employee_search_results");
+
+    if (query.length < 3) {
+        resultsEl.innerHTML = "";
+        return;
+    }
+
+    supervisorSearchTimeout = setTimeout(async () => {
+        const { data, error } = await supabaseClient
+            .schema("hrd")
+            .from("employees")
+            .select("id, nama, nik_karyawan")
+            .or(`nama.ilike.%${query}%,nik_karyawan.ilike.%${query}%`)
+            .eq("is_active", true)
+            .limit(10);
+
+        if (error || !data || data.length === 0) {
+            svSearchResults = [];
+            resultsEl.innerHTML = `<div class="list-group-item small text-muted">Tidak ditemukan.</div>`;
+            return;
+        }
+
+        // Disimpan di array & dipilih lewat indeks (lebih aman daripada
+        // menyisipkan JSON ke atribut onclick -- nama ber-tanda-petik tidak merusak tombol)
+        svSearchResults = data;
+        resultsEl.innerHTML = data.map((emp, i) => `
+            <button type="button" class="list-group-item list-group-item-action small" onclick="selectSupervisorEmployee(${i})">
+                ${emp.nama} <span class="text-muted">(${emp.nik_karyawan})</span>
+            </button>`).join("");
+    }, 300);
+}
+
+function selectSupervisorEmployee(index) {
+    const emp = svSearchResults[index];
+    if (!emp) return;
+    document.getElementById("sz_selected_employee_id").value = emp.id;
+    document.getElementById("sz_employee_search").value = `${emp.nama} (${emp.nik_karyawan})`;
+    document.getElementById("sz_employee_search_results").innerHTML = "";
+}
+
+// ---------------------------------------------------
+// S5. MODAL TAMBAH / EDIT
+// Mode Edit: Karyawan, Zona & Departemen DIKUNCI (hanya Status yang bisa diubah)
+// ---------------------------------------------------
+function openSupervisorZoneModal(editId = null) {
+    const form = document.getElementById("formSupervisorZone");
+    if (form) form.reset();
+    editingSupervisorZoneId = editId;
+    isSupervisorSubmitting = false;
+    svSearchResults = [];
+    document.getElementById("sz_employee_search_results").innerHTML = "";
+    document.getElementById("sz_selected_employee_id").value = "";
+
+    const title = document.getElementById("modalSupervisorZoneTitle");
+    const searchWrapper = document.getElementById("sz_employee_search_wrapper");
+    const zonaWrapper = document.getElementById("sz_zona_wrapper");
+    const deptWrapper = document.getElementById("sz_dept_wrapper");
+    const infoEl = document.getElementById("sz_employee_selected_display");
+
+    // Reset info terkunci dari sesi Edit sebelumnya
+    infoEl.classList.add("d-none");
+    infoEl.innerHTML = "";
+
+    if (editId === null) {
+        // ---- MODE TAMBAH ----
+        if (title) title.textContent = "Tambah Supervisor Zona";
+        searchWrapper.classList.remove("d-none");
+        zonaWrapper.classList.remove("d-none");
+        deptWrapper.classList.remove("d-none");
+        document.getElementById("sz_edit_id").value = "";
+        renderSupervisorZoneDropdowns();
+
+    } else {
+        // ---- MODE EDIT ----
+        const sz = supervisorZonesList.find(x => x.id === editId);
+        if (!sz) { alert("Data tidak ditemukan."); return; }
+
+        const zona = svZonaList.find(z => z.id === sz.zona_id);
+        const dept = svDeptList.find(d => d.id === sz.departemen_id);
+
+        if (title) title.textContent = "Edit Supervisor Zona";
+        searchWrapper.classList.add("d-none");
+        zonaWrapper.classList.add("d-none");
+        deptWrapper.classList.add("d-none");
+
+        document.getElementById("sz_edit_id").value = sz.id;
+        document.getElementById("sz_selected_employee_id").value = sz.employee_id;
+        document.getElementById("sz_is_active").value = sz.is_active ? "true" : "false";
+
+        infoEl.classList.remove("d-none");
+        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">Zona: <strong>${zona?.zona_name || '-'}</strong> | Departemen: <strong>${dept?.department_name || '-'}</strong> (tidak bisa diubah di sini -- hapus &amp; buat baru kalau perlu pindah)</div>`;
+    }
+
+    new bootstrap.Modal(document.getElementById("modalSupervisorZone")).show();
+}
+
+// ---------------------------------------------------
+// S6. SIMPAN & HAPUS
+// ---------------------------------------------------
+async function handleSaveSupervisorZone(e) {
+    if (e) e.preventDefault();
+    if (isSupervisorSubmitting) return;
+    isSupervisorSubmitting = true;
+
+    const isActive = document.getElementById("sz_is_active").value === "true";
+
+    const btnSubmit = e.target.querySelector("button[type='submit']");
+    const origText = btnSubmit ? btnSubmit.innerHTML : "Simpan";
+    if (btnSubmit) {
+        btnSubmit.disabled = true;
+        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...`;
+    }
+
+    const wasEditing = editingSupervisorZoneId !== null;
+
+    try {
+        if (wasEditing) {
+            // ---- UPDATE -- hanya status ----
+            const { error } = await supabaseClient
+                .from("supervisor_zones")
+                .update({ is_active: isActive })
+                .eq("id", editingSupervisorZoneId);
+            if (error) throw error;
+
+        } else {
+            // ---- INSERT BARU ----
+            const employeeId = document.getElementById("sz_selected_employee_id").value;
+            const zonaId = parseInt(document.getElementById("sz_zona_id").value);
+            const departemenId = parseInt(document.getElementById("sz_departemen_id").value);
+
+            if (!employeeId) throw new Error("Pilih karyawan dari hasil pencarian dulu.");
+            if (!zonaId) throw new Error("Pilih zona dulu.");
+            if (!departemenId) throw new Error("Pilih departemen dulu.");
+
+            // Cek duplikat: 1 zona + 1 departemen hanya boleh punya 1 supervisor aktif
+            if (isActive) {
+                const dup = supervisorZonesList.find(x =>
+                    x.is_active && x.zona_id === zonaId && x.departemen_id === departemenId);
+                if (dup) {
+                    throw new Error("Zona + Departemen ini sudah punya supervisor aktif. Nonaktifkan atau hapus dulu supervisor lama.");
+                }
+            }
+
+            const { error } = await supabaseClient.from("supervisor_zones").insert([{
+                employee_id: employeeId,
+                zona_id: zonaId,
+                departemen_id: departemenId,
+                is_active: isActive
+            }]);
+            if (error) throw error;
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById("modalSupervisorZone"))?.hide();
+        await loadSupervisorZonesList();
+        alert(wasEditing ? "Supervisor Zona berhasil diperbarui!" : "Supervisor Zona berhasil ditambahkan!");
+
+    } catch (err) {
+        alert("Gagal menyimpan: " + (err.message || err));
+    } finally {
+        editingSupervisorZoneId = null;
+        isSupervisorSubmitting = false;
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = origText;
+        }
+    }
+}
+
+async function deleteSupervisorZone(id) {
+    if (!confirm("Yakin hapus supervisor dari zona ini?")) return;
+    try {
+        const { error } = await supabaseClient.from("supervisor_zones").delete().eq("id", id);
+        if (error) throw error;
+        await loadSupervisorZonesList();
+    } catch (e) {
+        alert("Gagal menghapus: " + (e.message || e));
     }
 }

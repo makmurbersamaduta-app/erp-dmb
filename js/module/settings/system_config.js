@@ -41,12 +41,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         formZonaCoverage.addEventListener("submit", handleSaveZonaCoverage);
     }
 
-    const formSupervisorZone = document.getElementById("formSupervisorZone");
-    if (formSupervisorZone) {
-        formSupervisorZone.onsubmit = null;
-        formSupervisorZone.addEventListener("submit", handleSaveSupervisorZone);
-    }
-
     await loadSystemRoles();
     await loadMenuCategories();   // kamus kategori -- WAJIB sebelum render dropdown & tabel menu
     await loadJabatanList();          // WAJIB sebelum modal Akses Menu dibuka
@@ -54,10 +48,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadSystemMenus();
     await loadPermissionsMatrix();
 
-    // Tab 4: Zona & Approval Routing
+    // Tab 4 & 5: Daftar Zona + Zona Coverage (Supervisor Zona sudah dipindah ke master_data.js)
     await loadZonaTabMasters();   // zonas, departments, areas -- WAJIB sebelum render dropdown
     await loadZonaCoverageList();
-    await loadSupervisorZonesList();
 });
 
 // ===================================================
@@ -345,37 +338,143 @@ async function loadSystemMenus() {
     renderMenusTable();
 }
 
-const PLATFORM_LABEL = { "M": "Web ERP", "PWA": "Aplikasi PWA" };
+// ---------------------------------------------------
+// 5A. PENGATURAN URUTAN & PENGELOMPOKAN TABEL MENU APLIKASI
+// ---------------------------------------------------
+
+// Label platform. Nilai kolom "platform" di database huruf kecil
+// ("erp" / "pwa"), jadi kunci map ini HARUS huruf kecil.
+const PLATFORM_LABEL = { "erp": "ERP", "pwa": "PWA" };
+const PLATFORM_ORDER = ["erp", "pwa"];   // ERP tampil dulu, baru PWA
+
+// Urutan main menu ERP. Dicocokkan dengan kolom "category" di app_menus.
+// Ejaan HARUS sama dengan isi database (mis. "Payroll", bukan "Payrol").
+const ERP_GROUP_ORDER = ["Home", "Employees", "Time", "Payroll", "Assets", "Finance", "Operasional", "Files", "Settings"];
+
+// Urutan main menu PWA. Dicocokkan dengan AWALAN menu_code
+// (PWA-OPS-01 -> kunci "OPS"), BUKAN dengan kolom category.
+// Grup "Account" ditambahkan karena ada 5 menu PWA-ACCOUNT-xx di database.
+// Kalau grup ini mau dihapus/dipindah, ubah baris di bawah.
+const PWA_GROUP_ORDER = [
+    { key: "HOME",    label: "Home" },
+    { key: "OPS",     label: "Operasional" },
+    { key: "REPORT",  label: "Laporan" },
+    { key: "ACCOUNT", label: "Account" }
+];
+
+// State: platform mana yang sedang dikecilkan (collapse). Default: semua terbuka.
+let collapsedPlatforms = {};
+
+// Menentukan sebuah menu masuk main menu (grup) yang mana + urutannya.
+function getMenuGroup(m) {
+    const platformKey = (m.platform || "").toLowerCase();
+
+    if (platformKey === "pwa") {
+        const match = (m.menu_code || "").match(/^PWA-([A-Z]+)-/i);
+        const key = match ? match[1].toUpperCase() : "";
+        const idx = PWA_GROUP_ORDER.findIndex(g => g.key === key);
+        if (idx >= 0) return { order: idx, label: PWA_GROUP_ORDER[idx].label };
+        return { order: PWA_GROUP_ORDER.length, label: "Lainnya" };
+    }
+
+    const cat = (m.category || "").trim().toLowerCase();
+    const idx = ERP_GROUP_ORDER.findIndex(c => c.toLowerCase() === cat);
+    if (idx >= 0) return { order: idx, label: ERP_GROUP_ORDER[idx] };
+    return { order: ERP_GROUP_ORDER.length, label: m.category || "Lainnya" };
+}
+
+function platformRank(platformKey) {
+    const idx = PLATFORM_ORDER.indexOf(platformKey);
+    return idx >= 0 ? idx : 99;
+}
+
+// Urutan akhir: Platform -> Main menu -> (ERP: sort_order | PWA: nomor menu_code)
+function sortMenusForDisplay(menus) {
+    return [...menus].sort((a, b) => {
+        const pa = (a.platform || "").toLowerCase();
+        const pb = (b.platform || "").toLowerCase();
+        if (pa !== pb) return platformRank(pa) - platformRank(pb);
+
+        const ga = getMenuGroup(a);
+        const gb = getMenuGroup(b);
+        if (ga.order !== gb.order) return ga.order - gb.order;
+        if (ga.label !== gb.label) return ga.label.localeCompare(gb.label);
+
+        if (pa !== "pwa") {
+            const sa = Number(a.sort_order) || 0;
+            const sb = Number(b.sort_order) || 0;
+            if (sa !== sb) return sa - sb;
+        }
+        return (a.menu_code || "").localeCompare(b.menu_code || "", undefined, { numeric: true });
+    });
+}
+
+// Klik baris ERP / PWA -> kecilkan / besarkan
+function togglePlatform(platformKey) {
+    collapsedPlatforms[platformKey] = !collapsedPlatforms[platformKey];
+    renderMenusTable();
+}
 
 function renderMenusTable() {
+    const tbody = document.getElementById("menusTableBody");
     if (systemMenus.length === 0) {
-        document.getElementById("menusTableBody").innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada menu.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada menu.</td></tr>`;
         return;
     }
 
+    const sorted = sortMenusForDisplay(systemMenus);
     let html = "";
     let lastPlatform = null;
+    let lastGroup = null;
     let lastCategory = null;
 
-    systemMenus.forEach(m => {
-        if (m.platform !== lastPlatform) {
+    sorted.forEach(m => {
+        const platformKey = (m.platform || "").toLowerCase();
+        const platformLabel = PLATFORM_LABEL[platformKey] || m.platform;
+        const group = getMenuGroup(m);
+
+        // Level 1: baris platform (ERP / PWA) -- bisa diklik untuk dikecilkan
+        if (platformKey !== lastPlatform) {
+            const isCollapsed = !!collapsedPlatforms[platformKey];
+            const total = sorted.filter(x => (x.platform || "").toLowerCase() === platformKey).length;
             html += `
-                <tr class="table-secondary">
+                <tr class="table-secondary" style="cursor:pointer;" onclick="togglePlatform('${platformKey}')">
                     <td colspan="7" class="fw-bold small text-uppercase">
-                        <i class="fa-solid fa-layer-group me-2"></i>${PLATFORM_LABEL[m.platform] || m.platform}
+                        <i class="fa-solid ${isCollapsed ? 'fa-chevron-right' : 'fa-chevron-down'} me-2"></i>
+                        <i class="fa-solid fa-layer-group me-2"></i>${platformLabel}
+                        <span class="badge bg-secondary-subtle text-secondary ms-2">${total} menu</span>
                     </td>
                 </tr>`;
-            lastPlatform = m.platform;
+            lastPlatform = platformKey;
+            lastGroup = null;
             lastCategory = null;
         }
 
-        if (m.category !== lastCategory) {
+        // Kalau platform sedang dikecilkan, lewati baris di bawahnya
+        if (collapsedPlatforms[platformKey]) return;
+
+        // Level 2: baris main menu (Home, Employees, Time, ...)
+        if (group.label !== lastGroup) {
             html += `
                 <tr class="table-light">
                     <td colspan="7" class="fw-semibold small text-muted ps-4">
-                        <i class="fa-solid fa-folder me-2"></i>${m.category}
+                        <i class="fa-solid fa-folder me-2"></i>${group.label}
                     </td>
                 </tr>`;
+            lastGroup = group.label;
+            lastCategory = null;
+        }
+
+        // Level 3 (khusus PWA): sub-kategori, hanya kalau namanya beda dengan main menu
+        if (platformKey === "pwa" && m.category !== lastCategory) {
+            if ((m.category || "").toLowerCase() !== group.label.toLowerCase()) {
+                html += `
+                    <tr>
+                        <td colspan="7" class="small text-muted ps-5 bg-white">
+                            <i class="fa-solid fa-angle-right me-2"></i>${m.category}
+                        </td>
+                    </tr>`;
+            }
             lastCategory = m.category;
         }
 
@@ -384,7 +483,7 @@ function renderMenusTable() {
                 <td><code>${m.menu_code}</code></td>
                 <td class="text-start"><i class="${m.icon_class} me-2 text-primary"></i>${m.menu_name}</td>
                 <td class="text-start small text-muted">${m.path_url}</td>
-                <td><span class="badge bg-primary-subtle text-primary">${m.platform}</span></td>
+                <td><span class="badge bg-primary-subtle text-primary">${platformLabel}</span></td>
                 <td>${m.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
                 <td>
                     ${renderAccessBadge(m.menu_code)}<br>
@@ -397,7 +496,7 @@ function renderMenusTable() {
             </tr>`;
     });
 
-    document.getElementById("menusTableBody").innerHTML = html;
+    tbody.innerHTML = html;
 }
 
 // ===================================================
@@ -858,8 +957,8 @@ async function savePermissionsBulk() {
 }
 // ===================================================
 // 7. TAB 4: ZONA & APPROVAL ROUTING
-// 3 bagian: Zona (referensi saja), Cakupan Zona (zona_coverage, CRUD),
-// Supervisor Zona (supervisor_zones, CRUD).
+// 2 bagian: Daftar Zona (referensi saja) dan Zona Coverage (zona_coverage, CRUD).
+// Supervisor Zona sudah dipindah ke master_data.js.
 //
 // Field identitas (Zona/Departemen/Area untuk Cakupan; Karyawan/Zona
 // untuk Supervisor) DIKUNCI saat Edit -- pola yang sama dengan Menu
@@ -871,24 +970,32 @@ let zonaList = [];
 let departmentList = [];
 let areaList = [];
 let zonaCoverageList = [];
-let supervisorZonesList = [];
 let editingZonaCoverageId = null;
-let editingSupervisorZoneId = null;
-let selectedSupervisorEmployee = null; // {id, nama, nik_karyawan} saat mode Tambah
 
 // ---------------------------------------------------
 // 7.1 LOAD MASTER (zonas, departments, areas)
 // ---------------------------------------------------
+// Data pendukung untuk pengelompokan per cabang di Zona Coverage:
+// area -> cost center -> cabang
+let costCenterList = [];
+let branchList = [];
+let areaAllList = [];   // SEMUA area (termasuk non-aktif) -- khusus untuk cari cabang
+
 async function loadZonaTabMasters() {
-    const [{ data: zonas }, { data: depts }, { data: areas }] = await Promise.all([
+    const [{ data: zonas }, { data: depts }, { data: areas }, { data: ccs }, { data: brs }] = await Promise.all([
         supabaseClient.from("zonas").select("*").order("zona_name", { ascending: true }),
         supabaseClient.from("departments").select("*").order("department_name", { ascending: true }),
-        supabaseClient.from("areas").select("*").eq("is_active", true).order("area_name", { ascending: true })
+        supabaseClient.from("areas").select("*").order("area_name", { ascending: true }),
+        supabaseClient.from("cost_centers").select("id, costcenter_name, branch_id"),
+        supabaseClient.from("branches").select("id, branch_name")
     ]);
 
     zonaList = zonas || [];
     departmentList = depts || [];
-    areaList = areas || [];
+    areaAllList = areas || [];
+    areaList = areaAllList.filter(a => a.is_active === true);   // dropdown hanya area aktif
+    costCenterList = ccs || [];
+    branchList = brs || [];
 
     renderZonasTable();
     renderZonaDropdowns();
@@ -899,12 +1006,13 @@ function renderZonasTable() {
     if (!tbody) return;
 
     if (zonaList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="3" class="text-center text-muted">Belum ada data zona.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">Belum ada data zona.</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = zonaList.map(z => `
+    tbody.innerHTML = zonaList.map((z, idx) => `
         <tr class="text-center">
+            <td>${idx + 1}</td>
             <td class="text-start fw-semibold">${z.zona_name}</td>
             <td><code>${z.zona_code}</code></td>
             <td>${z.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
@@ -921,15 +1029,9 @@ function renderZonaDropdowns() {
     const zcSel = document.getElementById("zc_zona_id");
     if (zcSel) zcSel.innerHTML = options;
 
-    const szSel = document.getElementById("sz_zona_id");
-    if (szSel) szSel.innerHTML = options;
-
     const deptOptions = departmentList.map(d => `<option value="${d.id}">${d.department_name}</option>`).join("");
     const deptSel = document.getElementById("zc_departemen_id");
     if (deptSel) deptSel.innerHTML = deptOptions;
-
-    const szDeptSel = document.getElementById("sz_departemen_id");
-    if (szDeptSel) szDeptSel.innerHTML = deptOptions;
 
     const areaOptions = areaList.map(a => `<option value="${a.id}">${a.area_name}</option>`).join("");
     const areaSel = document.getElementById("zc_area_id");
@@ -953,22 +1055,53 @@ async function loadZonaCoverageList() {
     renderZonaCoverageTable();
 }
 
+// Cari cabang dari sebuah area: area -> cost center -> cabang
+function getBranchForArea(areaId) {
+    const area = areaAllList.find(a => a.id == areaId);
+    if (!area) return null;
+    const cc = costCenterList.find(c => c.id == area.cost_center_id);
+    if (!cc) return null;
+    return branchList.find(b => b.id == cc.branch_id) || null;
+}
+
 function renderZonaCoverageTable() {
     const tbody = document.getElementById("zonaCoverageTableBody");
     if (!tbody) return;
 
     if (zonaCoverageList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada cakupan zona.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Belum ada Zona Coverage.</td></tr>`;
         return;
     }
 
-    tbody.innerHTML = zonaCoverageList.map(zc => {
+    // Tempelkan info cabang ke tiap baris, lalu urutkan per nama cabang
+    // ("Tanpa Cabang" di paling bawah). Urutan awal (per zona) tetap terjaga
+    // di dalam tiap cabang karena sort() browser modern bersifat stabil.
+    const rows = zonaCoverageList.map(zc => {
+        const br = getBranchForArea(zc.area_id);
+        return { zc, branchId: br ? br.id : null, branchName: br ? br.branch_name : "Tanpa Cabang" };
+    });
+    rows.sort((a, b) => {
+        if (a.branchId === null && b.branchId !== null) return 1;
+        if (b.branchId === null && a.branchId !== null) return -1;
+        return a.branchName.localeCompare(b.branchName, "id");
+    });
+
+    let html = "";
+    let lastBranchId;   // undefined di awal supaya header kelompok pertama tetap tercetak
+    rows.forEach(({ zc, branchId, branchName }, idx) => {
+        if (branchId !== lastBranchId) {
+            html += `<tr class="table-group-header"><td colspan="8" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
+            lastBranchId = branchId;
+        }
+
         const zona = zonaList.find(z => z.id === zc.zona_id);
         const dept = departmentList.find(d => d.id === zc.departemen_id);
-        const area = areaList.find(a => a.id === zc.area_id);
+        const area = areaAllList.find(a => a.id === zc.area_id);
 
-        return `
+        // Nomor urut berjalan menerus lintas cabang (tidak reset per kelompok)
+        html += `
             <tr class="text-center">
+                <td>${idx + 1}</td>
                 <td><code>${zc.kode_zona_coverage}</code></td>
                 <td>${zona ? zona.zona_name : '-'}</td>
                 <td>${dept ? dept.department_name : '-'}</td>
@@ -980,7 +1113,9 @@ function renderZonaCoverageTable() {
                     <button class="btn btn-sm btn-light text-danger" onclick="deleteZonaCoverage(${zc.id})" title="Hapus"><i class="fa-solid fa-trash"></i></button>
                 </td>
             </tr>`;
-    }).join("");
+    });
+
+    tbody.innerHTML = html;
 }
 
 // Kode format: {zona_code}-{urutan}, nomor reset PER ZONA (sesuai catatan keputusan)
@@ -1031,7 +1166,7 @@ function openZonaCoverageModal(editId = null) {
 
     if (editId === null) {
         // ---- MODE TAMBAH ----
-        if (title) title.textContent = "Tambah Cakupan Zona";
+        if (title) title.textContent = "Tambah Zona Coverage";
         zonaWrapper.classList.remove("d-none");
         deptWrapper.classList.remove("d-none");
         areaWrapper.classList.remove("d-none");
@@ -1048,7 +1183,7 @@ function openZonaCoverageModal(editId = null) {
         const dept = departmentList.find(d => d.id === zc.departemen_id);
         const area = areaList.find(a => a.id === zc.area_id);
 
-        if (title) title.textContent = `Edit Cakupan: ${zc.kode_zona_coverage}`;
+        if (title) title.textContent = `Edit Zona Coverage: ${zc.kode_zona_coverage}`;
         zonaWrapper.classList.add("d-none");
         deptWrapper.classList.add("d-none");
         areaWrapper.classList.add("d-none");
@@ -1125,7 +1260,7 @@ async function handleSaveZonaCoverage(e) {
 
         bootstrap.Modal.getInstance(document.getElementById("modalZonaCoverage"))?.hide();
         await loadZonaCoverageList();
-        alert(editingZonaCoverageId !== null ? "Cakupan Zona berhasil diperbarui!" : "Cakupan Zona berhasil ditambahkan!");
+        alert(editingZonaCoverageId !== null ? "Zona Coverage berhasil diperbarui!" : "Zona Coverage berhasil ditambahkan!");
 
     } catch (err) {
         alert("Gagal menyimpan: " + (err.message || err));
@@ -1139,7 +1274,7 @@ async function handleSaveZonaCoverage(e) {
 }
 
 async function deleteZonaCoverage(id) {
-    if (!confirm("Yakin hapus cakupan zona ini?")) return;
+    if (!confirm("Yakin hapus Zona Coverage ini?")) return;
     try {
         const { error } = await supabaseClient.from("zona_coverage").delete().eq("id", id);
         if (error) throw error;
@@ -1149,233 +1284,5 @@ async function deleteZonaCoverage(id) {
     }
 }
 
-// ---------------------------------------------------
-// 7.3 SUPERVISOR ZONA (supervisor_zones)
-// ---------------------------------------------------
-async function loadSupervisorZonesList() {
-    const { data, error } = await supabaseClient
-        .from("supervisor_zones")
-        .select("*")
-        .order("zona_id", { ascending: true })
-        .order("departemen_id", { ascending: true });
-
-    if (error) {
-        document.getElementById("supervisorZonesTableBody").innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error: ${error.message}</td></tr>`;
-        return;
-    }
-    supervisorZonesList = data || [];
-
-    // Ambil nama karyawan -- supervisor_zones.employee_id (uuid) merujuk ke
-    // hrd.employees, schema BEDA, jadi tidak bisa di-join lewat PostgREST
-    // embed biasa. Query terpisah lalu digabung manual di JS.
-    const employeeIds = [...new Set(supervisorZonesList.map(sz => sz.employee_id))];
-    let employeeMap = {};
-
-    if (employeeIds.length > 0) {
-        const { data: emps } = await supabaseClient
-            .schema("hrd")
-            .from("employees")
-            .select("id, nama, nik_karyawan")
-            .in("id", employeeIds);
-
-        (emps || []).forEach(e => { employeeMap[e.id] = e; });
-    }
-
-    renderSupervisorZonesTable(employeeMap);
-}
-
-function renderSupervisorZonesTable(employeeMap) {
-    const tbody = document.getElementById("supervisorZonesTableBody");
-    if (!tbody) return;
-
-    if (supervisorZonesList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">Belum ada supervisor terdaftar.</td></tr>`;
-        return;
-    }
-
-    tbody.innerHTML = supervisorZonesList.map(sz => {
-        const zona = zonaList.find(z => z.id === sz.zona_id);
-        const dept = departmentList.find(d => d.id === sz.departemen_id);
-        const emp = employeeMap[sz.employee_id];
-        const empLabel = emp ? `${emp.nama} (${emp.nik_karyawan})` : sz.employee_id;
-
-        return `
-            <tr class="text-center">
-                <td class="text-start fw-semibold">${empLabel}</td>
-                <td>${zona ? zona.zona_name : '-'}</td>
-                <td>${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
-                <td>${sz.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
-                <td>
-                    <button class="btn btn-sm btn-light text-primary me-1" onclick="openSupervisorZoneModal(${sz.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-sm btn-light text-danger" onclick="deleteSupervisorZone(${sz.id})" title="Hapus"><i class="fa-solid fa-trash"></i></button>
-                </td>
-            </tr>`;
-    }).join("");
-}
-
-// Pencarian karyawan (bukan dropdown biasa -- bisa ribuan baris).
-// Debounce sederhana 300ms supaya tidak query tiap ketikan huruf.
-let supervisorSearchTimeout = null;
-function handleSupervisorEmployeeSearch() {
-    clearTimeout(supervisorSearchTimeout);
-    const query = document.getElementById("sz_employee_search").value.trim();
-    const resultsEl = document.getElementById("sz_employee_search_results");
-
-    if (query.length < 3) {
-        resultsEl.innerHTML = "";
-        return;
-    }
-
-    supervisorSearchTimeout = setTimeout(async () => {
-        const { data, error } = await supabaseClient
-            .schema("hrd")
-            .from("employees")
-            .select("id, nama, nik_karyawan")
-            .or(`nama.ilike.%${query}%,nik_karyawan.ilike.%${query}%`)
-            .eq("is_active", true)
-            .limit(10);
-
-        if (error || !data || data.length === 0) {
-            resultsEl.innerHTML = `<div class="list-group-item small text-muted">Tidak ditemukan.</div>`;
-            return;
-        }
-
-        resultsEl.innerHTML = data.map(emp => `
-            <button type="button" class="list-group-item list-group-item-action small" onclick='selectSupervisorEmployee(${JSON.stringify(emp)})'>
-                ${emp.nama} <span class="text-muted">(${emp.nik_karyawan})</span>
-            </button>`).join("");
-    }, 300);
-}
-
-function selectSupervisorEmployee(emp) {
-    selectedSupervisorEmployee = emp;
-    document.getElementById("sz_selected_employee_id").value = emp.id;
-    document.getElementById("sz_employee_search").value = `${emp.nama} (${emp.nik_karyawan})`;
-    document.getElementById("sz_employee_search_results").innerHTML = "";
-}
-
-function openSupervisorZoneModal(editId = null) {
-    const form = document.getElementById("formSupervisorZone");
-    if (form) form.reset();
-    editingSupervisorZoneId = editId;
-    selectedSupervisorEmployee = null;
-    document.getElementById("sz_employee_search_results").innerHTML = "";
-
-    const title = document.getElementById("modalSupervisorZoneTitle");
-    const searchWrapper = document.getElementById("sz_employee_search_wrapper");
-    const zonaWrapper = document.getElementById("sz_zona_wrapper");
-    const deptWrapper = document.getElementById("sz_dept_wrapper");
-
-    if (editId === null) {
-        // ---- MODE TAMBAH ----
-        if (title) title.textContent = "Tambah Supervisor Zona";
-        searchWrapper.classList.remove("d-none");
-        zonaWrapper.classList.remove("d-none");
-        deptWrapper.classList.remove("d-none");
-        document.getElementById("sz_edit_id").value = "";
-        renderZonaDropdowns();
-
-    } else {
-        // ---- MODE EDIT -- Karyawan, Zona & Departemen DIKUNCI ----
-        const sz = supervisorZonesList.find(x => x.id === editId);
-        if (!sz) { alert("Data tidak ditemukan."); return; }
-
-        const zona = zonaList.find(z => z.id === sz.zona_id);
-        const dept = departmentList.find(d => d.id === sz.departemen_id);
-
-        if (title) title.textContent = "Edit Supervisor Zona";
-        searchWrapper.classList.add("d-none");
-        zonaWrapper.classList.add("d-none");
-        deptWrapper.classList.add("d-none");
-
-        document.getElementById("sz_edit_id").value = sz.id;
-        document.getElementById("sz_selected_employee_id").value = sz.employee_id;
-        document.getElementById("sz_is_active").value = sz.is_active ? "true" : "false";
-
-        // Tampilkan info identitas yg dikunci sebagai teks info saja
-        const infoEl = document.getElementById("sz_employee_selected_display");
-        infoEl.classList.remove("d-none");
-        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">Zona: <strong>${zona?.zona_name || '-'}</strong> | Departemen: <strong>${dept?.department_name || '-'}</strong> (tidak bisa diubah di sini -- hapus & buat baru kalau perlu pindah)</div>`;
-    }
-
-    new bootstrap.Modal(document.getElementById("modalSupervisorZone")).show();
-}
-
-async function handleSaveSupervisorZone(e) {
-    if (e) e.preventDefault();
-
-    const isActive = document.getElementById("sz_is_active").value === "true";
-
-    const btnSubmit = e.target.querySelector("button[type='submit']");
-    const origText = btnSubmit ? btnSubmit.innerHTML : "Simpan";
-    if (btnSubmit) {
-        btnSubmit.disabled = true;
-        btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...`;
-    }
-
-    try {
-        if (editingSupervisorZoneId !== null) {
-            // ---- UPDATE -- hanya status ----
-            const { error } = await supabaseClient
-                .from("supervisor_zones")
-                .update({ is_active: isActive })
-                .eq("id", editingSupervisorZoneId);
-            if (error) throw error;
-
-        } else {
-            // ---- INSERT BARU ----
-            const employeeId = document.getElementById("sz_selected_employee_id").value;
-            const zonaId = parseInt(document.getElementById("sz_zona_id").value);
-            const departemenId = parseInt(document.getElementById("sz_departemen_id").value);
-
-            if (!employeeId) {
-                throw new Error("Pilih karyawan dari hasil pencarian dulu.");
-            }
-            if (!departemenId) {
-                throw new Error("Pilih departemen dulu.");
-            }
-
-            // Cek duplikat: 1 zona + 1 departemen hanya boleh punya 1 supervisor aktif
-            if (isActive) {
-                const dup = supervisorZonesList.find(x =>
-                    x.is_active && x.zona_id === zonaId && x.departemen_id === departemenId);
-                if (dup) {
-                    throw new Error("Zona + Departemen ini sudah punya supervisor aktif. Nonaktifkan atau hapus dulu supervisor lama.");
-                }
-            }
-
-            const { error } = await supabaseClient.from("supervisor_zones").insert([{
-                employee_id: employeeId,
-                zona_id: zonaId,
-                departemen_id: departemenId,
-                is_active: isActive
-            }]);
-
-            if (error) throw error;
-        }
-
-        bootstrap.Modal.getInstance(document.getElementById("modalSupervisorZone"))?.hide();
-        await loadSupervisorZonesList();
-        alert(editingSupervisorZoneId !== null ? "Supervisor Zona berhasil diperbarui!" : "Supervisor Zona berhasil ditambahkan!");
-
-    } catch (err) {
-        alert("Gagal menyimpan: " + (err.message || err));
-    } finally {
-        editingSupervisorZoneId = null;
-        if (btnSubmit) {
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = origText;
-        }
-    }
-}
-
-async function deleteSupervisorZone(id) {
-    if (!confirm("Yakin hapus supervisor dari zona ini?")) return;
-    try {
-        const { error } = await supabaseClient.from("supervisor_zones").delete().eq("id", id);
-        if (error) throw error;
-        await loadSupervisorZonesList();
-    } catch (e) {
-        alert("Gagal menghapus: " + (e.message || e));
-    }
-}
+// Catatan: pengaturan Supervisor Zona sudah dipindah ke master_data.js
+// (menu "Zona Supervisor" di halaman Master Data).
