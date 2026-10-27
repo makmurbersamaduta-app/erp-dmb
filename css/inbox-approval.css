@@ -1,0 +1,58 @@
+/* File: css/inbox-approval.css
+   Tambahan tampilan khusus tab Persetujuan di Inbox ERP.
+   Dimuat SETELAH css/inbox.css. Semua kelas berawalan "apv-" supaya tidak
+   bentrok dengan kelas yang sudah ada. Tema: Simple Profesional. */
+
+/* ===== Pesan di atas daftar ===== */
+.apv-msg { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; font-size: .82rem; line-height: 1.4; border: 1px solid transparent; }
+.apv-msg-error   { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.apv-msg-success { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.apv-msg-info    { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+
+/* ===== Baris jenis pengajuan ===== */
+.apv-group { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; overflow: hidden; }
+.apv-group-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: transparent; border: 0; text-align: left; cursor: pointer; font: inherit; color: #0f172a; }
+.apv-group-icon { width: 34px; height: 34px; border-radius: 8px; background: #eff6ff; color: #0d6efd; display: flex; align-items: center; justify-content: center; flex: none; }
+.apv-group-title { flex: 1; font-size: .9rem; font-weight: 700; }
+.apv-count { background: #dc2626; color: #fff; font-size: .7rem; font-weight: 700; min-width: 20px; padding: 2px 7px; border-radius: 10px; text-align: center; }
+.apv-soon { font-size: .68rem; font-weight: 600; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; }
+.apv-chevron { color: #94a3b8; font-size: .8rem; transition: transform .15s; }
+.apv-group.open > .apv-group-head .apv-chevron { transform: rotate(90deg); }
+.apv-group.is-soon .apv-group-head { cursor: default; opacity: .65; }
+.apv-group.is-soon .apv-group-icon { background: #f1f5f9; color: #64748b; }
+
+/* ===== Daftar pengajuan ===== */
+.apv-list { border-top: 1px solid #e2e8f0; }
+.apv-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: transparent; border: 0; border-bottom: 1px solid #e2e8f0; text-align: left; cursor: pointer; font: inherit; color: #0f172a; }
+.apv-item:last-child { border-bottom: 0; }
+.apv-item:hover { background: #f8fafc; }
+.apv-item.active { background: #eff6ff; box-shadow: inset 3px 0 0 #0d6efd; }
+.apv-item-main { flex: 1; min-width: 0; }
+.apv-item-title { font-size: .85rem; font-weight: 700; }
+.apv-item-sub { font-size: .74rem; color: #64748b; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apv-empty { padding: 16px 14px; text-align: center; font-size: .8rem; color: #64748b; }
+
+/* ===== Panel detail ===== */
+.apv-detail { padding: 18px 20px; }
+.apv-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.apv-detail-title { font-size: 1.05rem; font-weight: 700; color: #0f172a; }
+.apv-detail-sub { font-size: .78rem; color: #64748b; }
+.apv-info { margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 16px; }
+.apv-info-cell { min-width: 0; }
+.apv-info dt { font-size: .68rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+.apv-info dd { margin: 2px 0 0; font-size: .86rem; font-weight: 600; color: #0f172a; word-break: break-word; }
+.apv-table th { font-size: .72rem; white-space: nowrap; }
+.apv-table td { font-size: .8rem; }
+.apv-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0; display: block; }
+.apv-section-title { margin: 18px 0 8px; font-size: .78rem; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: .03em; }
+.apv-history { list-style: none; margin: 0; padding: 0; font-size: .8rem; }
+.apv-history li { padding: 6px 0 6px 12px; border-left: 2px solid #e2e8f0; margin-left: 4px; }
+.apv-history-note { margin-top: 2px; color: #334155; }
+
+/* ===== Konfirmasi dan tombol keputusan ===== */
+.apv-confirm { margin-top: 16px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+.apv-confirm-text { font-size: .85rem; font-weight: 600; color: #0f172a; margin-bottom: 8px; }
+.apv-label { font-size: .75rem; font-weight: 700; }
+.apv-detail-msg { margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: .8rem; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.apv-detail-msg-info { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+.apv-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }

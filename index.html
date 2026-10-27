@@ -34,6 +34,12 @@
                 <img src="assets/images/logo-dmb.jpg" alt="Logo DMB" class="header-logo-img" onerror="this.style.display='none'">
                 <h6 class="mb-0 fw-semibold text-secondary small">Control & Management Center</h6>
             </div>
+        <div class="d-flex align-items-center gap-3 ms-auto">
+
+        <div class="header-action position-relative" id="btnInbox" title="Buka Inbox">
+          <i class="fa-solid fa-bell notification-bell"></i>
+          <span class="badge-count" id="lblNotificationCount" style="display:none;">0</span>
+        </div>
 
             <div class="dropdown">
                 <button class="btn btn-light dropdown-toggle d-flex align-items-center py-1 px-2 border-0 bg-transparent" type="button" data-bs-toggle="dropdown">
@@ -51,6 +57,7 @@
                     <li><a class="dropdown-item small text-danger fw-bold" href="#" onclick="handleLogout()"><i class="fa-solid fa-right-from-bracket me-2"></i>Keluar (Logout)</a></li>
                 </ul>
             </div>
+        </div>
         </header>
 
         <main class="content-body">
@@ -123,6 +130,11 @@
 <script src="js/auth.js"></script>
 <script src="js/sidebar.js"></script>
 <script src="js/dashboard.js"></script>
+<script >
+  document.getElementById("btnInbox")?.addEventListener("click", () => {
+      window.location.href = "inbox.html";
+    });
+  </script>
 
 </body>
 </html>

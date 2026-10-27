@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inbox - DMB ERP</title>
+
+    <!-- Bootstrap & Icon -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS Global Project (halaman ini sejajar index.html, jadi tanpa ../) -->
+    <link href="css/base.css" rel="stylesheet">
+    <link href="css/components.css" rel="stylesheet">
+    <link href="css/layout.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+
+    <!-- CSS Khusus Halaman Ini -->
+    <link href="css/inbox.css" rel="stylesheet">
+    <!-- CSS tambahan khusus tampilan Persetujuan (baris jenis, detail, tombol keputusan) -->
+    <link href="css/inbox-approval.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- HEADER (tanpa sidebar, ada tombol kembali) -->
+    <header class="inbox-header">
+        <button type="button" class="inbox-btn-back" id="btnBack" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <h1 class="inbox-header-title">Inbox</h1>
+    </header>
+
+    <!-- MAIN CONTENT -->
+    <main class="inbox-main">
+
+        <!-- Tab: Notifikasi / Persetujuan -->
+        <div class="inbox-tabs" role="tablist">
+            <button type="button" class="inbox-tab active" role="tab" id="tabBtnNotifikasi"
+                    data-tab="notifikasi" aria-selected="true" aria-controls="panelNotifikasi">
+                Notifikasi <span class="inbox-badge d-none" id="badgeNotifikasi">0</span>
+            </button>
+            <button type="button" class="inbox-tab" role="tab" id="tabBtnPersetujuan"
+                    data-tab="persetujuan" aria-selected="false" aria-controls="panelPersetujuan">
+                Persetujuan <span class="inbox-badge d-none" id="badgePersetujuan">0</span>
+            </button>
+        </div>
+
+        <!-- Panel Notifikasi -->
+        <section class="inbox-panel active" id="panelNotifikasi" role="tabpanel" aria-labelledby="tabBtnNotifikasi">
+            <div class="inbox-layout">
+                <div class="inbox-list" id="listNotifikasi">
+                    <div class="inbox-empty">
+                        <i class="fa-regular fa-bell-slash"></i>
+                        Belum ada notifikasi.
+                    </div>
+                </div>
+                <div class="inbox-detail" id="detailNotifikasi">
+                    <div class="inbox-empty">
+                        <i class="fa-regular fa-envelope-open"></i>
+                        Pilih notifikasi untuk melihat detailnya.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Panel Persetujuan -->
+        <section class="inbox-panel" id="panelPersetujuan" role="tabpanel" aria-labelledby="tabBtnPersetujuan">
+            <div class="inbox-layout">
+                <div class="inbox-list" id="listPersetujuan">
+                    <!-- Pesan (error / keberhasilan). Teks diisi oleh js/inbox.js -->
+                    <div class="apv-msg d-none" id="apvMsg"></div>
+
+                    <!-- Satu baris per jenis pengajuan. Hanya Permintaan Barang yang aktif. -->
+                    <div class="apv-group" data-type="permintaan_barang">
+                        <button type="button" class="apv-group-head">
+                            <span class="apv-group-icon"><i class="fa-solid fa-box-open"></i></span>
+                            <span class="apv-group-title">Permintaan Barang</span>
+                            <span class="apv-count d-none">0</span>
+                            <i class="fa-solid fa-chevron-right apv-chevron"></i>
+                        </button>
+                        <div class="apv-list d-none"></div>
+                    </div>
+
+                    <div class="apv-group is-soon" data-type="overtime">
+                        <button type="button" class="apv-group-head">
+                            <span class="apv-group-icon"><i class="fa-regular fa-clock"></i></span>
+                            <span class="apv-group-title">Overtime</span>
+                            <span class="apv-soon">Segera</span>
+                        </button>
+                    </div>
+
+                    <div class="apv-group is-soon" data-type="time_off">
+                        <button type="button" class="apv-group-head">
+                            <span class="apv-group-icon"><i class="fa-regular fa-calendar-minus"></i></span>
+                            <span class="apv-group-title">Time Off</span>
+                            <span class="apv-soon">Segera</span>
+                        </button>
+                    </div>
+
+                    <div class="apv-group is-soon" data-type="change_shift">
+                        <button type="button" class="apv-group-head">
+                            <span class="apv-group-icon"><i class="fa-solid fa-right-left"></i></span>
+                            <span class="apv-group-title">Change Shift</span>
+                            <span class="apv-soon">Segera</span>
+                        </button>
+                    </div>
+
+                    <div class="apv-group is-soon" data-type="attendance">
+                        <button type="button" class="apv-group-head">
+                            <span class="apv-group-icon"><i class="fa-solid fa-fingerprint"></i></span>
+                            <span class="apv-group-title">Attendance</span>
+                            <span class="apv-soon">Segera</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="inbox-detail" id="detailPersetujuan">
+                    <div class="inbox-empty">
+                        <i class="fa-regular fa-file-lines"></i>
+                        Pilih pengajuan untuk melihat detailnya.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase.js"></script>
+    <script src="js/approval-common.js"></script>
+    <script src="js/inbox.js"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+/* File: css/pages/inbox.css
+   Halaman Inbox ERP (desktop fleksibel).
+   Semua class berawalan "inbox-" supaya tidak bentrok dengan CSS global. */
+
+/* ---------- 1. WARNA & UKURAN (ubah di sini kalau perlu menyesuaikan tema ERP) ---------- */
+:root {
+    --inbox-primary: #0d6efd;
+    --inbox-dark: #1e293b;
+    --inbox-muted: #64748b;
+    --inbox-border: #e2e8f0;
+    --inbox-bg: #f8fafc;
+    --inbox-card: #ffffff;
+    --inbox-danger: #dc2626;
+    --inbox-header-height: 60px;
+}
+
+/* ---------- 2. HEADER ---------- */
+.inbox-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: var(--inbox-header-height);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 24px;
+    background: var(--inbox-card);
+    border-bottom: 1px solid var(--inbox-border);
+}
+.inbox-btn-back {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--inbox-dark);
+    font-size: 1.05rem;
+    cursor: pointer;
+}
+.inbox-btn-back:hover { background: var(--inbox-bg); }
+.inbox-header-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--inbox-dark);
+}
+
+/* ---------- 3. AREA UTAMA: melebar mengikuti layar, dibatasi 1280px ---------- */
+.inbox-main {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 20px 24px 32px;
+}
+
+/* ---------- 4. TAB ---------- */
+.inbox-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--inbox-border);
+    margin-bottom: 16px;
+}
+.inbox-tab {
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--inbox-muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+}
+.inbox-tab:hover { color: var(--inbox-dark); }
+.inbox-tab.active {
+    color: var(--inbox-primary);
+    border-bottom-color: var(--inbox-primary);
+}
+.inbox-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: var(--inbox-danger);
+    color: #fff;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+/* ---------- 5. PANEL ---------- */
+.inbox-panel { display: none; }
+.inbox-panel.active { display: block; }
+
+/* Layar kecil/tablet: daftar saja satu kolom, panel detail disembunyikan */
+.inbox-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+}
+.inbox-detail { display: none; }
+
+/* Layar desktop (>= 992px): daftar di kiri, detail di kanan */
+@media (min-width: 992px) {
+    .inbox-layout {
+        grid-template-columns: minmax(320px, 400px) 1fr;
+        min-height: calc(100vh - var(--inbox-header-height) - 140px);
+    }
+    .inbox-detail { display: block; }
+}
+
+.inbox-list,
+.inbox-detail {
+    background: var(--inbox-card);
+    border: 1px solid var(--inbox-border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* ---------- 6. TAMPILAN KOSONG ---------- */
+.inbox-empty {
+    height: 100%;
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 24px;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--inbox-muted);
+}
+.inbox-empty i {
+    font-size: 2.2rem;
+    color: var(--inbox-border);
+}

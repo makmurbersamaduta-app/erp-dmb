@@ -16,10 +16,10 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <link href="../../css/base.css" rel="stylesheet">
-    <link href="../../css/components.css" rel="stylesheet">
-    <link href="../../css/layout.css" rel="stylesheet">
-    <link href="../../css/style.css" rel="stylesheet">
+    <link href="../css/base.css" rel="stylesheet">
+    <link href="../css/components.css" rel="stylesheet">
+    <link href="../css/layout.css" rel="stylesheet">
+    <link href="../css/style.css" rel="stylesheet">
 
     <!-- ============================================================
          KELOMPOK 2: STYLE HALAMAN
@@ -122,6 +122,8 @@
         .btn-tool:hover { border-color: var(--db-primary); }
         .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-tool-primary { background: var(--db-primary); border-color: var(--db-primary); color: #fff; font-weight: 600; }
+        .btn-tool[hidden] { display: none; }
+        .btn-tool:disabled { opacity: 0.55; cursor: not-allowed; }
         .btn-tool-primary:hover { background: var(--db-primary-dark); border-color: var(--db-primary-dark); }
 
         .db-filter-wrapper { position: relative; }
@@ -188,9 +190,17 @@
         .db-table tbody tr:hover { background: #f7fafc; }
         .col-no { width: 50px; text-align: center !important; }
         .col-num { text-align: right !important; }
+        .col-avail { text-align: center !important; white-space: nowrap; }
+        .avail-all, .avail-chk { width: 16px; height: 16px; margin-left: 6px; vertical-align: middle; accent-color: var(--db-primary); cursor: pointer; }
+        .avail-chk { margin-left: 0; }
         .col-desc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
         .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--db-text-muted); white-space: normal !important; }
         .data-empty-cell { color: var(--db-text-muted); font-style: italic; }
+
+        /* --- Tombol Atur Ketersediaan (kanan bawah tabel) --- */
+        .db-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; flex-shrink: 0; flex-wrap: wrap; }
+        .avail-info { font-size: 12.5px; color: var(--db-text-muted); margin-right: auto; }
+        .avail-info[hidden] { display: none; }
 
         /* --- Pagination --- */
         .db-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; flex-shrink: 0; }
@@ -305,17 +315,33 @@
                         <th class="col-num">Harga Amortisasi</th>
                         <th class="col-num">Harga Jual</th>
                         <th class="col-num">Harga Internal</th>
+                        <th class="col-avail">Makassar <input type="checkbox" class="avail-all" data-col="is_makassar" title="Centang / lepas semua di halaman ini" hidden></th>
+                        <th class="col-avail">Surabaya <input type="checkbox" class="avail-all" data-col="is_surabaya" title="Centang / lepas semua di halaman ini" hidden></th>
+                        <th class="col-avail">Bekasi <input type="checkbox" class="avail-all" data-col="is_bekasi" title="Centang / lepas semua di halaman ini" hidden></th>
                     </tr>
                 </thead>
                 <tbody id="barangTableBody">
                     <tr class="row-loading">
-                        <td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
+                        <td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td>
                     </tr>
                 </tbody>
             </table>
         </div>
 
         <div class="db-pagination" id="barangPagination"></div>
+
+        <!-- ========================================================
+             KELOMPOK 5B: ATUR KETERSEDIAAN
+             Fungsi: tombol di kanan bawah tabel untuk mengubah kolom Makassar,
+             Surabaya, Bekasi menjadi kotak centang. Saat mode aktif muncul
+             tombol "Batal" dan "Simpan Perubahan".
+             ======================================================== -->
+        <div class="db-actions">
+            <span class="avail-info" id="availInfo" hidden></span>
+            <button type="button" class="btn-tool" id="btnAvailBatal" hidden>Batal</button>
+            <button type="button" class="btn-tool btn-tool-primary" id="btnAvailSimpan" hidden disabled><i class="fa-solid fa-floppy-disk"></i> Simpan Perubahan</button>
+            <button type="button" class="btn-tool" id="btnAvailToggle"><i class="fa-solid fa-list-check"></i> Atur Ketersediaan</button>
+        </div>
     </main>
 
     <!-- ============================================================

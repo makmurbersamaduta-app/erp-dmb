@@ -175,6 +175,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupBarangModal();
     setupHargaModal();
     setupKategoriModal();
+    setupAvailability();
 
     try {
         await loadKategori();
@@ -281,7 +282,7 @@ const BARANG_COLUMNS = "id, kode_barang, nama_barang, satuan, deskripsi, level_a
 async function loadBarangPage() {
     const myReq = ++state.reqId;
     const tbody = $("barangTableBody");
-    tbody.innerHTML = `<tr class="row-loading"><td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
+    tbody.innerHTML = `<tr class="row-loading"><td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
 
     try {
         let query = db().from("data_barang").select(BARANG_COLUMNS, { count: "exact" }).eq("is_active", true);
@@ -306,14 +307,27 @@ async function loadBarangPage() {
         renderPagination();
     } catch (err) {
         console.error("Gagal memuat data barang:", err);
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="7">Gagal memuat data: ${esc(err.message)}</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Gagal memuat data: ${esc(err.message)}</td></tr>`;
     }
+}
+
+// Sel ketersediaan: tampilan biasa = ✅ / ❌ ("-" jika belum diatur / kosong),
+// mode "Atur Ketersediaan" = kotak centang.
+function availCellHtml(r, col) {
+    if (avail.editing) {
+        return `<td class="col-avail"><input type="checkbox" class="avail-chk" data-col="${col}" ${effectiveAvail(r, col) ? "checked" : ""}></td>`;
+    }
+    const v = r[col];
+    if (v === true) return `<td class="col-avail">✅</td>`;
+    if (v === false) return `<td class="col-avail">❌</td>`;
+    return `<td class="col-avail"><span class="data-empty-cell" title="Belum diatur">-</span></td>`;
 }
 
 function renderBarangTable() {
     const tbody = $("barangTableBody");
     if (state.data.length === 0) {
-        tbody.innerHTML = `<tr class="row-empty"><td colspan="7">Tidak ada data ditemukan.</td></tr>`;
+        tbody.innerHTML = `<tr class="row-empty"><td colspan="10">Tidak ada data ditemukan.</td></tr>`;
+        if (avail.editing) syncHeaderChecks();
         return;
     }
     const start = (state.page - 1) * ROWS_PER_PAGE;
@@ -321,7 +335,7 @@ function renderBarangTable() {
     const money = (v) => (v === null || v === undefined) ? dash : formatRupiah(v);
 
     tbody.innerHTML = state.data.map((r, i) => `
-        <tr class="row-clickable" data-id="${esc(r.id)}">
+        <tr class="${avail.editing ? "" : "row-clickable"}" data-id="${esc(r.id)}">
             <td class="col-no">${start + i + 1}</td>
             <td>${esc(r.kode_barang)}</td>
             <td>${r.nama_barang ? esc(r.nama_barang) : dash}</td>
@@ -329,8 +343,12 @@ function renderBarangTable() {
             <td class="col-num">${money(r.price?.harga_amortisasi)}</td>
             <td class="col-num">${money(r.price?.harga_jual)}</td>
             <td class="col-num">${money(r.price?.harga_internal)}</td>
+            ${availCellHtml(r, "is_makassar")}
+            ${availCellHtml(r, "is_surabaya")}
+            ${availCellHtml(r, "is_bekasi")}
         </tr>
     `).join("");
+    if (avail.editing) syncHeaderChecks();
 }
 
 function renderPagination() {
@@ -769,6 +787,7 @@ function setupBarangModal() {
 
     $("btnTambah").addEventListener("click", openAddModal);
     $("barangTableBody").addEventListener("click", (e) => {
+        if (avail.editing) return;          // mode Atur Ketersediaan: klik baris tidak membuka detail
         const tr = e.target.closest("tr[data-id]");
         if (!tr) return;
         const row = state.data.find(r => String(r.id) === tr.dataset.id);
@@ -1498,4 +1517,154 @@ function getKetersediaan() {
         out[f.column] = checked ? checked.value === "true" : null;
     });
     return out;
+}
+
+// ===================================================
+// KELOMPOK 21: ATUR KETERSEDIAAN PER CABANG (Makassar / Surabaya / Bekasi)
+// Fungsi: kolom Makassar, Surabaya, Bekasi di tabel menampilkan ✅ (tersedia)
+// atau ❌ (tidak tersedia). Tombol "Atur Ketersediaan" di kanan bawah mengubah
+// kolom itu menjadi kotak centang (centang = tersedia). Kotak di header
+// kolom mencentang / melepas SEMUA baris di halaman yang sedang tampil.
+// "Simpan Perubahan" mengirim hanya yang berubah dalam satu transaksi
+// (fungsi database ga.set_ketersediaan_barang); setelah itu tampilan kembali
+// ke ✅ / ❌. Perubahan tetap tersimpan sementara jika Anda pindah halaman,
+// mencari, atau memfilter selama mode ini aktif.
+// WAJIB: jalankan data-barang-ketersediaan.sql di Supabase.
+// ===================================================
+const RPC_SET_KETERSEDIAAN = "set_ketersediaan_barang";
+const AVAIL_COLS = ["is_makassar", "is_surabaya", "is_bekasi"];
+
+// pending: id barang -> { is_makassar?: true/false, ... } (hanya kolom yang BERUBAH dari nilai awal)
+const avail = { editing: false, pending: new Map(), saving: false };
+
+// Nilai kotak centang sebuah sel: perubahan yang belum disimpan, atau nilai dari database
+// (kosong / NULL dianggap tidak tercentang)
+function effectiveAvail(row, col) {
+    const p = avail.pending.get(String(row.id));
+    if (p && Object.prototype.hasOwnProperty.call(p, col)) return p[col];
+    return row[col] === true;
+}
+
+// Mencatat / membatalkan perubahan satu sel. Jika nilainya kembali sama seperti awal,
+// perubahan dihapus (dan nilai NULL lama tetap NULL).
+function setAvail(row, col, value) {
+    const id = String(row.id);
+    const original = row[col] === true;
+    const p = avail.pending.get(id) || {};
+    if (value === original) delete p[col]; else p[col] = value;
+    if (Object.keys(p).length === 0) avail.pending.delete(id); else avail.pending.set(id, p);
+}
+
+function changeCount() {
+    let n = 0;
+    avail.pending.forEach(p => { n += Object.keys(p).length; });
+    return n;
+}
+
+function setupAvailability() {
+    $("btnAvailToggle").addEventListener("click", enterAvailEdit);
+    $("btnAvailBatal").addEventListener("click", cancelAvailEdit);
+    $("btnAvailSimpan").addEventListener("click", saveAvailEdit);
+
+    // Kotak centang per baris (satu pendengar untuk seluruh tabel)
+    $("barangTableBody").addEventListener("change", (e) => {
+        if (!avail.editing) return;
+        const cb = e.target.closest(".avail-chk");
+        if (!cb) return;
+        const tr = cb.closest("tr[data-id]");
+        const row = state.data.find(r => String(r.id) === tr.dataset.id);
+        if (!row) return;
+        setAvail(row, cb.dataset.col, cb.checked);
+        updateAvailUi();
+        syncHeaderChecks();
+    });
+
+    // Kotak centang di header: centang / lepas semua baris di halaman ini untuk kolom tsb
+    document.querySelectorAll(".avail-all").forEach(headCb => {
+        headCb.addEventListener("change", () => {
+            if (!avail.editing) return;
+            const col = headCb.dataset.col;
+            const value = headCb.checked;
+            state.data.forEach(row => setAvail(row, col, value));
+            $("barangTableBody").querySelectorAll(`.avail-chk[data-col="${col}"]`).forEach(c => { c.checked = value; });
+            updateAvailUi();
+            syncHeaderChecks();
+        });
+    });
+
+    // Peringatan jika halaman ditutup saat masih ada perubahan yang belum disimpan
+    window.addEventListener("beforeunload", (e) => {
+        if (avail.editing && changeCount() > 0) { e.preventDefault(); e.returnValue = ""; }
+    });
+}
+
+// Status kotak centang di header (tercentang semua / sebagian / tidak ada) untuk halaman ini
+function syncHeaderChecks() {
+    document.querySelectorAll(".avail-all").forEach(headCb => {
+        const col = headCb.dataset.col;
+        const rows = state.data;
+        const checkedCount = rows.filter(r => effectiveAvail(r, col)).length;
+        headCb.checked = rows.length > 0 && checkedCount === rows.length;
+        headCb.indeterminate = checkedCount > 0 && checkedCount < rows.length;
+    });
+}
+
+// Menampilkan / menyembunyikan tombol dan kotak header sesuai mode
+function updateAvailUi() {
+    const ed = avail.editing;
+    const n = changeCount();
+    $("btnAvailToggle").hidden = ed;
+    $("btnAvailBatal").hidden = !ed;
+    $("btnAvailSimpan").hidden = !ed;
+    $("availInfo").hidden = !ed;
+    document.querySelectorAll(".avail-all").forEach(cb => { cb.hidden = !ed; });
+    $("btnAvailSimpan").disabled = (n === 0) || avail.saving;
+    $("availInfo").textContent = n > 0
+        ? `Centang = Tersedia. ${n} perubahan belum disimpan.`
+        : "Centang = Tersedia. Belum ada perubahan.";
+}
+
+function enterAvailEdit() {
+    avail.editing = true;
+    avail.pending.clear();
+    updateAvailUi();
+    renderBarangTable();
+}
+
+function cancelAvailEdit() {
+    if (avail.saving) return;
+    if (changeCount() > 0 && !confirm("Perubahan yang belum disimpan akan dibuang. Lanjutkan?")) return;
+    avail.editing = false;
+    avail.pending.clear();
+    updateAvailUi();
+    renderBarangTable();
+}
+
+async function saveAvailEdit() {
+    if (avail.saving || changeCount() === 0) return;
+    const n = changeCount();
+    const items = Array.from(avail.pending.entries()).map(([id, cols]) => ({ id, ...cols }));
+
+    const btn = $("btnAvailSimpan");
+    avail.saving = true;
+    setBusy(btn, true, "Menyimpan...");
+    try {
+        // Satu panggilan = satu transaksi: semua perubahan tersimpan, atau tidak ada sama sekali
+        const { error } = await db().rpc(RPC_SET_KETERSEDIAAN, { p: { items } });
+        if (error) throw error;
+
+        avail.editing = false;
+        avail.pending.clear();
+        avail.saving = false;
+        updateAvailUi();
+        await loadBarangPage();            // tampilan kembali ke ✅ / ❌ dengan data terbaru
+        alert(`${n} perubahan ketersediaan tersimpan.`);
+    } catch (err) {
+        console.error("Gagal menyimpan ketersediaan:", err);
+        alert("Tidak ada perubahan yang tersimpan.\n" + err.message);
+    } finally {
+        avail.saving = false;
+        setBusy(btn, false);
+        updateAvailUi();
+    }
 }

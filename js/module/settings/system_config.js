@@ -9,6 +9,7 @@
 let systemRoles = [];
 let systemMenus = [];
 let menuCategories = [];        // dari tabel public.menu_categories: [{category_name, category_code}]
+let menuCategoriesError = "";   // pesan error kalau gagal load menu_categories (kosong = sukses)
 let currentPermissions = {};    // state lokal checkbox SEBELUM disimpan ke DB
 let originalPermissions = {};   // snapshot terakhir yg TERSIMPAN di DB -- dipakai utk deteksi "ada perubahan atau tidak"
 let editingMenuId = null;       // null = mode Tambah Menu, angka = mode Edit Menu
@@ -174,8 +175,11 @@ async function loadMenuCategories() {
     if (error) {
         console.error("Gagal memuat kamus kategori:", error.message);
         menuCategories = [];
+        menuCategoriesError = error.message;   // ditampilkan di dropdown supaya tidak gagal diam-diam
+        renderCategoryDropdown();
         return;
     }
+    menuCategoriesError = "";
     menuCategories = data || [];
     renderCategoryDropdown();
 }
@@ -187,6 +191,11 @@ function renderCategoryDropdown() {
     let html = menuCategories.map(c =>
         `<option value="${c.category_name}" data-code="${c.category_code}">${c.category_name} (${c.category_code})</option>`
     ).join("");
+
+    // Kalau load gagal, tampilkan alasannya (opsi non-aktif, tidak bisa dipilih)
+    if (menuCategoriesError) {
+        html = `<option value="" disabled>(Gagal memuat kategori: ${menuCategoriesError})</option>` + html;
+    }
 
     html += `<option value="__new__">+ Kategori Baru...</option>`;
     sel.innerHTML = html;
@@ -646,7 +655,7 @@ function openMenuModal(editId = null) {
         categoryWrapper.classList.remove("d-none");
         renderCategoryDropdown(); // pastikan opsi "+ Kategori Baru..." selalu di paling bawah & fresh
         document.getElementById("f_menu_edit_id").value = "";
-        updateMenuCodePreview();
+        handleCategoryChange();   // sinkronkan field "Kategori Baru" dgn pilihan dropdown (+ update preview kode)
 
     } else {
         // ---- MODE EDIT ----

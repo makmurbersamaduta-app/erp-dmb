@@ -66,7 +66,8 @@ function getFallbackMenus() {
         { menu_code: 'M-FILES-01', menu_name: 'Dokumen & Files', category: 'Files', path_url: 'modules/company/legality.html', icon_class: 'fa-solid fa-folder-open', sort_order: 70 },
         { menu_code: 'M-SET-01', menu_name: 'Data Pengguna', category: 'Settings', path_url: 'modules/settings/users.html', icon_class: 'fa-solid fa-user-gear', sort_order: 90 },
         { menu_code: 'M-SET-02', menu_name: 'Master Data', category: 'Settings', path_url: 'modules/settings/master_data.html', icon_class: 'fa-solid fa-database', sort_order: 91 },
-        { menu_code: 'M-SET-03', menu_name: 'Akses Maintenance', category: 'Settings', path_url: 'modules/settings/system_config.html', icon_class: 'fa-solid fa-gear', sort_order: 92 }
+        { menu_code: 'M-SET-03', menu_name: 'Akses Maintenance', category: 'Settings', path_url: 'modules/settings/system_config.html', icon_class: 'fa-solid fa-gear', sort_order: 92 },
+        { menu_code: 'M-SET-04', menu_name: 'Monitoring Approval', category: 'Settings', path_url: 'modules/settings/monitoring_persetujuan.html', icon_class: 'fa-solid fa-list-check', sort_order: 93 }
     ];
 }
 
