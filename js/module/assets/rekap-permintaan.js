@@ -155,6 +155,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setupTabs();
     $("btnDownload").addEventListener("click", handleDownload);
+    $("btnBarangMasuk").addEventListener("click", () => openActionPage("masuk", "Barang Masuk"));
+    $("btnBarangKeluar").addEventListener("click", () => openActionPage("keluar", "Barang Keluar"));
+    $("btnSuratJalan").addEventListener("click", () => openActionPage("suratJalan", "Surat Jalan"));
     if (state.canSwitch) setupCloseModal();
     updateTabUi();
     loadPage();
@@ -188,7 +191,7 @@ function updateTabUi() {
         btn.setAttribute("aria-selected", active ? "true" : "false");
     });
     $("branchTitle").textContent = branchName();
-    if (state.canSwitch) $("btnBack").href = `../../index.html?branch_id=${state.branchId}`;
+    if (state.canSwitch) $("btnBack").href = `catalog.html?branch_id=${state.branchId}`;
 }
 
 // ===================================================
@@ -378,7 +381,7 @@ async function openCloseModal() {
             const info = Number(o.jumlah_belum_terkirim) > 0 ? `${o.jumlah_belum_terkirim} barang belum terkirim` : "semua terkirim";
             return `<option value="${esc(o.id)}">${esc(o.kode_batch)}, ${esc(o.nama_pemohon || o.pemohon || "-")} (${esc(info)})</option>`;
         }).join("");
-        if (closeState.opts.length === 0) showRcMsg(`Tidak ada permintaan berstatus "Disetujui" yang aktif di cabang ini.`, "info");
+        if (closeState.opts.length === 0) showRcMsg(`Tidak ada permintaan berstatus "Disetujui" yang masih memiliki barang belum terkirim di cabang ini.`, "info");
     } catch (err) {
         console.error("Gagal memuat daftar permintaan:", err);
         $("rcKode").innerHTML = `<option value="">Pilih Kode Permintaan</option>`;
@@ -437,7 +440,7 @@ async function submitClose() {
         : "";
     const ok = confirm(
         `Tutup permintaan ${sel.kode_batch} (${sel.nama_pemohon || sel.pemohon || "-"})?${sisa}\n\n` +
-        "Permintaan akan hilang dari Barang Keluar, rekap ini, dan daftar permintaan pemohon. Tindakan ini tidak dapat dibatalkan dari halaman ini."
+        "Status permintaan menjadi \"Selesai\" dan permintaan akan hilang dari Barang Keluar, rekap ini, dan daftar permintaan pemohon. Tindakan ini tidak dapat dibatalkan dari halaman ini."
     );
     if (!ok) return;
 
