@@ -36,9 +36,19 @@
 
         /* --- Bar atas: Kembali (kiri) + tab cabang (kanan) --- */
         .ct-topbar {
-            display: flex; align-items: center; justify-content: space-between; gap: 16px;
-            padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--ct-border); flex-shrink: 0;
-        }
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);   /* kiri | judul | kanan, kiri dan kanan selalu sama lebar */
+    align-items: center;
+    gap: 16px;
+    padding: 14px 24px;
+    background: #fff;
+    border-bottom: 1px solid var(--ct-border);
+    flex-shrink: 0;
+}
+.btn-back { justify-self: start; }        /* Kembali tetap di kiri */
+.ct-tabs  { justify-self: end; }          /* tab tetap di kanan */
+.ct-title-block { margin-bottom: 0; }     /* judul sekarang di dalam header, margin bawahnya tidak lagi dibutuhkan */
+        
         .btn-back {
             display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--ct-radius);
             border: 1px solid var(--ct-border); background: var(--ct-bg-soft); color: var(--ct-primary-dark);
@@ -153,7 +163,7 @@
          Makassar = branch_id 2, Surabaya = branch_id 1.
          ============================================================ -->
     <header class="ct-topbar">
-        <a href="index.html" class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <a href="../../index.html" class="btn-back" id="btnBack"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
 
         <!-- KELOMPOK 3: JUDUL (baris kedua berganti sesuai cabang, diatur JS) -->
         <div class="ct-title-block">

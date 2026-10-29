@@ -14,6 +14,13 @@ let originalNikKaryawan = "";
 let isResigned = false;   // true jika karyawan non-aktif (resign) -> form terkunci permanen
 let dataLoaded = false;    // true setelah data karyawan selesai dimuat // NIK saat data pertama kali dimuat, untuk deteksi perubahan NIK
 
+// Role yang BOLEH melakukan koreksi riwayat, dibandingkan dengan roleId di erp_session.
+// Saat ini: role dengan id 1, 2, dan 3.
+const ROLE_ID_BOLEH_KOREKSI = [1, 2, 3];
+
+let riwayatAssignments = [];   // semua assignment karyawan, terbaru di atas
+let koreksiMode = null;        // 'cancel_mutation' | 'update_resign_date' | 'cancel_resign'
+
 let masterBranches = [];
 let masterCostCenters = [];
 let masterAreas = [];
@@ -287,7 +294,7 @@ async function loadEmployeeData(empId) {
     toggleNoAbsenStgVisibility();                            // Menampilkan/menyembunyikan field
 
         // Jalankan filter penempatan & bagian secara berjenjang
-        handlePlacementAndFiltering(false);
+        handlePlacementAndFiltering();
 
         setInputValue("costcenter_id", activeAssign.costcenter_id);
 
@@ -320,6 +327,10 @@ async function loadEmployeeData(empId) {
     // E. Semua field terkunci saat halaman dibuka (resign -> terkunci permanen)
     dataLoaded = true;
     setFormLocked(true);
+
+    // F. Riwayat penempatan & tombol koreksi
+    riwayatAssignments = sortedAssign;
+    renderRiwayatSection(emp);
 }
 
 // ==============================================================================
@@ -378,7 +389,7 @@ function handleAreaFiltering() {
     populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
 }
 
-async function handlePlacementAndFiltering(triggerAutoNik = true) {
+async function handlePlacementAndFiltering() {
     const branchVal = document.getElementById("branch_id")?.value || "";
     const ccSelect = document.getElementById("costcenter_id");
     const ccVal = ccSelect?.value || "";
@@ -410,137 +421,6 @@ async function handlePlacementAndFiltering(triggerAutoNik = true) {
     //    agar data bagian karyawan non-Borongan tetap ter-load dan tidak hilang.
     populateSelect("bagian_id", masterBagians, "id", "bagian_name", "-- Pilih Bagian --");
 
-    // 4. Update NIK Otomatis (HANYA JIKA BELUM ADA DATA MUTASI / RESIGN) (POIN 1b & POIN 2)
-    if (!hasCareerHistory && triggerAutoNik) {
-        await generateNikAuto(statusVal, branchVal, deptVal, startDateVal);
-    }
-}
-
-// Generate NIK Otomatis berdasarkan 3 Aturan Format NIK
-// Ambil SEMUA NIK yang cocok dengan pola LIKE, bertahap per 1000 baris.
-// (Supabase membatasi 1 request = max 1000 baris; tanpa ini NIK tertinggi bisa terlewat.)
-async function fetchNikList(likePattern) {
-    const PAGE = 1000;
-    let all = [];
-    while (true) {
-        const { data, error } = await supabaseClient
-            .schema('hrd')
-            .from('employees')
-            .select('nik_karyawan')
-            .like('nik_karyawan', likePattern)
-            .order('nik_karyawan', { ascending: true })
-            .range(all.length, all.length + PAGE - 1);
-        if (error) throw error; // JANGAN generate NIK dari data yang gagal dimuat
-        if (!data || data.length === 0) break;
-        all = all.concat(data);
-    }
-    return all;
-}
-
-async function generateNikAuto(statusKaryawan, branchId, deptId, startDateVal) {
-    const nikInput = document.getElementById("nik_karyawan");
-    if (!nikInput) return;
-
-    try {
-        let generatedNik = "";
-
-        // a. STATUS = "Borongan" (Format: A001 -> A999 -> B001)
-        if (statusKaryawan === "Borongan") {
-            const emps = await fetchNikList('____'); // semua NIK 4 karakter (format Borongan: huruf + 3 angka)
-
-            let currentLetter = 'A';
-            let maxSeq = 0;
-
-            (emps || []).forEach(e => {
-                const nik = (e.nik_karyawan || "").trim();
-                const match = nik.match(/^([A-Z])(\d{3})$/);
-                if (match) {
-                    const letter = match[1];
-                    const seq = parseInt(match[2], 10);
-                    if (letter > currentLetter) {
-                        currentLetter = letter;
-                        maxSeq = seq;
-                    } else if (letter === currentLetter && seq > maxSeq) {
-                        maxSeq = seq;
-                    }
-                }
-            });
-
-            if (maxSeq >= 999 && currentLetter === 'Z') {
-                alert('Urutan NIK Borongan sudah mencapai Z999. Hubungi administrator.');
-                return;
-            }
-            if (maxSeq >= 999) {
-                currentLetter = String.fromCharCode(currentLetter.charCodeAt(0) + 1);
-                maxSeq = 1;
-            } else {
-                maxSeq += 1;
-            }
-
-            generatedNik = `${currentLetter}${String(maxSeq).padStart(3, '0')}`;
-        }
-        // b. STATUS = "Reliver" (Format: DMBR + branch_id + dept_id + YY + MM + Seq 001)
-        else if (statusKaryawan === "Reliver") {
-            if (!branchId || !deptId) return;
-
-            const d = startDateVal ? new Date(startDateVal) : new Date();
-            const yy = String(d.getFullYear()).slice(-2);
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-
-            const prefix = `DMBR${branchId}${deptId}${yy}${mm}`;
-
-            const emps = await fetchNikList(`${prefix}%`);
-
-            let maxSeq = 0;
-            (emps || []).forEach(e => {
-                const nik = (e.nik_karyawan || "").trim();
-                const seqStr = nik.replace(prefix, "");
-                const seq = parseInt(seqStr, 10);
-                if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-            });
-
-            if (maxSeq >= 999) {
-                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
-                return;
-            }
-            const nextSeq = maxSeq + 1;
-            generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
-        }
-        // c. STATUS KARYAWAN LAINNYA (PKWTT, PKWT, DLL) (Format: DMB + branch_id + dept_id + YY + MM + Seq 001)
-        else if (statusKaryawan !== "") {
-            if (!branchId || !deptId) return;
-
-            const d = startDateVal ? new Date(startDateVal) : new Date();
-            const yy = String(d.getFullYear()).slice(-2);
-            const mm = String(d.getMonth() + 1).padStart(2, '0');
-
-            const prefix = `DMB${branchId}${deptId}${yy}${mm}`;
-
-            const emps = await fetchNikList(`${prefix}%`);
-
-            let maxSeq = 0;
-            (emps || []).forEach(e => {
-                const nik = (e.nik_karyawan || "").trim();
-                const seqStr = nik.replace(prefix, "");
-                const seq = parseInt(seqStr, 10);
-                if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
-            });
-
-            if (maxSeq >= 999) {
-                alert('Urutan NIK untuk kombinasi ini sudah mencapai 999. Hubungi administrator.');
-                return;
-            }
-            const nextSeq = maxSeq + 1;
-            generatedNik = `${prefix}${String(nextSeq).padStart(3, '0')}`;
-        }
-
-        if (generatedNik) {
-            nikInput.value = generatedNik;
-            nikInput.classList.remove("is-invalid");
-        }
-    } catch (err) {
-        console.error("Gagal generate NIK otomatis:", err);
-    }
 }
 
 // ==============================================================================
@@ -558,12 +438,12 @@ function setupEventListeners() {
         alamatKtpInput.addEventListener("input", handleAlamatKtpInput);
     }
 
-    // Listener Perubahan Penempatan & Status untuk Update Cascading & Auto NIK
+    // Listener Perubahan Penempatan & Status untuk Update Cascading (NIK TIDAK lagi diubah otomatis)
     const placementFields = ["branch_id", "costcenter_id", "departemen_id", "status_karyawan", "start_date"];
     placementFields.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            el.addEventListener("change", () => handlePlacementAndFiltering(true));
+            el.addEventListener("change", () => handlePlacementAndFiltering());
         }
     });
 
@@ -734,5 +614,358 @@ function toggleNoAbsenStgVisibility() {
             containerStg.style.display = "none";  // Sembunyikan jika bukan Borongan
             if (inputStg) inputStg.value = "";    // Kosongkan nilainya
         }
+    }
+}
+
+// ==============================================================================
+// 7. RIWAYAT PENEMPATAN & KOREKSI (batal mutasi, ubah tanggal resign, batal resign)
+// Perubahan data diproses oleh fungsi database (hrd.cancel_last_mutation,
+// hrd.update_resign_date, hrd.cancel_resign) -> 1 transaksi, ada catatan audit.
+// Mengubah data/tanggal mutasi terakhir: lewat tombol Edit di form utama
+// (tanggal akhir penempatan sebelumnya disesuaikan otomatis oleh trigger database).
+// ==============================================================================
+function escHtml(v) {
+    return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtTgl(d) {
+    if (!d) return "-";
+    const p = String(d).split("-");
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+}
+
+// Identitas pengguna dari erp_session (dipakai untuk catatan audit & cek role)
+function getSessionActor() {
+    try {
+        const raw = localStorage.getItem("erp_session") || sessionStorage.getItem("erp_session");
+        if (!raw) return { name: "", roleId: null };
+        const p = JSON.parse(raw);
+        const rid = parseInt(p.roleId, 10);
+        return {
+            name: String(p.fullName || p.nama || p.nik || ""),
+            roleId: Number.isNaN(rid) ? null : rid
+        };
+    } catch (e) {
+        return { name: "", roleId: null };
+    }
+}
+
+// CATATAN: ini hanya pembatas tampilan. erp_session ada di browser dan bisa diubah
+// pengguna sendiri, jadi BUKAN pengamanan sungguhan.
+function bolehKoreksi() {
+    const rid = getSessionActor().roleId;
+    return rid !== null && ROLE_ID_BOLEH_KOREKSI.includes(rid);
+}
+
+function renderRiwayatSection(emp) {
+    const box = document.getElementById("sectionRiwayat");
+    if (!box) return;
+
+    const nm = (list, id, key) => list.find(x => String(x.id) === String(id))?.[key] || "-";
+    const isEmpActive = emp.is_active !== false;
+    const last = riwayatAssignments[0] || null;
+    const lastIsMutation = last && String(last.action_type || "").toUpperCase() === "MUTATION";
+
+    const rows = riwayatAssignments.map(a => `
+        <tr>
+            <td class="text-nowrap">${fmtTgl(a.start_date)}</td>
+            <td class="text-nowrap">${fmtTgl(a.end_date)}</td>
+            <td><span class="badge bg-secondary-subtle text-dark">${escHtml(a.action_type || "-")}</span>
+                ${a.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : ''}</td>
+            <td>${escHtml(a.status_karyawan || "-")}</td>
+            <td>${escHtml(nm(masterBranches, a.branch_id, "branch_name"))}</td>
+            <td>${escHtml(nm(masterCostCenters, a.costcenter_id, "costcenter_name"))}</td>
+            <td>${escHtml(nm(masterDepartments, a.departemen_id, "department_name"))}</td>
+            <td>${escHtml(nm(masterAreas, a.area_id, "area_name"))}</td>
+            <td>${escHtml(nm(masterJabatans, a.jabatan_id, "jabatan_name"))}</td>
+            <td>${escHtml(a.end_reason || "")}</td>
+        </tr>`).join("");
+
+    let actions = "";
+    if (!bolehKoreksi()) {
+        const r = getSessionActor().roleId;
+        actions = `<div class="text-muted small"><i class="fa-solid fa-lock me-1"></i>Koreksi riwayat hanya untuk role yang diizinkan. Role ID terbaca: <b>${escHtml(r === null ? "(tidak terbaca)" : r)}</b>.</div>`;
+    } else if (!isEmpActive) {
+        actions = `
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="openKoreksi('update_resign_date')"><i class="fa-solid fa-calendar-days me-1"></i>Ubah Tanggal Keluar</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="openKoreksi('cancel_resign')"><i class="fa-solid fa-rotate-left me-1"></i>Batalkan Resign</button>
+            </div>
+            <div class="text-muted small mt-2">Ubah tanggal keluar tidak menghapus blacklist. Batalkan resign akan menghapus blacklist.</div>`;
+    } else if (lastIsMutation) {
+        actions = `
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="openEditMutasi()"><i class="fa-solid fa-pen me-1"></i>Ubah Data Mutasi Terakhir</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="openKoreksi('cancel_mutation')"><i class="fa-solid fa-rotate-left me-1"></i>Batalkan Mutasi Terakhir</button>
+            </div>
+            <div class="text-muted small mt-2">Mengubah tanggal mutasi otomatis menyesuaikan tanggal selesai penempatan sebelumnya.</div>`;
+    } else {
+        actions = `<div class="text-muted small">Tidak ada koreksi yang tersedia untuk kondisi saat ini.</div>`;
+    }
+
+    box.innerHTML = `
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-white fw-bold small"><i class="fa-solid fa-clock-rotate-left me-2 text-primary"></i>Riwayat Penempatan &amp; Koreksi</div>
+            <div class="card-body">
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-hover small mb-0">
+                        <thead class="table-light"><tr>
+                            <th>Mulai</th><th>Selesai</th><th>Jenis</th><th>Status</th><th>Cabang</th>
+                            <th>Cost Center</th><th>Departemen</th><th>Area</th><th>Jabatan</th><th>Keterangan</th>
+                        </tr></thead>
+                        <tbody>${rows || '<tr><td colspan="10" class="text-center text-muted py-3">Belum ada riwayat.</td></tr>'}</tbody>
+                    </table>
+                </div>
+                ${actions}
+            </div>
+        </div>`;
+
+    injectKoreksiModal();
+    injectEditMutasiModal();
+}
+
+function injectKoreksiModal() {
+    if (document.getElementById("modalKoreksi")) return;
+    document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal fade" id="modalKoreksi" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header border-bottom py-2">
+                    <h6 class="modal-title fw-bold" id="korTitle"></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning small" id="korDesc"></div>
+                    <div class="mb-3" id="korDateWrap" style="display:none;">
+                        <label class="form-label small fw-bold">Tanggal Keluar Baru <span class="text-danger">*</span></label>
+                        <input type="date" id="korDate" class="form-control form-control-sm">
+                    </div>
+                    <div>
+                        <label class="form-label small fw-bold">Alasan koreksi <span class="text-danger">*</span></label>
+                        <textarea id="korReason" class="form-control form-control-sm" rows="3" placeholder="Mis. salah input, karyawan batal resign, dll."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-danger btn-sm" id="korSubmit" onclick="submitKoreksi()">Proses</button>
+                </div>
+            </div>
+        </div>
+    </div>`);
+}
+
+function openKoreksi(mode) {
+    koreksiMode = mode;
+    const last = riwayatAssignments[0];
+    const dateWrap = document.getElementById("korDateWrap");
+    const dateInput = document.getElementById("korDate");
+    document.getElementById("korReason").value = "";
+    dateWrap.style.display = "none";
+
+    if (mode === "cancel_mutation") {
+        document.getElementById("korTitle").textContent = "Batalkan Mutasi Terakhir";
+        document.getElementById("korDesc").innerHTML =
+            `Mutasi mulai <b>${fmtTgl(last?.start_date)}</b> akan DIHAPUS dan penempatan sebelumnya diaktifkan kembali. ` +
+            `Perubahan <b>NIK</b> atau <b>No. Absen STG</b> yang terjadi saat mutasi <b>tidak</b> dikembalikan otomatis, cek dan perbaiki manual bila perlu.`;
+    } else if (mode === "update_resign_date") {
+        document.getElementById("korTitle").textContent = "Ubah Tanggal Keluar";
+        document.getElementById("korDesc").innerHTML = "Hanya tanggal keluar yang diubah. Status blacklist tidak berubah.";
+        dateWrap.style.display = "block";
+        dateInput.value = last?.end_date || "";
+    } else if (mode === "cancel_resign") {
+        document.getElementById("korTitle").textContent = "Batalkan Resign";
+        document.getElementById("korDesc").innerHTML =
+            "Karyawan diaktifkan kembali, <b>status blacklist dihapus</b>, dan akun login diaktifkan kembali.";
+    }
+    new bootstrap.Modal(document.getElementById("modalKoreksi")).show();
+}
+
+async function submitKoreksi() {
+    const reason = document.getElementById("korReason").value.trim();
+    if (reason.length < 3) { alert("Alasan koreksi wajib diisi."); return; }
+    if (!bolehKoreksi()) { alert("Role Anda tidak diizinkan melakukan koreksi."); return; }
+
+    const btn = document.getElementById("korSubmit");
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Memproses...`;
+
+    try {
+        const a = getSessionActor();
+        const actor = `${a.name} (role ${a.roleId})`;
+        const last = riwayatAssignments[0];
+        let fn, params;
+
+        if (koreksiMode === "cancel_mutation") {
+            fn = "cancel_last_mutation";
+            params = { p_assignment_id: last.id, p_actor: actor, p_reason: reason };
+        } else if (koreksiMode === "update_resign_date") {
+            const newDate = document.getElementById("korDate").value;
+            if (!newDate) throw new Error("Tanggal keluar baru wajib diisi.");
+            fn = "update_resign_date";
+            params = { p_employee_id: currentEmpId, p_end_date: newDate, p_actor: actor, p_reason: reason };
+        } else if (koreksiMode === "cancel_resign") {
+            fn = "cancel_resign";
+            params = { p_employee_id: currentEmpId, p_actor: actor, p_reason: reason };
+        } else {
+            throw new Error("Jenis koreksi tidak dikenali.");
+        }
+
+        const { data, error } = await supabaseClient.schema("hrd").rpc(fn, params);
+        if (error) throw error;
+        if (data && data.success === false) throw new Error(data.message || "Gagal");
+
+        // Batal resign: aktifkan kembali akun login (kebalikan dari proses resign)
+        let warn = "";
+        if (koreksiMode === "cancel_resign") {
+            try {
+                const { data: u, error: uErr } = await supabaseClient
+                    .from("users").select("id, auth_uid").eq("employee_id", currentEmpId).maybeSingle();
+                if (!uErr && u?.auth_uid) {
+                    const { data: r, error: rErr } = await supabaseClient.functions.invoke("sync-auth", {
+                        body: { action: "reactivate", user_id: u.id }
+                    });
+                    if (rErr || !r?.success) {
+                        warn = "\n\nPERINGATAN: akun login GAGAL diaktifkan kembali otomatis. Aktifkan manual lewat halaman Users Account.";
+                    }
+                }
+            } catch (e) {
+                warn = "\n\nPERINGATAN: akun login GAGAL diaktifkan kembali otomatis. Aktifkan manual lewat halaman Users Account.";
+            }
+        }
+
+        alert("Koreksi berhasil disimpan." + warn);
+        window.location.reload();
+    } catch (err) {
+        console.error("Gagal koreksi riwayat:", err);
+        alert("Gagal melakukan koreksi: " + (err.message || err));
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+
+
+// ------------------------------------------------------------------------------
+// UBAH DATA MUTASI TERAKHIR (modal) -> rpc hrd.update_last_mutation
+// ------------------------------------------------------------------------------
+function injectEditMutasiModal() {
+    if (document.getElementById("modalEditMutasi")) return;
+    document.body.insertAdjacentHTML("beforeend", `
+    <div class="modal fade" id="modalEditMutasi" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header border-bottom py-2">
+                    <h6 class="modal-title fw-bold"><i class="fa-solid fa-pen me-2 text-primary"></i>Ubah Data Mutasi Terakhir</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2">
+                        <div class="col-md-6"><label class="form-label small fw-bold">Tanggal Mulai Mutasi <span class="text-danger">*</span></label>
+                            <input type="date" id="em_start" class="form-control form-control-sm"></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Status Karyawan <span class="text-danger">*</span></label>
+                            <select id="em_status" class="form-select form-select-sm"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Cabang</label>
+                            <select id="em_branch" class="form-select form-select-sm" onchange="onEmBranchChange()"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Cost Center</label>
+                            <select id="em_cc" class="form-select form-select-sm"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Departemen</label>
+                            <select id="em_dept" class="form-select form-select-sm"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Area</label>
+                            <select id="em_area" class="form-select form-select-sm"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Jabatan</label>
+                            <select id="em_jabatan" class="form-select form-select-sm"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Bagian</label>
+                            <select id="em_bagian" class="form-select form-select-sm"></select></div>
+                        <div class="col-12"><label class="form-label small fw-bold">Alasan koreksi <span class="text-danger">*</span></label>
+                            <textarea id="em_reason" class="form-control form-control-sm" rows="2" placeholder="Mis. salah input tanggal / area"></textarea></div>
+                    </div>
+                    <div class="text-muted small mt-2">NIK dan No. Absen STG tidak diubah dari sini.</div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="emSubmit" onclick="submitEditMutasi()">Simpan Perubahan</button>
+                </div>
+            </div>
+        </div>
+    </div>`);
+}
+
+// Isi <select> dari array; pilih nilai "selected" jika ada di daftar
+function fillEmSelect(id, items, valKey, textKey, placeholder, selected) {
+    const el = document.getElementById(id);
+    let html = `<option value="">${placeholder}</option>`;
+    items.forEach(it => { html += `<option value="${escHtml(it[valKey])}">${escHtml(it[textKey])}</option>`; });
+    el.innerHTML = html;
+    const sel = selected === null || selected === undefined ? "" : String(selected);
+    el.value = Array.from(el.options).some(o => o.value === sel) ? sel : "";
+}
+
+function refreshEmCascade(selCc, selArea) {
+    const b = document.getElementById("em_branch").value;
+    fillEmSelect("em_cc", masterCostCenters.filter(c => b && String(c.branch_id) === b), "id", "costcenter_name", "-- Pilih Cost Center --", selCc);
+    fillEmSelect("em_area", masterAreas.filter(a => b && String(a.branch_id) === b), "id", "area_name", "-- Pilih Area --", selArea);
+}
+
+function onEmBranchChange() {
+    // Ganti cabang: cost center & area milik cabang lama otomatis kosong
+    refreshEmCascade("", "");
+}
+
+function openEditMutasi() {
+    const last = riwayatAssignments[0];
+    if (!last) return;
+
+    const statuses = ["Tetap", "PKWT", "PKWTT", "Reliver", "Borongan"];
+    if (last.status_karyawan && !statuses.includes(last.status_karyawan)) statuses.push(last.status_karyawan);
+    fillEmSelect("em_status", statuses.map(x => ({ v: x, t: x })), "v", "t", "-- Pilih Status --", last.status_karyawan);
+
+    fillEmSelect("em_branch", masterBranches, "id", "branch_name", "-- Pilih Cabang --", last.branch_id);
+    refreshEmCascade(last.costcenter_id, last.area_id);
+    fillEmSelect("em_dept", masterDepartments, "id", "department_name", "-- Pilih Departemen --", last.departemen_id);
+    fillEmSelect("em_jabatan", masterJabatans, "id", "jabatan_name", "-- Pilih Jabatan --", last.jabatan_id);
+    fillEmSelect("em_bagian", masterBagians, "id", "bagian_name", "-- Pilih Bagian --", last.bagian_id);
+
+    document.getElementById("em_start").value = last.start_date || "";
+    document.getElementById("em_reason").value = "";
+    new bootstrap.Modal(document.getElementById("modalEditMutasi")).show();
+}
+
+async function submitEditMutasi() {
+    const reason = document.getElementById("em_reason").value.trim();
+    const start = document.getElementById("em_start").value;
+    const status = document.getElementById("em_status").value;
+    if (!start) { alert("Tanggal mulai mutasi wajib diisi."); return; }
+    if (!status) { alert("Status karyawan wajib dipilih."); return; }
+    if (reason.length < 3) { alert("Alasan koreksi wajib diisi."); return; }
+    if (!bolehKoreksi()) { alert("Role Anda tidak diizinkan melakukan koreksi."); return; }
+
+    const btn = document.getElementById("emSubmit");
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Menyimpan...`;
+
+    try {
+        const a = getSessionActor();
+        const v = id => document.getElementById(id).value;
+        const { data, error } = await supabaseClient.schema("hrd").rpc("update_last_mutation", {
+            p_assignment_id: riwayatAssignments[0].id,
+            p_data: {
+                start_date: start, status_karyawan: status,
+                branch_id: v("em_branch"), costcenter_id: v("em_cc"), departemen_id: v("em_dept"),
+                area_id: v("em_area"), jabatan_id: v("em_jabatan"), bagian_id: v("em_bagian")
+            },
+            p_actor: `${a.name} (role ${a.roleId})`,
+            p_reason: reason
+        });
+        if (error) throw error;
+        if (data && data.success === false) throw new Error(data.message || "Gagal");
+
+        alert("Data mutasi berhasil diperbarui.");
+        window.location.reload();
+    } catch (err) {
+        console.error("Gagal ubah mutasi:", err);
+        alert("Gagal mengubah data mutasi: " + (err.message || err));
+        btn.disabled = false;
+        btn.innerHTML = original;
     }
 }
