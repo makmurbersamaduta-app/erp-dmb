@@ -30,13 +30,6 @@ const ROLE_IDS_ALL_BRANCH = [1, 2];      // roleId 1 = Maintenance, 2 = Superadm
 // PERLU DISESUAIKAN: nama field cabang di erp_session (sesi Anda belum memuatnya).
 const SESSION_BRANCH_FIELDS = ["branchId", "branch_id"];
 
-// Halaman tujuan untuk 3 tombol di bawah tabel (cabang yang dibuka ikut dikirim sebagai ?branch_id=)
-const ACTION_PAGES = {
-    masuk: "barang_masuk.html",
-    keluar: "barang_keluar.html",
-    suratJalan: "surat_jalan.html"
-};
-
 // ===================================================
 // KELOMPOK 2: STATE (DATA SEMENTARA DI MEMORI)
 // ===================================================
@@ -188,7 +181,7 @@ function updateTabUi() {
         btn.setAttribute("aria-selected", active ? "true" : "false");
     });
     $("branchTitle").textContent = branchName();
-    if (state.canSwitch) $("btnBack").href = `catalog.html?branch_id=${state.branchId}`;
+    if (state.canSwitch) $("btnBack").href = "../../index.html";
 }
 
 // ===================================================
@@ -323,16 +316,6 @@ async function handleDownload() {
     } finally {
         setBusy(btn, false);
     }
-}
-
-// ===================================================
-// KELOMPOK 9: TOMBOL AKSI (Barang Masuk / Barang Keluar / Surat Jalan)
-// Fungsi: membuka halaman tujuan sambil membawa cabang yang sedang dibuka.
-// ===================================================
-function openActionPage(key, label) {
-    const url = ACTION_PAGES[key];
-    if (!url) { alert(`Halaman "${label}" belum tersedia.`); return; }
-    window.location.href = `${url}${url.includes("?") ? "&" : "?"}branch_id=${state.branchId}`;
 }
 
 // ===================================================
