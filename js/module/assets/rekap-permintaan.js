@@ -155,9 +155,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setupTabs();
     $("btnDownload").addEventListener("click", handleDownload);
-    $("btnBarangMasuk").addEventListener("click", () => openActionPage("masuk", "Barang Masuk"));
-    $("btnBarangKeluar").addEventListener("click", () => openActionPage("keluar", "Barang Keluar"));
-    $("btnSuratJalan").addEventListener("click", () => openActionPage("suratJalan", "Surat Jalan"));
     if (state.canSwitch) setupCloseModal();
     updateTabUi();
     loadPage();
