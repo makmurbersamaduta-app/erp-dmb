@@ -431,6 +431,144 @@ async function loadMasterData() {
     }
 }
 
+
+// ============================================================================
+// FILTER CHECKLIST (bisa memilih lebih dari satu)
+// Setiap <select> filter diubah menjadi tombol + daftar checklist. <select> aslinya
+// disembunyikan dan dijadikan penyimpan pilihan (multiple), jadi kode lain cukup membaca
+// getMultiValues(id). Tidak ada centang = filter tidak dipakai (semua data).
+// ============================================================================
+const MULTI_FILTER_IDS = ["filterStatusData", "filterStatusKaryawan", "filterBranch", "filterCostCenter",
+                          "filterDept", "filterArea", "filterJabatan", "filterBagian"];
+
+function mfEsc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// null = filter belum dibuat; [] = tidak ada yang dicentang
+function getMultiValues(selectId) {
+    const el = document.getElementById(selectId);
+    if (!el || el.dataset.mf !== "1") return null;
+    return Array.from(el.options).filter(o => o.selected && o.value !== "").map(o => o.value);
+}
+
+function refreshMultiFilter(selectId) {
+    const el = document.getElementById(selectId);
+    const wrap = el && el.nextElementSibling;
+    if (wrap && wrap._mfRefresh) wrap._mfRefresh();
+}
+
+function initMultiFilter(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel || sel.dataset.mf === "1") return;
+
+    // teks "semua" diambil dari opsi pertama (mis. "-- Semua Cabang --") sebelum diubah
+    if (!sel.dataset.allText) {
+        sel.dataset.allText = sel.options[0] ? sel.options[0].text.replace(/^[-\s]+|[-\s]+$/g, "") : "Semua";
+    }
+    sel.dataset.mf = "1";
+    // Pilihan bawaan = opsi yang ditandai "selected" di markup (mis. Aktif). Jangan pakai o.selected:
+    // browser otomatis menganggap opsi PERTAMA terpilih pada <select> biasa.
+    const keep = Array.from(sel.options).filter(o => o.defaultSelected && o.value !== "").map(o => o.value);
+    sel.multiple = true;
+    sel.style.display = "none";
+    Array.from(sel.options).forEach(o => { o.selected = keep.includes(o.value); });
+
+    const wrap = document.createElement("div");
+    wrap.className = "mf-wrap";
+    wrap.innerHTML = `
+        <button type="button" class="btn btn-sm btn-outline-secondary w-100 d-flex justify-content-between align-items-center mf-btn">
+            <span class="mf-text text-truncate"></span>
+            <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" class="ms-2 flex-shrink-0"><path fill="currentColor" d="M1.6 5l6.4 6.4L14.4 5z"/></svg>
+        </button>
+        <div class="mf-panel border rounded bg-white mt-1 p-2" style="display:none;">
+            <div class="d-flex align-items-center gap-2 mb-2 mf-tools">
+                <input type="text" class="form-control form-control-sm mf-search" placeholder="Cari..." autocomplete="off">
+                <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-nowrap mf-clear">Kosongkan</button>
+            </div>
+            <div class="mf-list" style="max-height:200px; overflow-y:auto;"></div>
+        </div>`;
+    sel.insertAdjacentElement("afterend", wrap);
+
+    const btn = wrap.querySelector(".mf-btn");
+    const textEl = wrap.querySelector(".mf-text");
+    const panel = wrap.querySelector(".mf-panel");
+    const tools = wrap.querySelector(".mf-tools");
+    const search = wrap.querySelector(".mf-search");
+    const list = wrap.querySelector(".mf-list");
+
+    function updateSummary() {
+        const chosen = Array.from(sel.options).filter(o => o.selected && o.value !== "");
+        textEl.textContent = chosen.length === 0 ? sel.dataset.allText
+                           : chosen.length === 1 ? chosen[0].text
+                           : `${chosen.length} dipilih`;
+        btn.classList.toggle("btn-outline-primary", chosen.length > 0);
+        btn.classList.toggle("btn-outline-secondary", chosen.length === 0);
+    }
+
+    function renderList() {
+        const opts = Array.from(sel.options).filter(o => o.value !== "");
+        tools.querySelector(".mf-search").style.display = opts.length > 8 ? "" : "none";
+        const q = search.value.trim().toLowerCase();
+        const shown = opts.filter(o => !q || o.text.toLowerCase().includes(q));
+        list.innerHTML = shown.length
+            ? shown.map(o => `<label class="d-flex align-items-center gap-2 small px-1 py-1 mf-item" style="cursor:pointer;">
+                    <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" value="${mfEsc(o.value)}" ${o.selected ? "checked" : ""}>
+                    <span>${mfEsc(o.text)}</span></label>`).join("")
+            : '<div class="text-muted small px-1 py-2">Tidak ada hasil</div>';
+    }
+
+    function fireChange() { sel.dispatchEvent(new Event("change", { bubbles: true })); }
+
+    btn.addEventListener("click", () => {
+        const opening = panel.style.display === "none";
+        document.querySelectorAll(".mf-panel").forEach(p => { p.style.display = "none"; });  // satu panel terbuka pada satu waktu
+        if (opening) { search.value = ""; renderList(); panel.style.display = "block"; }
+    });
+    search.addEventListener("input", renderList);
+    list.addEventListener("change", e => {
+        const cb = e.target;
+        if (!cb || cb.type !== "checkbox") return;
+        const opt = Array.from(sel.options).find(o => o.value === cb.value);
+        if (opt) opt.selected = cb.checked;
+        updateSummary();
+        fireChange();
+    });
+    wrap.querySelector(".mf-clear").addEventListener("click", () => {
+        Array.from(sel.options).forEach(o => { o.selected = false; });
+        updateSummary(); renderList(); fireChange();
+    });
+
+    wrap._mfRefresh = () => { updateSummary(); if (panel.style.display !== "none") renderList(); };
+    updateSummary();
+}
+
+function resetAllFilters() {
+    MULTI_FILTER_IDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        // Status Data kembali ke bawaan (Aktif); filter lain dikosongkan
+        Array.from(el.options).forEach(o => { o.selected = (id === "filterStatusData" && o.value === "active"); });
+        refreshMultiFilter(id);
+    });
+    renderDirectoryTable();
+}
+
+// Angka kecil pada tombol "Filter Data": jumlah filter yang sedang dipakai (Status Data = Aktif saja tidak dihitung)
+function updateFilterBadge() {
+    const badge = document.getElementById("filterBadge");
+    if (!badge) return;
+    let n = 0;
+    MULTI_FILTER_IDS.forEach(id => {
+        const v = getMultiValues(id);
+        if (!v || v.length === 0) return;
+        if (id === "filterStatusData" && v.length === 1 && v[0] === "active") return;
+        n++;
+    });
+    badge.textContent = n;
+    badge.classList.toggle("d-none", n === 0);
+}
+
 function populateFilterDropdowns() {
     fillSelectOptions("filterBranch", masterCache.branches, "id", "branch_name", "-- Semua Cabang --");
     fillSelectOptions("filterCostCenter", masterCache.cost_centers, "id", "costcenter_name", "-- Semua Cost Center --");
@@ -438,6 +576,14 @@ function populateFilterDropdowns() {
     fillSelectOptions("filterArea", masterCache.areas, "id", "area_name", "-- Semua Area --");
     fillSelectOptions("filterJabatan", masterCache.jabatans, "id", "jabatan_name", "-- Semua Jabatan --");
     fillSelectOptions("filterBagian", masterCache.bagians, "id", "bagian_name", "-- Semua Bagian --");
+    MULTI_FILTER_IDS.forEach(refreshMultiFilter);   // tampilan checklist ikut data terbaru
+}
+
+// Daftar master untuk dropdown mutasi: hanya yang aktif (+ yang sedang dipakai penempatan saat ini, diberi "(nonaktif)")
+function optListActive(list, usedId, nameKey) {
+    return list
+        .filter(m => m.is_active !== false || (usedId !== null && usedId !== undefined && String(m.id) === String(usedId)))
+        .map(m => m.is_active === false ? { ...m, [nameKey]: `${m[nameKey]} (nonaktif)` } : m);
 }
 
 function fillSelectOptions(elementId, list, valKey, textKey, defaultText) {
@@ -556,13 +702,15 @@ function renderDirectoryTable() {
     if (!tbody) return;
 
     const searchTerm = (document.getElementById("searchInput")?.value || "").toLowerCase().trim();
-    const branchVal = document.getElementById("filterBranch")?.value;
-    const ccVal = document.getElementById("filterCostCenter")?.value;
-    const deptVal = document.getElementById("filterDept")?.value;
-    const areaVal = document.getElementById("filterArea")?.value;
-    const jabVal = document.getElementById("filterJabatan")?.value;
-    const bagVal = document.getElementById("filterBagian")?.value;
-    const statusVal = document.getElementById("filterStatusSelect")?.value || "active";
+    const branchVals = getMultiValues("filterBranch") || [];
+    const ccVals = getMultiValues("filterCostCenter") || [];
+    const deptVals = getMultiValues("filterDept") || [];
+    const areaVals = getMultiValues("filterArea") || [];
+    const jabVals = getMultiValues("filterJabatan") || [];
+    const bagVals = getMultiValues("filterBagian") || [];
+    const statusDataVals = getMultiValues("filterStatusData") || ["active"];   // sebelum filter siap: bawaan Aktif
+    const statusKarVals = (getMultiValues("filterStatusKaryawan") || []).map(v => v.toUpperCase());
+    updateFilterBadge();
 
     const responsiveDiv = document.querySelector(".table-responsive");
     if (responsiveDiv) responsiveDiv.style.minHeight = "480px";
@@ -570,9 +718,7 @@ function renderDirectoryTable() {
     // Filtering Data Utama
     const filtered = directoryEmployees.filter(emp => {
         const isActive = emp.is_active !== false;
-        
-        if (statusVal === "active" && !isActive) return false;
-        if (statusVal === "inactive" && isActive) return false;
+        if (statusDataVals.length && !statusDataVals.includes(isActive ? "active" : "inactive")) return false;
 
         if (searchTerm) {
             const nik = (emp.nik_karyawan || "").toLowerCase();
@@ -582,12 +728,13 @@ function renderDirectoryTable() {
 
         const assign = getEmployeeAssignment(emp.id, emp.nik_karyawan);
 
-        if (branchVal && assign?.branch_id != branchVal) return false;
-        if (ccVal && assign?.costcenter_id != ccVal) return false;
-        if (deptVal && assign?.departemen_id != deptVal) return false;
-        if (areaVal && assign?.area_id != areaVal) return false;
-        if (jabVal && assign?.jabatan_id != jabVal) return false;
-        if (bagVal && assign?.bagian_id != bagVal) return false;
+        if (statusKarVals.length && !statusKarVals.includes(String(assign?.status_karyawan || "").trim().toUpperCase())) return false;
+        if (branchVals.length && !branchVals.includes(String(assign?.branch_id))) return false;
+        if (ccVals.length && !ccVals.includes(String(assign?.costcenter_id))) return false;
+        if (deptVals.length && !deptVals.includes(String(assign?.departemen_id))) return false;
+        if (areaVals.length && !areaVals.includes(String(assign?.area_id))) return false;
+        if (jabVals.length && !jabVals.includes(String(assign?.jabatan_id))) return false;
+        if (bagVals.length && !bagVals.includes(String(assign?.bagian_id))) return false;
 
         return true;
     });
@@ -796,29 +943,40 @@ function updateStatisticsCardsFiltered(filteredList) {
 // ============================================================================
 function setupEventListeners() {
     // --- FILTER DROPDOWNS ---
+    // Dua filter status (checklist) disisipkan paling atas pada panel filter:
+    //  - "Status Data"     : Aktif / Non-Aktif (dulu bernama "Status Karyawan")
+    //  - "Status Karyawan" : PKWT / PKWTT / Reliver / Borongan
     const filterContainer = document.querySelector(".filter-dropdown-menu .row");
-    if (filterContainer && !document.getElementById("filterStatusSelect")) {
-        const statusHtml = `
-            <div class="col-12 mb-2" id="statusFilterContainer">
-                <label class="form-label mb-1 style-sub-label fw-bold">Status Karyawan</label>
-                <select id="filterStatusSelect" class="form-select form-select-sm" onchange="renderDirectoryTable()">
+    if (filterContainer && !document.getElementById("filterStatusData")) {
+        filterContainer.insertAdjacentHTML("afterbegin", `
+            <div class="col-12 mb-2" id="statusDataContainer">
+                <label class="form-label mb-1 style-sub-label fw-bold">Status Data</label>
+                <select id="filterStatusData" data-all-text="Semua (tanpa filter)">
                     <option value="active" selected>Aktif</option>
-                    <option value="inactive">Non - Aktif</option>
-                    <option value="all">Semua</option>
+                    <option value="inactive">Non-Aktif</option>
                 </select>
-            </div>`;
-        filterContainer.insertAdjacentHTML("afterbegin", statusHtml);
+            </div>
+            <div class="col-12 mb-2" id="statusKaryawanContainer">
+                <label class="form-label mb-1 style-sub-label fw-bold">Status Karyawan</label>
+                <select id="filterStatusKaryawan" data-all-text="Semua Status Karyawan">
+                    <option value="PKWT">PKWT</option>
+                    <option value="PKWTT">PKWTT</option>
+                    <option value="Reliver">Reliver</option>
+                    <option value="Borongan">Borongan</option>
+                </select>
+            </div>`);
     }
 
+    // Semua filter diubah menjadi checklist (bisa pilih lebih dari satu)
+    MULTI_FILTER_IDS.forEach(initMultiFilter);
+
     const btnReset = document.getElementById("btnResetFilter");
-    if (btnReset) {
-        btnReset.addEventListener("click", () => {
-            document.querySelectorAll(".filter-dropdown-menu select").forEach(s => s.value = "");
-            const statusSel = document.getElementById("filterStatusSelect");
-            if (statusSel) statusSel.value = "active";
-            renderDirectoryTable();
-        });
-    }
+    if (btnReset) btnReset.addEventListener("click", resetAllFilters);
+
+    // Menu filter ditutup -> tutup juga panel checklist yang sedang terbuka
+    document.getElementById("dropdownFilterBtn")?.addEventListener("hide.bs.dropdown", () => {
+        document.querySelectorAll(".mf-panel").forEach(p => { p.style.display = "none"; });
+    });
 
     document.querySelectorAll(".filter-dropdown-menu select").forEach(s => {
         s.addEventListener("change", renderDirectoryTable);
@@ -862,16 +1020,22 @@ function openMutasiModal(empId) {
 
     const assign = getEmployeeAssignment(emp.id, emp.nik_karyawan);
 
+    // Cost Center & Area berupa dropdown pencarian (ketik untuk menyaring, atau klik panah)
+    enhanceSearchableSelect("mut_cc");
+    enhanceSearchableSelect("mut_area");
+    enhanceSearchableSelect("mut_bagian");
+    enhanceSearchableSelect("mut_jabatan");
+
     document.getElementById("mut_emp_id").value = emp.id;
     document.getElementById("mut_emp_name").value = `${emp.nama} (${emp.nik_karyawan})`;
     document.getElementById("mut_prev_status").value = assign?.status_karyawan || "";
 
-    fillSelectOptions("mut_branch", masterCache.branches, "id", "branch_name", "-- Pilih Cabang --");
-    fillSelectOptions("mut_cc", masterCache.cost_centers, "id", "costcenter_name", "-- Pilih Cost Center --");
-    fillSelectOptions("mut_dept", masterCache.departments, "id", "department_name", "-- Pilih Departemen --");
-    fillSelectOptions("mut_area", masterCache.areas, "id", "area_name", "-- Pilih Area --");
-    fillSelectOptions("mut_bagian", masterCache.bagians, "id", "bagian_name", "-- Pilih Bagian --");
-    fillSelectOptions("mut_jabatan", masterCache.jabatans, "id", "jabatan_name", "-- Pilih Jabatan --");
+    fillSelectOptions("mut_branch", optListActive(masterCache.branches, assign?.branch_id, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
+    fillSelectOptions("mut_cc", optListActive(masterCache.cost_centers, assign?.costcenter_id, "costcenter_name"), "id", "costcenter_name", "-- Pilih Cost Center --");
+    fillSelectOptions("mut_dept", optListActive(masterCache.departments, assign?.departemen_id, "department_name"), "id", "department_name", "-- Pilih Departemen --");
+    fillSelectOptions("mut_area", optListActive(masterCache.areas, assign?.area_id, "area_name"), "id", "area_name", "-- Pilih Area --");
+    fillSelectOptions("mut_bagian", optListActive(masterCache.bagians, assign?.bagian_id, "bagian_name"), "id", "bagian_name", "-- Pilih Bagian --");
+    fillSelectOptions("mut_jabatan", optListActive(masterCache.jabatans, assign?.jabatan_id, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
 
     if (assign) {
         if (document.getElementById("mut_branch")) document.getElementById("mut_branch").value = assign.branch_id || "";
@@ -1372,6 +1536,37 @@ function injectActionModals() {
 // ============================================================================
 // 10. EXPORT DATA DIREKTORI KARYAWAN KE EXCEL
 // ============================================================================
+// ============================================================================
+// FORMAT TANGGAL EXPORT: dd/mm/yyyy
+// Kolom tanggal diubah dari teks "2026-10-19" menjadi sel tanggal Excel dengan
+// format tampilan dd/mm/yyyy (tetap bisa diurutkan/difilter sebagai tanggal,
+// dan tampilannya tidak tergantung pengaturan regional komputer).
+// ============================================================================
+const EXPORT_DATE_HEADERS = ["Tanggal Lahir", "Tanggal Masuk", "Tanggal Keluar", "Tanggal Awal Mutasi", "Tanggal Akhir Mutasi"];
+
+function formatDateColumns(ws, dateHeaders) {
+    if (!ws || !ws["!ref"]) return;
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const cols = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+        const head = ws[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+        const isDateCol = !!head && dateHeaders.includes(String(head.v));
+        cols[C] = { wpx: isDateCol ? 90 : 64 };   // lebar cukup agar tanggal tidak tampil "#####"
+        if (!isDateCol) continue;
+        for (let R = range.s.r + 1; R <= range.e.r; R++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (!cell || typeof cell.v !== "string") continue;
+            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(cell.v);
+            if (!m) continue;                       // "-" atau kosong dibiarkan
+            cell.t = "n";
+            cell.v = Math.round(Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000) + 25569;  // nomor seri tanggal Excel
+            cell.z = "dd/mm/yyyy";
+            delete cell.w;
+        }
+    }
+    ws["!cols"] = cols;
+}
+
 function exportDirectoryToExcel() {
     if (typeof XLSX === "undefined") {
         alert("Library SheetJS (XLSX) belum dimuat pada halaman!");
@@ -1434,11 +1629,13 @@ function exportDirectoryToExcel() {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(exportRows);
+    formatDateColumns(ws, EXPORT_DATE_HEADERS);
     XLSX.utils.book_append_sheet(wb, ws, "Data Karyawan");
 
     // Sheet ke-2: Data Mutasi
     const mutRows = buildMutationExportRows(directorySortedFiltered);
     const wsMut = XLSX.utils.json_to_sheet(mutRows, { header: MUTATION_HEADERS });
+    formatDateColumns(wsMut, EXPORT_DATE_HEADERS);
     XLSX.utils.book_append_sheet(wb, wsMut, "Data Mutasi");
 
     const todayStr = new Date().toISOString().split('T')[0];
@@ -1489,3 +1686,189 @@ function buildMutationExportRows(employees) {
                         String(x["Tanggal Awal Mutasi"]).localeCompare(String(y["Tanggal Awal Mutasi"])));
     return rows;
 }
+
+// ==============================================================================
+// DROPDOWN DENGAN PENCARIAN (Searchable Select)
+// Mengubah <select> biasa menjadi kolom ketik + tombol panah:
+//  - ketik sebagian nama (mis. "rama") -> daftar menyaring opsi yang mengandung teks itu
+//  - klik tombol panah / klik kolom -> seluruh daftar tampil tanpa perlu mengetik
+// <select> aslinya tetap ada (disembunyikan secara visual) sehingga semua kode lama
+// (isi opsi, ambil nilai, validasi "required", event change) tetap bekerja.
+// ==============================================================================
+(function () {
+    const SVG_CARET = '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.6 5l6.4 6.4L14.4 5z"/></svg>';
+    const selValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+
+    function injectStyle() {
+        if (document.getElementById("ssStyle")) return;
+        const st = document.createElement("style");
+        st.id = "ssStyle";
+        st.textContent = `
+            .ss-wrap { position: relative; }
+            .ss-hidden-select { position: absolute !important; left: 0; bottom: 0; width: 100%; height: 1px;
+                                opacity: 0; pointer-events: none; border: 0 !important; padding: 0 !important; }
+            .ss-list { position: fixed; z-index: 3000; max-height: 240px; overflow-y: auto; background: #fff;
+                       border: 1px solid #ced4da; border-radius: .375rem; box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
+            .ss-item { padding: .4rem .75rem; cursor: pointer; font-size: .875rem; }
+            .ss-item:hover, .ss-item.active { background: #e7f1ff; }
+            .ss-item.selected { font-weight: 600; }
+            .ss-empty { padding: .5rem .75rem; color: #6c757d; font-size: .85rem; }`;
+        document.head.appendChild(st);
+    }
+
+    function esc(v) {
+        return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    window.enhanceSearchableSelect = function (selectId) {
+        const sel = document.getElementById(selectId);
+        if (!sel || sel.dataset.ss === "1") return;   // sudah pernah dipasang
+        sel.dataset.ss = "1";
+        injectStyle();
+
+        const wrap = document.createElement("div");
+        wrap.className = "ss-wrap";
+        wrap.innerHTML = `<div class="input-group ${sel.classList.contains("form-select-sm") ? "input-group-sm" : ""}">
+            <input type="text" class="form-control" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn-outline-secondary" tabindex="-1" aria-label="Buka daftar">${SVG_CARET}</button>
+        </div>`;
+        sel.parentNode.insertBefore(wrap, sel);
+        wrap.appendChild(sel);
+        sel.classList.add("ss-hidden-select");
+        sel.tabIndex = -1;
+
+        const input = wrap.querySelector("input");
+        const btn = wrap.querySelector("button");
+        let list = null, items = [], activeIdx = -1;
+
+        const selectedText = () => {
+            const o = sel.options[sel.selectedIndex];
+            return o && o.value !== "" ? o.text : "";
+        };
+        const placeholderText = () => (sel.options.length && sel.options[0].value === "") ? sel.options[0].text : "";
+
+        // Samakan tampilan kolom ketik dengan <select> (nilai, placeholder, status disabled)
+        function sync() {
+            input.value = selectedText();
+            input.placeholder = placeholderText();
+            input.disabled = sel.disabled;
+            btn.disabled = sel.disabled;
+        }
+
+        function setValue(v) {
+            selValueDesc.set.call(sel, v);
+            sync();
+            sel.dispatchEvent(new Event("change", { bubbles: true }));  // supaya filter bertingkat tetap jalan
+        }
+
+        // Kode lama mengisi nilai lewat "select.value = ..." -> ikut disinkronkan ke tampilan
+        Object.defineProperty(sel, "value", {
+            configurable: true,
+            get() { return selValueDesc.get.call(this); },
+            set(v) { selValueDesc.set.call(this, v); sync(); }
+        });
+        new MutationObserver(sync).observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+        sel.addEventListener("change", sync);
+
+        function place() {
+            if (!list) return;
+            const r = wrap.getBoundingClientRect();
+            list.style.left = r.left + "px";
+            list.style.width = r.width + "px";
+            const spaceBelow = window.innerHeight - r.bottom;
+            if (spaceBelow < Math.min(240, list.scrollHeight) + 8 && r.top > spaceBelow) {
+                list.style.top = "auto";
+                list.style.bottom = (window.innerHeight - r.top) + "px";
+            } else {
+                list.style.bottom = "auto";
+                list.style.top = r.bottom + "px";
+            }
+        }
+
+        function render(filterText) {
+            const q = (filterText || "").trim().toLowerCase();
+            items = Array.from(sel.options).filter(o => o.value !== "" && (!q || o.text.toLowerCase().includes(q)));
+            list.innerHTML = items.length
+                ? items.map((o, i) => `<div class="ss-item${o.value === sel.value ? " selected" : ""}" data-i="${i}">${esc(o.text)}</div>`).join("")
+                : '<div class="ss-empty">Tidak ada hasil</div>';
+            activeIdx = q ? (items.length ? 0 : -1) : items.findIndex(o => o.value === sel.value);
+            highlight();
+            place();
+        }
+
+        function highlight() {
+            if (!list) return;
+            list.querySelectorAll(".ss-item").forEach((el, i) => el.classList.toggle("active", i === activeIdx));
+            const a = list.querySelector(".ss-item.active");
+            if (a) a.scrollIntoView({ block: "nearest" });
+        }
+
+        function openList(filterText) {
+            if (sel.disabled) return;
+            if (!list) {
+                list = document.createElement("div");
+                list.className = "ss-list";
+                list.addEventListener("mousedown", e => {
+                    e.preventDefault();                       // jangan sampai kolom ketik kehilangan fokus
+                    const it = e.target.closest(".ss-item");
+                    if (it) choose(parseInt(it.dataset.i, 10));
+                });
+                document.body.appendChild(list);
+            }
+            render(filterText);
+        }
+
+        function closeList() {
+            if (list) { list.remove(); list = null; }
+            activeIdx = -1;
+        }
+
+        function choose(i) {
+            const o = items[i];
+            if (!o) return;
+            if (sel.value !== o.value) setValue(o.value); else sync();
+            closeList();
+        }
+
+        // Saat kolom ditinggalkan: teks kosong = kosongkan pilihan; teks cocok persis = pilih; selain itu kembalikan
+        function commit() {
+            closeList();
+            const t = input.value.trim().toLowerCase();
+            if (t === "") {
+                if (sel.value !== "") setValue(""); else sync();
+                return;
+            }
+            const exact = Array.from(sel.options).find(o => o.value !== "" && o.text.toLowerCase() === t);
+            if (exact && sel.value !== exact.value) setValue(exact.value); else sync();
+        }
+
+        input.addEventListener("focus", () => { if (!list) { openList(""); input.select(); } });
+        input.addEventListener("click", () => { if (!list) openList(""); });
+        input.addEventListener("input", () => { if (!list) openList(input.value); else render(input.value); });
+        input.addEventListener("blur", () => setTimeout(commit, 0));
+        input.addEventListener("keydown", e => {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (!list) openList(""); else { activeIdx = Math.min(activeIdx + 1, items.length - 1); highlight(); }
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (list) { activeIdx = Math.max(activeIdx - 1, 0); highlight(); }
+            } else if (e.key === "Enter") {
+                if (list) { e.preventDefault(); if (activeIdx >= 0) choose(activeIdx); else commit(); }
+            } else if (e.key === "Escape") {
+                if (list) { e.preventDefault(); e.stopPropagation(); closeList(); sync(); }
+            }
+        });
+
+        btn.addEventListener("mousedown", e => e.preventDefault());
+        btn.addEventListener("click", () => {
+            if (list) { closeList(); sync(); } else { input.focus(); if (!list) openList(""); }
+        });
+
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+
+        sync();
+    };
+
+})();

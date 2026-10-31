@@ -18,6 +18,19 @@ let dataLoaded = false;    // true setelah data karyawan selesai dimuat // NIK s
 // Saat ini: role dengan id 1, 2, dan 3.
 const ROLE_ID_BOLEH_KOREKSI = [1, 2, 3];
 
+// id master yang dipakai penempatan karyawan SAAT INI: tetap boleh tampil di dropdown walau nonaktif
+// (supaya data yang sudah tersimpan tidak terhapus tanpa sengaja saat disimpan ulang).
+let usedMaster = {};
+
+// Daftar master untuk dropdown: hanya yang aktif (+ yang sedang dipakai, diberi tanda "(nonaktif)")
+function optList(list, usedId, nameKey) {
+    return list
+        .filter(m => m.is_active !== false || (usedId !== null && usedId !== undefined && String(m.id) === String(usedId)))
+        .map(m => m.is_active === false ? { ...m, [nameKey]: `${m[nameKey]} (nonaktif)` } : m);
+}
+
+let currentAssignmentStartDate = null;   // start_date asli baris penempatan yang sedang diedit
+let currentAssignmentIsMutation = false; // true jika baris itu bertipe MUTATION
 let riwayatAssignments = [];   // semua assignment karyawan, terbaru di atas
 let koreksiMode = null;        // 'cancel_mutation' | 'update_resign_date' | 'cancel_resign'
 
@@ -157,9 +170,9 @@ async function loadMasterData() {
     ]);
 
     // Populate dropdown statis
-    populateSelect("branch_id", masterBranches, "id", "branch_name", "-- Pilih Cabang --");
-    populateSelect("departemen_id", masterDepartments, "id", "department_name", "-- Pilih Departemen --");
-    populateSelect("jabatan_id", masterJabatans, "id", "jabatan_name", "-- Pilih Jabatan --");
+    populateSelect("branch_id", optList(masterBranches, usedMaster.branch, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
+    populateSelect("departemen_id", optList(masterDepartments, usedMaster.dept, "department_name"), "id", "department_name", "-- Pilih Departemen --");
+    populateSelect("jabatan_id", optList(masterJabatans, usedMaster.jabatan, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
 
     resetSelect("costcenter_id", "-- Pilih Cost Center --");
     resetSelect("area_id", "-- Pilih Area --");
@@ -287,6 +300,15 @@ async function loadEmployeeData(empId) {
     if (activeAssign) {
         currentAssignmentId = activeAssign.id;
 
+        // Master yang dipakai penempatan ini tetap harus ada di dropdown (walau nonaktif)
+        usedMaster = {
+            branch: activeAssign.branch_id, cc: activeAssign.costcenter_id, area: activeAssign.area_id,
+            dept: activeAssign.departemen_id, bagian: activeAssign.bagian_id, jabatan: activeAssign.jabatan_id
+        };
+        populateSelect("branch_id", optList(masterBranches, usedMaster.branch, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
+        populateSelect("departemen_id", optList(masterDepartments, usedMaster.dept, "department_name"), "id", "department_name", "-- Pilih Departemen --");
+        populateSelect("jabatan_id", optList(masterJabatans, usedMaster.jabatan, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
+
         setInputValue("status_karyawan", activeAssign.status_karyawan);
         setInputValue("branch_id", activeAssign.branch_id);
         // --- TAMBAHAN PARSIAL UNTUK EDIT ---
@@ -308,7 +330,26 @@ async function loadEmployeeData(empId) {
             console.warn("[Edit] bagian_id", activeAssign.bagian_id, "tidak ditemukan di master public.bagians");
         }
         setInputValue("jabatan_id", activeAssign.jabatan_id);
-        setInputValue("start_date", activeAssign.start_date);
+        // Tanggal Mulai Bekerja = TANGGAL MASUK (rehire terakhir, atau penempatan awal),
+        // bukan tanggal mutasi terakhir.
+        const masukRow = findTanggalMasukRow(sortedAssign);
+        setInputValue("start_date", (masukRow || activeAssign).start_date);
+
+        currentAssignmentStartDate = activeAssign.start_date;
+        currentAssignmentIsMutation = String(activeAssign.action_type || "").toUpperCase() === "MUTATION";
+
+        // Jika baris yang diedit adalah MUTASI, kolom ini hanya tampilan (tanggal mutasi diubah
+        // lewat tombol "Ubah Data Mutasi Terakhir"), supaya tanggal masuk tidak menimpa tanggal mutasi.
+        const sdInput = document.getElementById("start_date");
+        if (sdInput) {
+            sdInput.readOnly = currentAssignmentIsMutation;
+            if (!document.getElementById("startDateHint")) {
+                sdInput.insertAdjacentHTML("afterend", '<div id="startDateHint" class="form-text small"></div>');
+            }
+            document.getElementById("startDateHint").textContent = currentAssignmentIsMutation
+                ? 'Diambil dari tanggal masuk / rehire. Untuk mengubah tanggal mutasi, gunakan "Ubah Data Mutasi Terakhir" pada Riwayat Penempatan di bawah.'
+                : "";
+        }
     }
 
     // D. Tanggal Keluar: hanya tampil jika karyawan sudah non-aktif (resign)
@@ -383,7 +424,7 @@ function handleAreaFiltering() {
         return;
     }
 
-    const filteredAreas = masterAreas.filter(a =>
+    const filteredAreas = optList(masterAreas, usedMaster.area, "area_name").filter(a =>
         String(a.branch_id) === String(branchVal)
     );
     populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
@@ -404,7 +445,7 @@ async function handlePlacementAndFiltering() {
         resetSelect("costcenter_id", "-- Pilih Cost Center --");
         resetSelect("area_id", "-- Pilih Area --");
     } else {
-        const filteredCC = masterCostCenters.filter(cc => String(cc.branch_id) === String(branchVal));
+        const filteredCC = optList(masterCostCenters, usedMaster.cc, "costcenter_name").filter(cc => String(cc.branch_id) === String(branchVal));
         populateSelect("costcenter_id", filteredCC, "id", "costcenter_name", "-- Pilih Cost Center --");
 
         if (filteredCC.some(cc => String(cc.id) === String(ccVal))) {
@@ -419,7 +460,7 @@ async function handlePlacementAndFiltering() {
 
     // 3. Bagian: daftar SELALU diisi (tidak lagi hanya untuk "Borongan"),
     //    agar data bagian karyawan non-Borongan tetap ter-load dan tidak hilang.
-    populateSelect("bagian_id", masterBagians, "id", "bagian_name", "-- Pilih Bagian --");
+    populateSelect("bagian_id", optList(masterBagians, usedMaster.bagian, "bagian_name"), "id", "bagian_name", "-- Pilih Bagian --");
 
 }
 
@@ -558,7 +599,10 @@ async function handleFormSubmit(e) {
             bagian_id: document.getElementById("bagian_id").value || null,
             jabatan_id: document.getElementById("jabatan_id").value || null,
             status_karyawan: statusKaryawanVal,
-            start_date: document.getElementById("start_date").value || null
+            // Baris MUTASI: tanggalnya TIDAK boleh tertimpa tanggal masuk yang tampil di kolom ini
+            start_date: currentAssignmentIsMutation
+                ? currentAssignmentStartDate
+                : (document.getElementById("start_date").value || null)
         };
 
         // Deteksi apakah NIK diubah dari nilai awal -- kalau ya, beri
@@ -657,6 +701,22 @@ function bolehKoreksi() {
     return rid !== null && ROLE_ID_BOLEH_KOREKSI.includes(rid);
 }
 
+// Baris yang menjadi dasar "Tanggal Masuk": REHIRE terakhir; jika tidak pernah rehire,
+// penempatan paling awal yang BUKAN mutasi. (Sama dengan kolom Tanggal Masuk di Directory.)
+function findTanggalMasukRow(rows) {
+    if (!rows || rows.length === 0) return null;
+    const type = a => String(a.action_type || "").toUpperCase();
+    const byDate = (x, y) => (x.start_date || "").localeCompare(y.start_date || "") ||
+                             (x.created_at || "").localeCompare(y.created_at || "");
+    const pick = (arr, last) => {
+        const s = arr.filter(a => a.start_date).sort(byDate);
+        return s.length ? (last ? s[s.length - 1] : s[0]) : null;
+    };
+    return pick(rows.filter(a => type(a) === "REHIRE"), true)
+        || pick(rows.filter(a => type(a) !== "MUTATION"), false)
+        || pick(rows, false);
+}
+
 function renderRiwayatSection(emp) {
     const box = document.getElementById("sectionRiwayat");
     if (!box) return;
@@ -665,13 +725,15 @@ function renderRiwayatSection(emp) {
     const isEmpActive = emp.is_active !== false;
     const last = riwayatAssignments[0] || null;
     const lastIsMutation = last && String(last.action_type || "").toUpperCase() === "MUTATION";
+    const masukRow = findTanggalMasukRow(riwayatAssignments);
 
     const rows = riwayatAssignments.map(a => `
         <tr>
             <td class="text-nowrap">${fmtTgl(a.start_date)}</td>
             <td class="text-nowrap">${fmtTgl(a.end_date)}</td>
             <td><span class="badge bg-secondary-subtle text-dark">${escHtml(a.action_type || "-")}</span>
-                ${a.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : ''}</td>
+                ${a.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : ''}
+                ${masukRow && a.id === masukRow.id ? '<span class="badge bg-primary-subtle text-primary">Tgl Masuk</span>' : ''}</td>
             <td>${escHtml(a.status_karyawan || "-")}</td>
             <td>${escHtml(nm(masterBranches, a.branch_id, "branch_name"))}</td>
             <td>${escHtml(nm(masterCostCenters, a.costcenter_id, "costcenter_name"))}</td>
@@ -902,8 +964,8 @@ function fillEmSelect(id, items, valKey, textKey, placeholder, selected) {
 
 function refreshEmCascade(selCc, selArea) {
     const b = document.getElementById("em_branch").value;
-    fillEmSelect("em_cc", masterCostCenters.filter(c => b && String(c.branch_id) === b), "id", "costcenter_name", "-- Pilih Cost Center --", selCc);
-    fillEmSelect("em_area", masterAreas.filter(a => b && String(a.branch_id) === b), "id", "area_name", "-- Pilih Area --", selArea);
+    fillEmSelect("em_cc", optList(masterCostCenters, riwayatAssignments[0]?.costcenter_id, "costcenter_name").filter(c => b && String(c.branch_id) === b), "id", "costcenter_name", "-- Pilih Cost Center --", selCc);
+    fillEmSelect("em_area", optList(masterAreas, riwayatAssignments[0]?.area_id, "area_name").filter(a => b && String(a.branch_id) === b), "id", "area_name", "-- Pilih Area --", selArea);
 }
 
 function onEmBranchChange() {
@@ -915,15 +977,21 @@ function openEditMutasi() {
     const last = riwayatAssignments[0];
     if (!last) return;
 
+    // Cost Center & Area di modal ini juga berupa dropdown pencarian
+    enhanceSearchableSelect("em_cc");
+    enhanceSearchableSelect("em_area");
+    enhanceSearchableSelect("em_jabatan");
+    enhanceSearchableSelect("em_bagian");
+
     const statuses = ["Tetap", "PKWT", "PKWTT", "Reliver", "Borongan"];
     if (last.status_karyawan && !statuses.includes(last.status_karyawan)) statuses.push(last.status_karyawan);
     fillEmSelect("em_status", statuses.map(x => ({ v: x, t: x })), "v", "t", "-- Pilih Status --", last.status_karyawan);
 
-    fillEmSelect("em_branch", masterBranches, "id", "branch_name", "-- Pilih Cabang --", last.branch_id);
+    fillEmSelect("em_branch", optList(masterBranches, last.branch_id, "branch_name"), "id", "branch_name", "-- Pilih Cabang --", last.branch_id);
     refreshEmCascade(last.costcenter_id, last.area_id);
-    fillEmSelect("em_dept", masterDepartments, "id", "department_name", "-- Pilih Departemen --", last.departemen_id);
-    fillEmSelect("em_jabatan", masterJabatans, "id", "jabatan_name", "-- Pilih Jabatan --", last.jabatan_id);
-    fillEmSelect("em_bagian", masterBagians, "id", "bagian_name", "-- Pilih Bagian --", last.bagian_id);
+    fillEmSelect("em_dept", optList(masterDepartments, last.departemen_id, "department_name"), "id", "department_name", "-- Pilih Departemen --", last.departemen_id);
+    fillEmSelect("em_jabatan", optList(masterJabatans, last.jabatan_id, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --", last.jabatan_id);
+    fillEmSelect("em_bagian", optList(masterBagians, last.bagian_id, "bagian_name"), "id", "bagian_name", "-- Pilih Bagian --", last.bagian_id);
 
     document.getElementById("em_start").value = last.start_date || "";
     document.getElementById("em_reason").value = "";
@@ -969,3 +1037,193 @@ async function submitEditMutasi() {
         btn.innerHTML = original;
     }
 }
+
+
+// ==============================================================================
+// DROPDOWN DENGAN PENCARIAN (Searchable Select)
+// Mengubah <select> biasa menjadi kolom ketik + tombol panah:
+//  - ketik sebagian nama (mis. "rama") -> daftar menyaring opsi yang mengandung teks itu
+//  - klik tombol panah / klik kolom -> seluruh daftar tampil tanpa perlu mengetik
+// <select> aslinya tetap ada (disembunyikan secara visual) sehingga semua kode lama
+// (isi opsi, ambil nilai, validasi "required", event change) tetap bekerja.
+// ==============================================================================
+(function () {
+    const SVG_CARET = '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.6 5l6.4 6.4L14.4 5z"/></svg>';
+    const selValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+
+    function injectStyle() {
+        if (document.getElementById("ssStyle")) return;
+        const st = document.createElement("style");
+        st.id = "ssStyle";
+        st.textContent = `
+            .ss-wrap { position: relative; }
+            .ss-hidden-select { position: absolute !important; left: 0; bottom: 0; width: 100%; height: 1px;
+                                opacity: 0; pointer-events: none; border: 0 !important; padding: 0 !important; }
+            .ss-list { position: fixed; z-index: 3000; max-height: 240px; overflow-y: auto; background: #fff;
+                       border: 1px solid #ced4da; border-radius: .375rem; box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
+            .ss-item { padding: .4rem .75rem; cursor: pointer; font-size: .875rem; }
+            .ss-item:hover, .ss-item.active { background: #e7f1ff; }
+            .ss-item.selected { font-weight: 600; }
+            .ss-empty { padding: .5rem .75rem; color: #6c757d; font-size: .85rem; }`;
+        document.head.appendChild(st);
+    }
+
+    function esc(v) {
+        return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    window.enhanceSearchableSelect = function (selectId) {
+        const sel = document.getElementById(selectId);
+        if (!sel || sel.dataset.ss === "1") return;   // sudah pernah dipasang
+        sel.dataset.ss = "1";
+        injectStyle();
+
+        const wrap = document.createElement("div");
+        wrap.className = "ss-wrap";
+        wrap.innerHTML = `<div class="input-group ${sel.classList.contains("form-select-sm") ? "input-group-sm" : ""}">
+            <input type="text" class="form-control" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn-outline-secondary" tabindex="-1" aria-label="Buka daftar">${SVG_CARET}</button>
+        </div>`;
+        sel.parentNode.insertBefore(wrap, sel);
+        wrap.appendChild(sel);
+        sel.classList.add("ss-hidden-select");
+        sel.tabIndex = -1;
+
+        const input = wrap.querySelector("input");
+        const btn = wrap.querySelector("button");
+        let list = null, items = [], activeIdx = -1;
+
+        const selectedText = () => {
+            const o = sel.options[sel.selectedIndex];
+            return o && o.value !== "" ? o.text : "";
+        };
+        const placeholderText = () => (sel.options.length && sel.options[0].value === "") ? sel.options[0].text : "";
+
+        // Samakan tampilan kolom ketik dengan <select> (nilai, placeholder, status disabled)
+        function sync() {
+            input.value = selectedText();
+            input.placeholder = placeholderText();
+            input.disabled = sel.disabled;
+            btn.disabled = sel.disabled;
+        }
+
+        function setValue(v) {
+            selValueDesc.set.call(sel, v);
+            sync();
+            sel.dispatchEvent(new Event("change", { bubbles: true }));  // supaya filter bertingkat tetap jalan
+        }
+
+        // Kode lama mengisi nilai lewat "select.value = ..." -> ikut disinkronkan ke tampilan
+        Object.defineProperty(sel, "value", {
+            configurable: true,
+            get() { return selValueDesc.get.call(this); },
+            set(v) { selValueDesc.set.call(this, v); sync(); }
+        });
+        new MutationObserver(sync).observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+        sel.addEventListener("change", sync);
+
+        function place() {
+            if (!list) return;
+            const r = wrap.getBoundingClientRect();
+            list.style.left = r.left + "px";
+            list.style.width = r.width + "px";
+            const spaceBelow = window.innerHeight - r.bottom;
+            if (spaceBelow < Math.min(240, list.scrollHeight) + 8 && r.top > spaceBelow) {
+                list.style.top = "auto";
+                list.style.bottom = (window.innerHeight - r.top) + "px";
+            } else {
+                list.style.bottom = "auto";
+                list.style.top = r.bottom + "px";
+            }
+        }
+
+        function render(filterText) {
+            const q = (filterText || "").trim().toLowerCase();
+            items = Array.from(sel.options).filter(o => o.value !== "" && (!q || o.text.toLowerCase().includes(q)));
+            list.innerHTML = items.length
+                ? items.map((o, i) => `<div class="ss-item${o.value === sel.value ? " selected" : ""}" data-i="${i}">${esc(o.text)}</div>`).join("")
+                : '<div class="ss-empty">Tidak ada hasil</div>';
+            activeIdx = q ? (items.length ? 0 : -1) : items.findIndex(o => o.value === sel.value);
+            highlight();
+            place();
+        }
+
+        function highlight() {
+            if (!list) return;
+            list.querySelectorAll(".ss-item").forEach((el, i) => el.classList.toggle("active", i === activeIdx));
+            const a = list.querySelector(".ss-item.active");
+            if (a) a.scrollIntoView({ block: "nearest" });
+        }
+
+        function openList(filterText) {
+            if (sel.disabled) return;
+            if (!list) {
+                list = document.createElement("div");
+                list.className = "ss-list";
+                list.addEventListener("mousedown", e => {
+                    e.preventDefault();                       // jangan sampai kolom ketik kehilangan fokus
+                    const it = e.target.closest(".ss-item");
+                    if (it) choose(parseInt(it.dataset.i, 10));
+                });
+                document.body.appendChild(list);
+            }
+            render(filterText);
+        }
+
+        function closeList() {
+            if (list) { list.remove(); list = null; }
+            activeIdx = -1;
+        }
+
+        function choose(i) {
+            const o = items[i];
+            if (!o) return;
+            if (sel.value !== o.value) setValue(o.value); else sync();
+            closeList();
+        }
+
+        // Saat kolom ditinggalkan: teks kosong = kosongkan pilihan; teks cocok persis = pilih; selain itu kembalikan
+        function commit() {
+            closeList();
+            const t = input.value.trim().toLowerCase();
+            if (t === "") {
+                if (sel.value !== "") setValue(""); else sync();
+                return;
+            }
+            const exact = Array.from(sel.options).find(o => o.value !== "" && o.text.toLowerCase() === t);
+            if (exact && sel.value !== exact.value) setValue(exact.value); else sync();
+        }
+
+        input.addEventListener("focus", () => { if (!list) { openList(""); input.select(); } });
+        input.addEventListener("click", () => { if (!list) openList(""); });
+        input.addEventListener("input", () => { if (!list) openList(input.value); else render(input.value); });
+        input.addEventListener("blur", () => setTimeout(commit, 0));
+        input.addEventListener("keydown", e => {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (!list) openList(""); else { activeIdx = Math.min(activeIdx + 1, items.length - 1); highlight(); }
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (list) { activeIdx = Math.max(activeIdx - 1, 0); highlight(); }
+            } else if (e.key === "Enter") {
+                if (list) { e.preventDefault(); if (activeIdx >= 0) choose(activeIdx); else commit(); }
+            } else if (e.key === "Escape") {
+                if (list) { e.preventDefault(); e.stopPropagation(); closeList(); sync(); }
+            }
+        });
+
+        btn.addEventListener("mousedown", e => e.preventDefault());
+        btn.addEventListener("click", () => {
+            if (list) { closeList(); sync(); } else { input.focus(); if (!list) openList(""); }
+        });
+
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+
+        sync();
+    };
+
+    function initMain() { ["costcenter_id", "area_id", "bagian_id", "jabatan_id"].forEach(window.enhanceSearchableSelect); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initMain);
+    else initMain();
+})();

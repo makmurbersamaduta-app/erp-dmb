@@ -56,6 +56,61 @@ function hitungPtkp(statusPernikahan, jenisKelamin, jumlahAnak) {
     return `${prefix}/${anakCount}`;
 }
 
+// ============================================================================
+// HELPER TANGGAL (format isian: dd/mm/yyyy)
+// Menerima: teks "dd/mm/yyyy" (juga dd-mm-yyyy / dd.mm.yyyy), sel tanggal Excel
+// (nomor seri), dan teks lama "yyyy-mm-dd". Hasil selalu "yyyy-mm-dd" (format database),
+// atau null jika tidak valid (mis. 31/02/2026).
+// ============================================================================
+function parseTanggalExcel(raw) {
+    if (raw === null || raw === undefined) return null;
+    const s = String(raw).trim();
+    if (s === "") return null;
+
+    let y, m, d;
+    let mt;
+    if ((mt = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(s))) {
+        d = +mt[1]; m = +mt[2]; y = +mt[3];
+    } else if ((mt = /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/.exec(s))) {
+        y = +mt[1]; m = +mt[2]; d = +mt[3];
+    } else if (/^\d+(\.\d+)?$/.test(s) && parseFloat(s) > 20000 && parseFloat(s) < 80000) {
+        // nomor seri tanggal Excel -> tanggal
+        const dt = new Date(Math.round((Math.floor(parseFloat(s)) - 25569) * 86400000));
+        y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; d = dt.getUTCDate();
+    } else {
+        return null;
+    }
+
+    // Validasi tanggal nyata (menolak 31/02/2026, bulan 13, dst.)
+    const chk = new Date(Date.UTC(y, m - 1, d));
+    if (chk.getUTCFullYear() !== y || chk.getUTCMonth() !== m - 1 || chk.getUTCDate() !== d) return null;
+
+    return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+// Ubah kolom tanggal (teks "yyyy-mm-dd") pada sheet menjadi sel tanggal Excel berformat dd/mm/yyyy
+function formatTemplateDateColumns(ws, dateHeaders) {
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    const cols = [];
+    for (let C = range.s.c; C <= range.e.c; C++) {
+        const head = ws[XLSX.utils.encode_cell({ r: range.s.r, c: C })];
+        const isDateCol = !!head && dateHeaders.includes(String(head.v));
+        cols[C] = { wpx: isDateCol ? 90 : 110 };
+        if (!isDateCol) continue;
+        for (let R = range.s.r + 1; R <= range.e.r; R++) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (!cell || typeof cell.v !== "string") continue;
+            const mt = /^(\d{4})-(\d{2})-(\d{2})$/.exec(cell.v);
+            if (!mt) continue;
+            cell.t = "n";
+            cell.v = Math.round(Date.UTC(+mt[1], +mt[2] - 1, +mt[3]) / 86400000) + 25569;
+            cell.z = "dd/mm/yyyy";
+            delete cell.w;
+        }
+    }
+    ws["!cols"] = cols;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     // Bind Event Listeners Bulk Upload
     const btnProcessBulk = document.getElementById("btnProcessBulk");
@@ -124,7 +179,8 @@ function downloadBulkTemplate() {
         { "Kategori Field": "AGAMA (Mandatory)", "Pilihan Nilai / Format": "Islam, Kristen, Katolik, Hindu, Buddha, Khonghucu" },
         { "Kategori Field": "STATUS PERNIKAHAN (Mandatory)", "Pilihan Nilai / Format": "Lajang, Menikah, Cerai" },
         { "Kategori Field": "NAMA BANK", "Pilihan Nilai / Format": "BCA, Mandiri, BNI, BRI, CIMB, Danamon, Permata, Lainnya" },
-        { "Kategori Field": "FORMAT TANGGAL", "Pilihan Nilai / Format": "YYYY-MM-DD (Contoh: 2026-08-01)" },
+        { "Kategori Field": "FORMAT TANGGAL (Tanggal Lahir, Tanggal Masuk)", "Pilihan Nilai / Format": "dd/mm/yyyy (Contoh: 01/08/2026 = 1 Agustus 2026)" },
+        { "Kategori Field": "CATATAN TANGGAL", "Pilihan Nilai / Format": "Ketik tanggal sebagai tanggal Excel atau teks dd/mm/yyyy. Hari dan bulan 2 digit disarankan (05/06/1995). Tanggal yang tidak valid (mis. 31/02/2026) akan ditolak." },
         { "Kategori Field": "--- DAFTAR ID MASTER ---", "Pilihan Nilai / Format": "--- Ambil ID Angka dari Master Data ---" }
     ];
 
@@ -143,6 +199,7 @@ function downloadBulkTemplate() {
 
     const wb = XLSX.utils.book_new();
     const wsTemplate = XLSX.utils.json_to_sheet(templateData);
+    formatTemplateDateColumns(wsTemplate, ["Tanggal Lahir", "Tanggal Masuk"]);
     const wsGuide = XLSX.utils.json_to_sheet(guideData);
 
     XLSX.utils.book_append_sheet(wb, wsTemplate, "Template Bulk");
@@ -206,7 +263,8 @@ async function handleBulkExcelUpload() {
                 const nikKtp = getRowValue(row, ['nik_ktp', 'No KTP', 'NIK KTP']);
                 const nama = getRowValue(row, ['nama', 'Nama']);
                 const tempatLahir = getRowValue(row, ['tempat_lahir', 'Tempat Lahir']);
-                const tanggalLahir = getRowValue(row, ['tanggal_lahir', 'Tanggal Lahir']);
+                const tanggalLahirRaw = getRowValue(row, ['tanggal_lahir', 'Tanggal Lahir']);
+                const tanggalLahir = parseTanggalExcel(tanggalLahirRaw);
                 const jenisKelamin = getRowValue(row, ['jenis_kelamin', 'Jenis Kelamin']);
                 const pendidikan = getRowValue(row, ['pendidikan', 'Pendidikan']);
                 const agama = getRowValue(row, ['agama', 'Agama']);
@@ -222,7 +280,16 @@ async function handleBulkExcelUpload() {
                 const areaId = getRowValue(row, ['area_id', 'Area ID']);
                 const jabatanId = getRowValue(row, ['jabatan_id', 'Jabatan ID']);
                 const statusKaryawan = getRowValue(row, ['status_karyawan', 'Status Karyawan']);
-                const startDate = getRowValue(row, ['start_date', 'Tanggal Masuk']);
+                const startDateRaw = getRowValue(row, ['start_date', 'Tanggal Masuk']);
+                const startDate = parseTanggalExcel(startDateRaw);
+
+                // Tanggal diisi tetapi formatnya salah -> pesan yang jelas (bukan "field tidak lengkap")
+                if ((tanggalLahirRaw && !tanggalLahir) || (startDateRaw && !startDate)) {
+                    failCount++;
+                    const kolom = (tanggalLahirRaw && !tanggalLahir) ? `Tanggal Lahir ("${tanggalLahirRaw}")` : `Tanggal Masuk ("${startDateRaw}")`;
+                    errorLogs.push(`Baris ${rowNum}: ${kolom} tidak valid. Gunakan format dd/mm/yyyy.`);
+                    continue;
+                }
 
                 if (!nikKtp || !nama || !tempatLahir || !tanggalLahir || !jenisKelamin || 
                     !pendidikan || !agama || !statusPernikahan || anak === undefined || 

@@ -139,6 +139,10 @@ async function loadMasterData() {
         fetchMaster("jabatans")
     ]);
 
+    // Hanya data master AKTIF (is_active bukan false) yang boleh muncul di dropdown
+    [masterBranches, masterCostCenters, masterAreas, masterDepartments, masterBagians, masterJabatans] =
+        [masterBranches, masterCostCenters, masterAreas, masterDepartments, masterBagians, masterJabatans].map(list => list.filter(m => m.is_active !== false));
+
     // Populate dropdown
     populateSelect("branch_id", masterBranches, "id", "branch_name", "-- Pilih Cabang --");
     populateSelect("departemen_id", masterDepartments, "id", "department_name", "-- Pilih Departemen --");
@@ -613,3 +617,193 @@ async function handleFormSubmit(e) {
         btnSubmit.innerHTML = originalText;
     }
 }
+
+
+// ==============================================================================
+// DROPDOWN DENGAN PENCARIAN (Searchable Select)
+// Mengubah <select> biasa menjadi kolom ketik + tombol panah:
+//  - ketik sebagian nama (mis. "rama") -> daftar menyaring opsi yang mengandung teks itu
+//  - klik tombol panah / klik kolom -> seluruh daftar tampil tanpa perlu mengetik
+// <select> aslinya tetap ada (disembunyikan secara visual) sehingga semua kode lama
+// (isi opsi, ambil nilai, validasi "required", event change) tetap bekerja.
+// ==============================================================================
+(function () {
+    const SVG_CARET = '<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1.6 5l6.4 6.4L14.4 5z"/></svg>';
+    const selValueDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+
+    function injectStyle() {
+        if (document.getElementById("ssStyle")) return;
+        const st = document.createElement("style");
+        st.id = "ssStyle";
+        st.textContent = `
+            .ss-wrap { position: relative; }
+            .ss-hidden-select { position: absolute !important; left: 0; bottom: 0; width: 100%; height: 1px;
+                                opacity: 0; pointer-events: none; border: 0 !important; padding: 0 !important; }
+            .ss-list { position: fixed; z-index: 3000; max-height: 240px; overflow-y: auto; background: #fff;
+                       border: 1px solid #ced4da; border-radius: .375rem; box-shadow: 0 .5rem 1rem rgba(0,0,0,.15); }
+            .ss-item { padding: .4rem .75rem; cursor: pointer; font-size: .875rem; }
+            .ss-item:hover, .ss-item.active { background: #e7f1ff; }
+            .ss-item.selected { font-weight: 600; }
+            .ss-empty { padding: .5rem .75rem; color: #6c757d; font-size: .85rem; }`;
+        document.head.appendChild(st);
+    }
+
+    function esc(v) {
+        return String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    window.enhanceSearchableSelect = function (selectId) {
+        const sel = document.getElementById(selectId);
+        if (!sel || sel.dataset.ss === "1") return;   // sudah pernah dipasang
+        sel.dataset.ss = "1";
+        injectStyle();
+
+        const wrap = document.createElement("div");
+        wrap.className = "ss-wrap";
+        wrap.innerHTML = `<div class="input-group ${sel.classList.contains("form-select-sm") ? "input-group-sm" : ""}">
+            <input type="text" class="form-control" autocomplete="off" spellcheck="false">
+            <button type="button" class="btn btn-outline-secondary" tabindex="-1" aria-label="Buka daftar">${SVG_CARET}</button>
+        </div>`;
+        sel.parentNode.insertBefore(wrap, sel);
+        wrap.appendChild(sel);
+        sel.classList.add("ss-hidden-select");
+        sel.tabIndex = -1;
+
+        const input = wrap.querySelector("input");
+        const btn = wrap.querySelector("button");
+        let list = null, items = [], activeIdx = -1;
+
+        const selectedText = () => {
+            const o = sel.options[sel.selectedIndex];
+            return o && o.value !== "" ? o.text : "";
+        };
+        const placeholderText = () => (sel.options.length && sel.options[0].value === "") ? sel.options[0].text : "";
+
+        // Samakan tampilan kolom ketik dengan <select> (nilai, placeholder, status disabled)
+        function sync() {
+            input.value = selectedText();
+            input.placeholder = placeholderText();
+            input.disabled = sel.disabled;
+            btn.disabled = sel.disabled;
+        }
+
+        function setValue(v) {
+            selValueDesc.set.call(sel, v);
+            sync();
+            sel.dispatchEvent(new Event("change", { bubbles: true }));  // supaya filter bertingkat tetap jalan
+        }
+
+        // Kode lama mengisi nilai lewat "select.value = ..." -> ikut disinkronkan ke tampilan
+        Object.defineProperty(sel, "value", {
+            configurable: true,
+            get() { return selValueDesc.get.call(this); },
+            set(v) { selValueDesc.set.call(this, v); sync(); }
+        });
+        new MutationObserver(sync).observe(sel, { childList: true, attributes: true, attributeFilter: ["disabled"] });
+        sel.addEventListener("change", sync);
+
+        function place() {
+            if (!list) return;
+            const r = wrap.getBoundingClientRect();
+            list.style.left = r.left + "px";
+            list.style.width = r.width + "px";
+            const spaceBelow = window.innerHeight - r.bottom;
+            if (spaceBelow < Math.min(240, list.scrollHeight) + 8 && r.top > spaceBelow) {
+                list.style.top = "auto";
+                list.style.bottom = (window.innerHeight - r.top) + "px";
+            } else {
+                list.style.bottom = "auto";
+                list.style.top = r.bottom + "px";
+            }
+        }
+
+        function render(filterText) {
+            const q = (filterText || "").trim().toLowerCase();
+            items = Array.from(sel.options).filter(o => o.value !== "" && (!q || o.text.toLowerCase().includes(q)));
+            list.innerHTML = items.length
+                ? items.map((o, i) => `<div class="ss-item${o.value === sel.value ? " selected" : ""}" data-i="${i}">${esc(o.text)}</div>`).join("")
+                : '<div class="ss-empty">Tidak ada hasil</div>';
+            activeIdx = q ? (items.length ? 0 : -1) : items.findIndex(o => o.value === sel.value);
+            highlight();
+            place();
+        }
+
+        function highlight() {
+            if (!list) return;
+            list.querySelectorAll(".ss-item").forEach((el, i) => el.classList.toggle("active", i === activeIdx));
+            const a = list.querySelector(".ss-item.active");
+            if (a) a.scrollIntoView({ block: "nearest" });
+        }
+
+        function openList(filterText) {
+            if (sel.disabled) return;
+            if (!list) {
+                list = document.createElement("div");
+                list.className = "ss-list";
+                list.addEventListener("mousedown", e => {
+                    e.preventDefault();                       // jangan sampai kolom ketik kehilangan fokus
+                    const it = e.target.closest(".ss-item");
+                    if (it) choose(parseInt(it.dataset.i, 10));
+                });
+                document.body.appendChild(list);
+            }
+            render(filterText);
+        }
+
+        function closeList() {
+            if (list) { list.remove(); list = null; }
+            activeIdx = -1;
+        }
+
+        function choose(i) {
+            const o = items[i];
+            if (!o) return;
+            if (sel.value !== o.value) setValue(o.value); else sync();
+            closeList();
+        }
+
+        // Saat kolom ditinggalkan: teks kosong = kosongkan pilihan; teks cocok persis = pilih; selain itu kembalikan
+        function commit() {
+            closeList();
+            const t = input.value.trim().toLowerCase();
+            if (t === "") {
+                if (sel.value !== "") setValue(""); else sync();
+                return;
+            }
+            const exact = Array.from(sel.options).find(o => o.value !== "" && o.text.toLowerCase() === t);
+            if (exact && sel.value !== exact.value) setValue(exact.value); else sync();
+        }
+
+        input.addEventListener("focus", () => { if (!list) { openList(""); input.select(); } });
+        input.addEventListener("click", () => { if (!list) openList(""); });
+        input.addEventListener("input", () => { if (!list) openList(input.value); else render(input.value); });
+        input.addEventListener("blur", () => setTimeout(commit, 0));
+        input.addEventListener("keydown", e => {
+            if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (!list) openList(""); else { activeIdx = Math.min(activeIdx + 1, items.length - 1); highlight(); }
+            } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (list) { activeIdx = Math.max(activeIdx - 1, 0); highlight(); }
+            } else if (e.key === "Enter") {
+                if (list) { e.preventDefault(); if (activeIdx >= 0) choose(activeIdx); else commit(); }
+            } else if (e.key === "Escape") {
+                if (list) { e.preventDefault(); e.stopPropagation(); closeList(); sync(); }
+            }
+        });
+
+        btn.addEventListener("mousedown", e => e.preventDefault());
+        btn.addEventListener("click", () => {
+            if (list) { closeList(); sync(); } else { input.focus(); if (!list) openList(""); }
+        });
+
+        window.addEventListener("scroll", place, true);
+        window.addEventListener("resize", place);
+
+        sync();
+    };
+
+    function initMain() { ["costcenter_id", "area_id", "bagian_id", "jabatan_id"].forEach(window.enhanceSearchableSelect); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initMain);
+    else initMain();
+})();
