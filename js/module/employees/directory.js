@@ -482,9 +482,12 @@ function initMultiFilter(selectId) {
             <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" class="ms-2 flex-shrink-0"><path fill="currentColor" d="M1.6 5l6.4 6.4L14.4 5z"/></svg>
         </button>
         <div class="mf-panel border rounded bg-white mt-1 p-2" style="display:none;">
-            <div class="d-flex align-items-center gap-2 mb-2 mf-tools">
-                <input type="text" class="form-control form-control-sm mf-search" placeholder="Cari..." autocomplete="off">
-                <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-nowrap mf-clear">Kosongkan</button>
+            <div class="mb-2 mf-tools">
+                <input type="text" class="form-control form-control-sm mf-search mb-1" placeholder="Cari..." autocomplete="off">
+                <div class="d-flex justify-content-between align-items-center">
+                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 mf-selall">Pilih Semua</button>
+                    <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 text-secondary mf-clear">Kosongkan</button>
+                </div>
             </div>
             <div class="mf-list" style="max-height:200px; overflow-y:auto;"></div>
         </div>`;
@@ -495,12 +498,17 @@ function initMultiFilter(selectId) {
     const panel = wrap.querySelector(".mf-panel");
     const tools = wrap.querySelector(".mf-tools");
     const search = wrap.querySelector(".mf-search");
+    const selAllBtn = wrap.querySelector(".mf-selall");
     const list = wrap.querySelector(".mf-list");
+    // "Pilih Semua" tidak ditampilkan untuk Status Data (hanya 2 pilihan: Aktif / Non-Aktif)
+    if (selectId === "filterStatusData") selAllBtn.style.display = "none";
 
     function updateSummary() {
         const chosen = Array.from(sel.options).filter(o => o.selected && o.value !== "");
+        const total = Array.from(sel.options).filter(o => o.value !== "").length;
         textEl.textContent = chosen.length === 0 ? sel.dataset.allText
                            : chosen.length === 1 ? chosen[0].text
+                           : chosen.length === total ? `Semua dipilih (${total})`
                            : `${chosen.length} dipilih`;
         btn.classList.toggle("btn-outline-primary", chosen.length > 0);
         btn.classList.toggle("btn-outline-secondary", chosen.length === 0);
@@ -511,6 +519,7 @@ function initMultiFilter(selectId) {
         tools.querySelector(".mf-search").style.display = opts.length > 8 ? "" : "none";
         const q = search.value.trim().toLowerCase();
         const shown = opts.filter(o => !q || o.text.toLowerCase().includes(q));
+        selAllBtn.textContent = q ? "Pilih hasil pencarian" : "Pilih Semua";
         list.innerHTML = shown.length
             ? shown.map(o => `<label class="d-flex align-items-center gap-2 small px-1 py-1 mf-item" style="cursor:pointer;">
                     <input type="checkbox" class="form-check-input mt-0 flex-shrink-0" value="${mfEsc(o.value)}" ${o.selected ? "checked" : ""}>
@@ -533,6 +542,15 @@ function initMultiFilter(selectId) {
         if (opt) opt.selected = cb.checked;
         updateSummary();
         fireChange();
+    });
+    // Centang semua opsi (atau hanya yang cocok dengan kata pencarian) sekaligus,
+    // lalu hilangkan centang pada yang ingin dikecualikan.
+    selAllBtn.addEventListener("click", () => {
+        const q = search.value.trim().toLowerCase();
+        Array.from(sel.options).forEach(o => {
+            if (o.value !== "" && (!q || o.text.toLowerCase().includes(q))) o.selected = true;
+        });
+        updateSummary(); renderList(); fireChange();
     });
     wrap.querySelector(".mf-clear").addEventListener("click", () => {
         Array.from(sel.options).forEach(o => { o.selected = false; });
@@ -1643,32 +1661,36 @@ function exportDirectoryToExcel() {
 }
 
 // ============================================================================
-// DATA MUTASI UNTUK SHEET KE-2 EXPORT
-// Aturan: action_type = MUTATION, status_karyawan PKWT/PKWTT,
-// dan kalau karyawan pernah REHIRE -> hanya mutasi pada/setelah tanggal REHIRE terakhir.
+// DATA ASSIGNMENT UNTUK SHEET KE-2 EXPORT ("Data Mutasi")
+// Aturan:
+//  - SEMUA assignment (NEW_HIRE, MUTATION, REHIRE), tidak hanya mutasi
+//  - hanya karyawan yang status karyawannya saat ini PKWT / PKWTT
+//  - jika karyawan pernah REHIRE: hanya mulai dari assignment REHIRE terakhir sampai assignment
+//    terakhir. Assignment sebelum rehire (siklus kerja lama) tidak diambil.
 // ============================================================================
-const MUTATION_HEADERS = ["NIK Karyawan", "Nama", "Cabang", "Cost Center", "Departemen", "Area", "Jabatan", "Tanggal Awal Mutasi", "Tanggal Akhir Mutasi"];
+const MUTATION_HEADERS = ["NIK Karyawan", "Nama", "Cabang", "Cost Center", "Departemen", "Area", "Jabatan", "Tanggal Awal Mutasi", "Tanggal Akhir Mutasi", "Jenis Assignment"];
 
 function buildMutationExportRows(employees) {
     const rows = [];
     employees.forEach(emp => {
         const list = directoryAssignmentsByEmp.get(String(emp.id)) || [];
 
-        const rehireDates = list
-            .filter(a => String(a.action_type || "").toUpperCase() === "REHIRE" && a.start_date)
-            .map(a => a.start_date).sort();
-        const lastRehire = rehireDates.length ? rehireDates[rehireDates.length - 1] : null;
-
         // Status karyawan = yang sama dengan kolom "Status Karyawan" di sheet Data Karyawan
-        // (diambil dari assignment aktif/terbaru), bukan dari status di baris mutasi.
+        // (diambil dari assignment aktif/terbaru).
         const cur = getEmployeeAssignment(emp.id, emp.nik_karyawan);
         const st = String(cur?.status_karyawan || "").toUpperCase().trim();
         if (st !== "PKWT" && st !== "PKWTT") return;
 
-        list.forEach(a => {
-            if (String(a.action_type || "").toUpperCase() !== "MUTATION") return;
-            if (lastRehire && (a.start_date || "") < lastRehire) return;
+        // Urutkan lama -> baru, lalu mulai dari REHIRE terakhir (jika ada)
+        const sorted = [...list].sort((x, y) =>
+            (x.start_date || "").localeCompare(y.start_date || "") ||
+            (x.created_at || "").localeCompare(y.created_at || ""));
+        let startIdx = 0;
+        sorted.forEach((a, i) => {
+            if (String(a.action_type || "").toUpperCase() === "REHIRE") startIdx = i;
+        });
 
+        sorted.slice(startIdx).forEach(a => {
             rows.push({
                 "NIK Karyawan": emp.nik_karyawan || "-",
                 "Nama": emp.nama || "-",
@@ -1678,7 +1700,8 @@ function buildMutationExportRows(employees) {
                 "Area": masterCache.areas.find(x => x.id == a.area_id)?.area_name || "-",
                 "Jabatan": masterCache.jabatans.find(j => j.id == a.jabatan_id)?.jabatan_name || "-",
                 "Tanggal Awal Mutasi": a.start_date || "",
-                "Tanggal Akhir Mutasi": a.end_date || ""
+                "Tanggal Akhir Mutasi": a.end_date || "",
+                "Jenis Assignment": a.action_type || "-"
             });
         });
     });
