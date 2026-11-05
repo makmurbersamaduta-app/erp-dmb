@@ -408,11 +408,15 @@ function branchChoices() {
     return list;
 }
 
+// Daftar area untuk dropdown. Area yang is_active-nya false tidak ditampilkan. Daftar lengkap
+// (state.areas / areaMap) tetap menyimpan semua area, supaya titik lama yang berada di area
+// nonaktif masih menampilkan nama areanya di tabel.
 // Daftar area untuk sebuah cabang. Jika tabel areas punya kolom branch_id, area
 // disaring sesuai cabang (area tanpa branch_id tetap ditampilkan); jika tidak, semua area.
 function areaChoices(branchId) {
     const hasBranchCol = state.areas.some(a => Object.prototype.hasOwnProperty.call(a, "branch_id"));
     return state.areas
+        .filter(a => a.is_active !== false)    // area nonaktif (is_active = false) tidak ditawarkan; NULL dianggap aktif
         .filter(a => !hasBranchCol || a.branch_id === null || a.branch_id === undefined || String(a.branch_id) === String(branchId))
         .map(a => ({ id: a.id, name: a.area_name }))
         .sort((a, b) => String(a.name).localeCompare(String(b.name), "id", { numeric: true }));
