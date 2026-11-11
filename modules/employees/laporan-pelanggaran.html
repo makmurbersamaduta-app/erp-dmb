@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Pelanggaran - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: ikon, font, CSS proyek, dan gaya halaman. Tema sama dengan
+         laporan-inspeksi.html (Simple Profesional). Awalan "li-" = gaya halaman laporan.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS proyek (path disalin dari laporan-inspeksi.html). PERLU DICEK: samakan dengan lokasi file ini. -->
+    <link href="../../../css/base.css" rel="stylesheet">
+    <link href="../../../css/components.css" rel="stylesheet">
+    <link href="../../../css/layout.css" rel="stylesheet">
+    <link href="../../../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --li-primary: #2b6cb0;
+            --li-primary-dark: #1e4e8c;
+            --li-bg-soft: #e1ecf5;
+            --li-border: #d3dfea;
+            --li-text-main: #1f2d3d;
+            --li-text-muted: #6b7c93;
+            --li-danger: #d64545;
+            --li-success: #2f855a;
+            --li-radius: 8px;
+            --li-head-h: 40px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body { display: flex; flex-direction: column; font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--li-text-main); }
+        [hidden] { display: none !important; }
+
+        /* --- Bar atas: Kembali (kiri) + judul (tengah) --- */
+        .li-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--li-border); flex-shrink: 0; }
+        .li-topbar .btn-back { grid-column: 1; justify-self: start; }
+        .li-title-block { grid-column: 2; text-align: center; }
+        .li-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .li-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--li-primary); }
+        .btn-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--li-radius); border: 1px solid var(--li-border); background: var(--li-bg-soft); color: var(--li-primary-dark); font-size: 14px; font-weight: 600; text-decoration: none; transition: background 0.15s ease; }
+        .btn-back:hover { background: var(--li-primary); color: #fff; }
+
+        /* --- Area utama & toolbar --- */
+        .li-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+        .li-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .li-toolbar-right { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .btn-tool { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); padding: 8px 16px; font-size: 14px; color: var(--li-text-main); cursor: pointer; font-family: inherit; }
+        .btn-tool:hover { border-color: var(--li-primary); color: var(--li-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+        .li-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--li-primary); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+
+        /* --- Panel filter --- */
+        .li-filter-wrap { position: relative; }
+        .li-filter-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 320px; max-height: 80vh; overflow-y: auto; background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12); padding: 16px; }
+        .li-field { margin-bottom: 12px; }
+        .li-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--li-text-muted); margin-bottom: 4px; }
+        .li-field select, .li-field input[type="date"], .li-field input[type="text"], .li-field textarea { width: 100%; border: 1px solid var(--li-border); border-radius: var(--li-radius); padding: 8px 10px; font-size: 14px; font-family: inherit; background: #fff; outline: none; }
+        .li-field textarea { resize: vertical; min-height: 80px; }
+        .li-field select:focus, .li-field input:focus, .li-field textarea:focus { border-color: var(--li-primary); }
+        .li-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .li-filter-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+        .li-btn-plain { padding: 8px 14px; border-radius: var(--li-radius); border: 1px solid var(--li-border); background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--li-text-main); text-decoration: none; display: inline-block; }
+        .li-btn-plain:hover { border-color: var(--li-primary); }
+        .li-btn-primary { padding: 8px 16px; border-radius: var(--li-radius); border: 1px solid var(--li-primary); background: var(--li-primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .li-btn-primary:hover { background: var(--li-primary-dark); border-color: var(--li-primary-dark); }
+        .li-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* --- Tabel (header sticky) --- */
+        .li-table-wrapper { background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: auto; flex: 1; min-height: 0; }
+        .li-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .li-table thead th { position: sticky; top: 0; z-index: 10; height: var(--li-head-h); background: var(--li-bg-soft); color: var(--li-text-main); font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap; border-bottom: 2px solid var(--li-border); }
+        .li-table tbody td { padding: 10px 14px; border-bottom: 1px solid var(--li-border); vertical-align: middle; white-space: nowrap; }
+        .li-table tbody tr:hover { background: #f7fafc; }
+        .li-table tbody tr.li-row-click { cursor: pointer; }
+        .li-table td.col-desc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+        .col-no { width: 50px; text-align: center !important; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--li-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--li-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .li-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn { min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--li-border); background: #fff; border-radius: 6px; font-size: 13px; color: var(--li-text-main); cursor: pointer; font-family: inherit; }
+        .pagination-btn:hover { border-color: var(--li-primary); }
+        .pagination-btn.active { background: var(--li-primary); border-color: var(--li-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .li-page-info { font-size: 12.5px; color: var(--li-text-muted); margin-left: 10px; }
+
+        /* --- Modal umum --- */
+        .li-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(31, 45, 61, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .li-overlay.top { z-index: 300; }
+        .li-modal { background: #fff; border-radius: 12px; width: 100%; max-width: 720px; max-height: 94vh; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(31, 45, 61, 0.28); overflow: hidden; }
+        .li-modal.sm { max-width: 460px; }
+        .li-modal.lg { max-width: 860px; }
+        .li-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--li-border); }
+        .li-modal-title { margin: 0; font-size: 17px; font-weight: 700; }
+        .li-modal-close { border: none; background: transparent; font-size: 18px; color: var(--li-text-muted); cursor: pointer; padding: 4px 8px; }
+        .li-modal-close:hover { color: var(--li-text-main); }
+        .li-modal-body { padding: 16px 20px; overflow-y: auto; }
+        .li-modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 20px; background: #f8fafc; border-top: 1px solid var(--li-border); }
+
+        /* --- Modal detail: info, foto, peta --- */
+        .li-info { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin: 0 0 14px; font-size: 13.5px; }
+        .li-info dt { color: var(--li-text-muted); font-weight: 600; }
+        .li-info dd { margin: 0; font-weight: 500; word-break: break-word; white-space: pre-wrap; }
+        .li-section-label { font-size: 13px; font-weight: 600; color: var(--li-text-muted); margin: 14px 0 8px; }
+        .li-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+        .li-photo-grid a { display: block; aspect-ratio: 1 / 1; border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: hidden; background: #f8fafc; }
+        .li-photo-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .li-note { padding: 18px 16px; text-align: center; color: var(--li-text-muted); font-size: 13.5px; line-height: 1.55; background: #f8fafc; border: 1px dashed var(--li-border); border-radius: var(--li-radius); }
+        .li-map { height: 300px; border: 1px solid var(--li-border); border-radius: var(--li-radius); position: relative; z-index: 0; isolation: isolate; }
+        .li-map-pin { color: var(--li-danger); font-size: 34px; line-height: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+        .li-map-note { margin-top: 10px; font-size: 12px; color: var(--li-text-muted); line-height: 1.5; }
+
+        /* --- Modal kategori: tab, tabel, status, tombol aksi --- */
+        .li-kat-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .li-tabs { display: flex; gap: 6px; background: var(--li-bg-soft); padding: 4px; border-radius: 10px; }
+        .li-tab { border: none; background: transparent; padding: 7px 20px; border-radius: 7px; font-size: 14px; font-weight: 600; color: var(--li-text-muted); cursor: pointer; font-family: inherit; }
+        .li-tab:hover { color: var(--li-primary-dark); }
+        .li-tab.active { background: var(--li-primary); color: #fff; }
+        .li-kat-wrap { border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: auto; max-height: 55vh; }
+        .li-kat-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .li-kat-table thead th { position: sticky; top: 0; z-index: 5; background: var(--li-bg-soft); font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--li-border); white-space: nowrap; }
+        .li-kat-table tbody td { padding: 9px 12px; border-bottom: 1px solid var(--li-border); vertical-align: middle; }
+        .li-kat-table tbody tr.li-row-click:hover { background: #f7fafc; }
+        .li-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+        .li-pill.on { background: #e3f4ea; color: var(--li-success); }
+        .li-pill.off { background: #fbe9e9; color: var(--li-danger); }
+        .li-act { display: inline-flex; gap: 6px; }
+        .li-act button { border: 1px solid var(--li-border); background: #fff; border-radius: 6px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+        .li-act button:hover { border-color: var(--li-primary); color: var(--li-primary-dark); }
+        .li-act button.danger:hover { border-color: var(--li-danger); color: var(--li-danger); }
+
+        @media (max-width: 640px) {
+            .li-topbar, .li-main { padding-left: 12px; padding-right: 12px; }
+            .li-filter-panel { width: 280px; }
+            .li-title { font-size: 20px; }
+            .li-info { grid-template-columns: 100px 1fr; }
+        }
+
+        /* --- Tambahan halaman pelanggaran: kotak cari, saran karyawan, peringatan --- */
+        .li-search { display: flex; align-items: center; background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); }
+        .li-search:focus-within { border-color: var(--li-primary); }
+        .li-search input { border: none; outline: none; background: transparent; padding: 8px 10px; font-size: 14px; width: 250px; font-family: inherit; }
+        .li-search button { border: none; background: transparent; padding: 8px 12px; cursor: pointer; color: var(--li-text-muted); font-size: 14px; }
+        .li-search button:hover { color: var(--li-primary-dark); }
+        .li-modal.md { max-width: 560px; }
+        .li-rel { position: relative; }
+        .li-suggest { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); box-shadow: 0 8px 24px rgba(31, 45, 61, 0.15); max-height: 250px; overflow-y: auto; }
+        .li-suggest-item { padding: 9px 12px; font-size: 13.5px; border-bottom: 1px solid #eef2f6; cursor: pointer; }
+        .li-suggest-item:last-child { border-bottom: none; }
+        .li-suggest-item:hover { background: var(--li-bg-soft); }
+        .li-suggest-item.disabled { color: var(--li-text-muted); cursor: not-allowed; background: #fafbfc; }
+        .li-suggest-item small { display: block; color: var(--li-text-muted); font-size: 12px; margin-top: 1px; }
+        .li-chosen { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--li-primary); background: var(--li-bg-soft); border-radius: var(--li-radius); padding: 8px 10px; font-size: 14px; font-weight: 600; }
+        .li-chosen button { border: none; background: transparent; color: var(--li-text-muted); cursor: pointer; font-size: 16px; }
+        .li-alert { padding: 10px 12px; border-radius: var(--li-radius); font-size: 13px; margin-bottom: 12px; white-space: pre-line; line-height: 1.5; }
+        .li-alert.info { background: var(--li-bg-soft); color: var(--li-primary-dark); }
+        .li-alert.warn { background: #fef3c7; color: #92400e; }
+        .li-alert.danger { background: #fdecec; color: #9b1c1c; }
+        .li-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 500; background: #1f2d3d; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 13px; max-width: 90vw; text-align: center; }
+        /* Panel filter kini di sisi kiri, jadi dibuka ke kanan */
+        .li-filter-panel { left: 0; right: auto; }
+        /* Tombol Tambah Pelanggaran: merah */
+        .btn-tool.li-red { background: var(--li-danger); border-color: var(--li-danger); color: #fff; font-weight: 600; }
+        .btn-tool.li-red:hover { background: #b83232; border-color: #b83232; color: #fff; }
+        /* Deskripsi tampil penuh (baris melebar ke bawah), kolom lain tetap satu baris */
+        .li-table tbody td { vertical-align: top; }
+        .li-table td.col-desc { min-width: 280px; max-width: 380px; white-space: pre-line; word-break: break-word; line-height: 1.45; }
+        .li-table tbody tr.li-row-click { cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS + JUDUL
+         Fungsi: tombol "Kembali" dan judul. Baris di bawah judul (subTitle)
+         diisi JS: cabang (dan departemen) sesuai hak akses atau filter.
+         ============================================================ -->
+    <header class="li-topbar">
+        <a href="../../index.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <div class="li-title-block">
+            <h1 class="li-title">Laporan Pelanggaran</h1>
+            <div class="li-subtitle" id="subTitle">-</div>
+        </div>
+    </header>
+
+    <main class="li-main">
+
+        <!-- ========================================================
+             KELOMPOK 3: TOOLBAR
+             Kiri : Cari (NIK / Nama / Area) dan Filter.
+             Kanan: Jenis Pelanggaran (hanya role 1 & 2) dan Tambah Pelanggaran (merah).
+             Filter Branch hanya role 1 & 2, filter Department hanya role 1, 2, 3
+             (diatur JS lewat kelas li-only-branch / li-only-dept).
+             ======================================================== -->
+        <div class="li-toolbar">
+            <div class="li-toolbar-right">
+                <div class="li-search">
+                    <input type="text" id="searchInput" placeholder="Cari NIK, nama, atau area" autocomplete="off">
+                    <button type="button" id="btnSearchClear" aria-label="Hapus pencarian" hidden><i class="fa-solid fa-xmark"></i></button>
+                    <button type="button" id="btnSearch" aria-label="Cari"><i class="fa-solid fa-magnifying-glass"></i></button>
+                </div>
+
+                <div class="li-filter-wrap">
+                    <button type="button" class="btn-tool" id="btnFilter">
+                        <i class="fa-solid fa-filter"></i><span>Filter</span>
+                        <span class="li-badge" id="filterBadge" hidden>0</span>
+                    </button>
+
+                    <div class="li-filter-panel" id="filterPanel" hidden>
+                        <div class="li-field li-only-branch">
+                            <label for="fBranch">Branch</label>
+                            <select id="fBranch"><option value="">Semua Branch</option></select>
+                        </div>
+                        <div class="li-field li-only-dept">
+                            <label for="fDept">Department</label>
+                            <select id="fDept"><option value="">Semua Department</option></select>
+                        </div>
+                        <div class="li-field">
+                            <label for="fArea">Area</label>
+                            <select id="fArea"><option value="">Semua Area</option></select>
+                        </div>
+                        <div class="li-field">
+                            <label for="fSP">Jenis Peringatan</label>
+                            <select id="fSP"><option value="">Semua Jenis</option></select>
+                        </div>
+                        <div class="li-field">
+                            <label for="fStatus">Status Peringatan</label>
+                            <select id="fStatus">
+                                <option value="">Semua Status</option>
+                                <option value="aktif">Aktif</option>
+                                <option value="nonaktif">Non Aktif</option>
+                            </select>
+                        </div>
+                        <div class="li-filter-actions">
+                            <button type="button" class="li-btn-plain" id="btnFilterReset">Reset</button>
+                            <button type="button" class="li-btn-primary" id="btnFilterApply">Terapkan</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="li-toolbar-right">
+                <button type="button" class="btn-tool" id="btnJenis" hidden>
+                    <i class="fa-solid fa-list-check"></i><span>Jenis Pelanggaran</span>
+                </button>
+                <button type="button" class="btn-tool li-red" id="btnTambah">
+                    <i class="fa-solid fa-plus"></i><span>Surat Peringatan</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: TABEL (header sticky)
+             Isi dibuat oleh laporan-pelanggaran.js. Data dikelompokkan per cabang
+             (Makassar, Surabaya, Bekasi) tanpa sub header, tiap kelompok urut
+             Start Date terbaru di atas. Status "Non Aktif" jika sudah lewat End Date.
+             ======================================================== -->
+        <div class="li-table-wrapper">
+            <table class="li-table">
+                <thead>
+                    <tr>
+                        <th>NIK</th>
+                        <th>Nama</th>
+                        <th>Jenis Peringatan</th>
+                        <th>Jenis Pelanggaran</th>
+                        <th>Deskripsi Pelanggaran</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Status Peringatan</th>
+                    </tr>
+                </thead>
+                <tbody id="pelanggaranTableBody">
+                    <tr class="row-loading"><td colspan="8"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 5: PAGINATION (50 baris per halaman, diatur JS) -->
+        <div class="li-pagination" id="pelanggaranPagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 5B: MODAL DETAIL PELANGGARAN
+         Fungsi: klik baris tabel membuka data lengkap barisnya. Tombol
+         "Print Surat Peringatan" muncul hanya untuk Surat Peringatan 1, 2, dan 3
+         dan menghasilkan file PDF (format mengikuti Master_Surat_Peringatan.docx).
+         ============================================================ -->
+    <div class="li-overlay" id="detailOverlay" hidden>
+        <div class="li-modal md" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="detailTitle">Detail Pelanggaran</h2>
+                <button type="button" class="li-modal-close" id="btnDetailClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <dl class="li-info">
+                    <dt>NIK</dt><dd id="dNik">-</dd>
+                    <dt>Nama</dt><dd id="dNama">-</dd>
+                    <dt>Department</dt><dd id="dDept">-</dd>
+                    <dt>Area</dt><dd id="dArea">-</dd>
+                    <dt>Jenis Peringatan</dt><dd id="dSp">-</dd>
+                    <dt>Jenis Pelanggaran</dt><dd id="dJenis">-</dd>
+                    <dt>Deskripsi Pelanggaran</dt><dd id="dDesc">-</dd>
+                    <dt>Start Date</dt><dd id="dStart">-</dd>
+                    <dt>End Date</dt><dd id="dEnd">-</dd>
+                </dl>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnDetailCloseFoot">Tutup</button>
+                <button type="button" class="li-btn-primary" id="btnPrintSp" hidden><i class="fa-solid fa-file-pdf"></i> Print Surat Peringatan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 6: MODAL JENIS PELANGGARAN (+ SUB MODAL FORM)
+         Fungsi: kelola master jenis_pelanggaran, modelnya sama dengan modal Kategori
+         di laporan-inspeksi: tab Aktif / Non Aktif, tombol tambah, Edit, Hapus
+         (= nonaktifkan). Di tab Non Aktif, klik baris membuka form edit dengan status Aktif.
+         ============================================================ -->
+    <div class="li-overlay" id="masterOverlay" hidden>
+        <div class="li-modal lg" role="dialog" aria-modal="true" aria-labelledby="masterTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="masterTitle">Pengaturan Jenis Pelanggaran</h2>
+                <button type="button" class="li-modal-close" id="btnMasterClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <div class="li-kat-bar">
+                    <div class="li-tabs" role="tablist">
+                        <button type="button" class="li-tab active" data-tab="aktif" role="tab">Aktif</button>
+                        <button type="button" class="li-tab" data-tab="nonaktif" role="tab">Non Aktif</button>
+                    </div>
+                    <button type="button" class="li-btn-primary" id="btnMasterAdd"><i class="fa-solid fa-plus"></i> Tambah Jenis Pelanggaran</button>
+                </div>
+                <div class="li-kat-wrap">
+                    <table class="li-kat-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;text-align:center">No</th>
+                                <th>Jenis Pelanggaran</th>
+                                <th>Deskripsi</th>
+                                <th>Status</th>
+                                <th>Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="masterTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnMasterCloseFoot">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="li-overlay top" id="masterFormOverlay" hidden>
+        <div class="li-modal sm" role="dialog" aria-modal="true" aria-labelledby="masterFormTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="masterFormTitle">Tambah Jenis Pelanggaran</h2>
+                <button type="button" class="li-modal-close" id="btnMasterFormClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <div class="li-field">
+                    <label for="mName">Jenis Pelanggaran</label>
+                    <input type="text" id="mName" maxlength="150" autocomplete="off">
+                </div>
+                <div class="li-field">
+                    <label for="mDesc">Deskripsi</label>
+                    <textarea id="mDesc"></textarea>
+                </div>
+                <div class="li-field" id="mStatusField" hidden>
+                    <label for="mStatus">Status</label>
+                    <select id="mStatus">
+                        <option value="true">Aktif</option>
+                        <option value="false">Non Aktif</option>
+                    </select>
+                </div>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnMasterFormCancel">Batal</button>
+                <button type="button" class="li-btn-primary" id="btnMasterFormSave">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 7: MODAL TAMBAH PELANGGARAN
+         Fungsi: cari karyawan (ketik nama atau NIK; yang tersimpan employee_id),
+         Jenis Peringatan (opsi otomatis mengikuti SP yang masih berlaku menurut
+         End Date), Jenis Pelanggaran, Deskripsi, Start Date, End Date (otomatis
+         +6 bulan). Cabang, departemen, area, bagian, dan petugas terisi otomatis.
+         ============================================================ -->
+    <div class="li-overlay" id="addOverlay" hidden>
+        <div class="li-modal md" role="dialog" aria-modal="true" aria-labelledby="addTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="addTitle">Surat Peringatan</h2>
+                <button type="button" class="li-modal-close" id="btnAddClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <div class="li-alert" id="addMsg" hidden></div>
+
+                <div class="li-field li-rel">
+                    <label for="pEmpSearch">Nama Karyawan</label>
+                    <input type="text" id="pEmpSearch" placeholder="Ketik nama atau NIK (min. 2 huruf)" autocomplete="off">
+                    <div class="li-chosen" id="pEmpChosen" hidden>
+                        <span id="pEmpChosenText"></span>
+                        <button type="button" id="btnEmpClear" aria-label="Ganti karyawan"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <div class="li-suggest" id="pEmpList" hidden></div>
+                </div>
+
+                <div class="li-alert info" id="pSpInfo" hidden></div>
+
+                <div class="li-field">
+                    <label for="pSp">Jenis Peringatan</label>
+                    <select id="pSp" disabled><option value="">Pilih karyawan dulu</option></select>
+                </div>
+                <div class="li-field">
+                    <label for="pJenis">Jenis Pelanggaran</label>
+                    <select id="pJenis"><option value="">Pilih Jenis Pelanggaran</option></select>
+                </div>
+                <div class="li-field">
+                    <label for="pDesc">Deskripsi Pelanggaran</label>
+                    <textarea id="pDesc" maxlength="1000"></textarea>
+                </div>
+                <div class="li-date-row">
+                    <div class="li-field">
+                        <label for="pStart">Start Date</label>
+                        <input type="date" id="pStart">
+                    </div>
+                    <div class="li-field">
+                        <label for="pEnd">End Date (otomatis +6 bulan)</label>
+                        <input type="date" id="pEnd" readonly>
+                    </div>
+                </div>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnAddCancel">Batal</button>
+                <button type="button" class="li-btn-primary" id="btnAddSave">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="li-toast" id="liToast" hidden></div>
+
+    <!-- ============================================================
+         KELOMPOK 8: SCRIPT
+         Supabase (database), jsPDF (membuat PDF surat peringatan), skrip koneksi proyek, lalu skrip halaman.
+         PERLU DICEK: path disalin dari laporan-inspeksi.html.
+         ============================================================ -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/employees/laporan-pelanggaran.js"></script>
+</body>
+</html>

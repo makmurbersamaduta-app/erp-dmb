@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Inspeksi - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: ikon Font Awesome, font Inter, peta Leaflet, CSS proyek, dan
+         seluruh gaya halaman. Prefix "li-" = laporan inspeksi, supaya tidak
+         bentrok dengan kelas di base.css / components.css / layout.css / style.css.
+         Tema warna sama dengan laporan-patroli.html (Simple Profesional).
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" rel="stylesheet">
+
+    <!-- CSS proyek, dimuat SEBELUM <style> di bawah. Path disalin dari laporan-patroli.html.
+         PERLU DICEK: samakan dengan lokasi file ini yang sebenarnya. -->
+    <link href="../../../css/base.css" rel="stylesheet">
+    <link href="../../../css/components.css" rel="stylesheet">
+    <link href="../../../css/layout.css" rel="stylesheet">
+    <link href="../../../css/style.css" rel="stylesheet">
+
+    <style>
+        :root {
+            --li-primary: #2b6cb0;
+            --li-primary-dark: #1e4e8c;
+            --li-bg-soft: #e1ecf5;
+            --li-border: #d3dfea;
+            --li-text-main: #1f2d3d;
+            --li-text-muted: #6b7c93;
+            --li-danger: #d64545;
+            --li-success: #2f855a;
+            --li-radius: 8px;
+            --li-head-h: 40px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body { display: flex; flex-direction: column; font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--li-text-main); }
+        [hidden] { display: none !important; }
+
+        /* --- Bar atas: Kembali (kiri) + judul (tengah) --- */
+        .li-topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 16px; padding: 14px 24px; background: #fff; border-bottom: 1px solid var(--li-border); flex-shrink: 0; }
+        .li-topbar .btn-back { grid-column: 1; justify-self: start; }
+        .li-title-block { grid-column: 2; text-align: center; }
+        .li-title { margin: 0; font-size: 24px; font-weight: 700; }
+        .li-subtitle { margin-top: 2px; font-size: 16px; font-weight: 600; color: var(--li-primary); }
+        .btn-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: var(--li-radius); border: 1px solid var(--li-border); background: var(--li-bg-soft); color: var(--li-primary-dark); font-size: 14px; font-weight: 600; text-decoration: none; transition: background 0.15s ease; }
+        .btn-back:hover { background: var(--li-primary); color: #fff; }
+
+        /* --- Area utama & toolbar --- */
+        .li-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 24px; overflow: hidden; }
+        .li-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-shrink: 0; }
+        .li-toolbar-right { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .btn-tool { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); padding: 8px 16px; font-size: 14px; color: var(--li-text-main); cursor: pointer; font-family: inherit; }
+        .btn-tool:hover { border-color: var(--li-primary); color: var(--li-primary-dark); }
+        .btn-tool:disabled { opacity: 0.6; cursor: not-allowed; }
+        .li-badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--li-primary); color: #fff; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+
+        /* --- Panel filter --- */
+        .li-filter-wrap { position: relative; }
+        .li-filter-panel { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: 320px; max-height: 80vh; overflow-y: auto; background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); box-shadow: 0 8px 24px rgba(31, 45, 61, 0.12); padding: 16px; }
+        .li-field { margin-bottom: 12px; }
+        .li-field label { display: block; font-size: 12.5px; font-weight: 600; color: var(--li-text-muted); margin-bottom: 4px; }
+        .li-field select, .li-field input[type="date"], .li-field input[type="text"], .li-field textarea { width: 100%; border: 1px solid var(--li-border); border-radius: var(--li-radius); padding: 8px 10px; font-size: 14px; font-family: inherit; background: #fff; outline: none; }
+        .li-field textarea { resize: vertical; min-height: 80px; }
+        .li-field select:focus, .li-field input:focus, .li-field textarea:focus { border-color: var(--li-primary); }
+        .li-date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .li-filter-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+        .li-btn-plain { padding: 8px 14px; border-radius: var(--li-radius); border: 1px solid var(--li-border); background: #fff; font-size: 14px; cursor: pointer; font-family: inherit; color: var(--li-text-main); text-decoration: none; display: inline-block; }
+        .li-btn-plain:hover { border-color: var(--li-primary); }
+        .li-btn-primary { padding: 8px 16px; border-radius: var(--li-radius); border: 1px solid var(--li-primary); background: var(--li-primary); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+        .li-btn-primary:hover { background: var(--li-primary-dark); border-color: var(--li-primary-dark); }
+        .li-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* --- Tabel (header sticky) --- */
+        .li-table-wrapper { background: #fff; border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: auto; flex: 1; min-height: 0; }
+        .li-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .li-table thead th { position: sticky; top: 0; z-index: 10; height: var(--li-head-h); background: var(--li-bg-soft); color: var(--li-text-main); font-weight: 600; text-align: left; padding: 0 14px; white-space: nowrap; border-bottom: 2px solid var(--li-border); }
+        .li-table tbody td { padding: 10px 14px; border-bottom: 1px solid var(--li-border); vertical-align: middle; white-space: nowrap; }
+        .li-table tbody tr:hover { background: #f7fafc; }
+        .li-table tbody tr.li-row-click { cursor: pointer; }
+        .li-table td.col-desc { max-width: 280px; overflow: hidden; text-overflow: ellipsis; }
+        .col-no { width: 50px; text-align: center !important; }
+        .row-loading td, .row-empty td { text-align: center !important; padding: 30px !important; color: var(--li-text-muted); white-space: normal !important; }
+        .data-empty-cell { color: var(--li-text-muted); font-style: italic; }
+
+        /* --- Pagination --- */
+        .li-pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .pagination-btn { min-width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--li-border); background: #fff; border-radius: 6px; font-size: 13px; color: var(--li-text-main); cursor: pointer; font-family: inherit; }
+        .pagination-btn:hover { border-color: var(--li-primary); }
+        .pagination-btn.active { background: var(--li-primary); border-color: var(--li-primary); color: #fff; }
+        .pagination-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .li-page-info { font-size: 12.5px; color: var(--li-text-muted); margin-left: 10px; }
+
+        /* --- Modal umum --- */
+        .li-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(31, 45, 61, 0.5); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .li-overlay.top { z-index: 300; }
+        .li-modal { background: #fff; border-radius: 12px; width: 100%; max-width: 720px; max-height: 94vh; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(31, 45, 61, 0.28); overflow: hidden; }
+        .li-modal.sm { max-width: 460px; }
+        .li-modal.lg { max-width: 860px; }
+        .li-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--li-border); }
+        .li-modal-title { margin: 0; font-size: 17px; font-weight: 700; }
+        .li-modal-close { border: none; background: transparent; font-size: 18px; color: var(--li-text-muted); cursor: pointer; padding: 4px 8px; }
+        .li-modal-close:hover { color: var(--li-text-main); }
+        .li-modal-body { padding: 16px 20px; overflow-y: auto; }
+        .li-modal-foot { display: flex; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 20px; background: #f8fafc; border-top: 1px solid var(--li-border); }
+
+        /* --- Modal detail: info, foto, peta --- */
+        .li-info { display: grid; grid-template-columns: 130px 1fr; gap: 6px 12px; margin: 0 0 14px; font-size: 13.5px; }
+        .li-info dt { color: var(--li-text-muted); font-weight: 600; }
+        .li-info dd { margin: 0; font-weight: 500; word-break: break-word; white-space: pre-wrap; }
+        .li-section-label { font-size: 13px; font-weight: 600; color: var(--li-text-muted); margin: 14px 0 8px; }
+        .li-photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+        .li-photo-grid a { display: block; aspect-ratio: 1 / 1; border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: hidden; background: #f8fafc; }
+        .li-photo-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .li-note { padding: 18px 16px; text-align: center; color: var(--li-text-muted); font-size: 13.5px; line-height: 1.55; background: #f8fafc; border: 1px dashed var(--li-border); border-radius: var(--li-radius); }
+        .li-map { height: 300px; border: 1px solid var(--li-border); border-radius: var(--li-radius); position: relative; z-index: 0; isolation: isolate; }
+        .li-map-pin { color: var(--li-danger); font-size: 34px; line-height: 1; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+        .li-map-note { margin-top: 10px; font-size: 12px; color: var(--li-text-muted); line-height: 1.5; }
+
+        /* --- Modal kategori: tab, tabel, status, tombol aksi --- */
+        .li-kat-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+        .li-tabs { display: flex; gap: 6px; background: var(--li-bg-soft); padding: 4px; border-radius: 10px; }
+        .li-tab { border: none; background: transparent; padding: 7px 20px; border-radius: 7px; font-size: 14px; font-weight: 600; color: var(--li-text-muted); cursor: pointer; font-family: inherit; }
+        .li-tab:hover { color: var(--li-primary-dark); }
+        .li-tab.active { background: var(--li-primary); color: #fff; }
+        .li-kat-wrap { border: 1px solid var(--li-border); border-radius: var(--li-radius); overflow: auto; max-height: 55vh; }
+        .li-kat-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
+        .li-kat-table thead th { position: sticky; top: 0; z-index: 5; background: var(--li-bg-soft); font-weight: 600; text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--li-border); white-space: nowrap; }
+        .li-kat-table tbody td { padding: 9px 12px; border-bottom: 1px solid var(--li-border); vertical-align: middle; }
+        .li-kat-table tbody tr.li-row-click:hover { background: #f7fafc; }
+        .li-pill { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+        .li-pill.on { background: #e3f4ea; color: var(--li-success); }
+        .li-pill.off { background: #fbe9e9; color: var(--li-danger); }
+        .li-act { display: inline-flex; gap: 6px; }
+        .li-act button { border: 1px solid var(--li-border); background: #fff; border-radius: 6px; padding: 5px 10px; font-size: 12.5px; cursor: pointer; font-family: inherit; }
+        .li-act button:hover { border-color: var(--li-primary); color: var(--li-primary-dark); }
+        .li-act button.danger:hover { border-color: var(--li-danger); color: var(--li-danger); }
+
+        @media (max-width: 640px) {
+            .li-topbar, .li-main { padding-left: 12px; padding-right: 12px; }
+            .li-filter-panel { width: 280px; }
+            .li-title { font-size: 20px; }
+            .li-info { grid-template-columns: 100px 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: BAR ATAS + JUDUL
+         Fungsi: tombol "Kembali" dan judul "Laporan Inspeksi". Baris di bawah
+         judul (subTitle) diisi JS: nama departemen untuk Supervisor, atau
+         nama cabang / "Semua Cabang" untuk Maintenance & Superadmin.
+         ============================================================ -->
+    <header class="li-topbar">
+        <a href="../../index.html" class="btn-back"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+        <div class="li-title-block">
+            <h1 class="li-title">Laporan Inspeksi</h1>
+            <div class="li-subtitle" id="subTitle">-</div>
+        </div>
+    </header>
+
+    <main class="li-main">
+
+        <!-- ========================================================
+             KELOMPOK 3: TOOLBAR
+             Fungsi: tombol Kategori dan Sub Kategori (kiri, membuka modal pengaturan),
+             lalu Filter dan Download Excel (kanan).
+             Kolom Cabang, Departemen, dan Area di panel filter hanya muncul
+             untuk Maintenance & Superadmin (diatur JS, kelas "li-admin-only").
+             ======================================================== -->
+        <div class="li-toolbar">
+            <div class="li-toolbar-right">
+                <button type="button" class="btn-tool" id="btnKategori" hidden>
+                    <i class="fa-solid fa-tags"></i><span>Kategori</span>
+                </button>
+                <button type="button" class="btn-tool" id="btnSubKategori" hidden>
+                    <i class="fa-solid fa-tag"></i><span>Sub Kategori</span>
+                </button>
+            </div>
+
+            <div class="li-toolbar-right">
+                <div class="li-filter-wrap">
+                    <button type="button" class="btn-tool" id="btnFilter">
+                        <i class="fa-solid fa-filter"></i><span>Filter</span>
+                        <span class="li-badge" id="filterBadge" hidden>0</span>
+                    </button>
+
+                    <div class="li-filter-panel" id="filterPanel" hidden>
+                        <div class="li-field li-admin-only">
+                            <label for="fBranch">Cabang</label>
+                            <select id="fBranch"><option value="">Semua Cabang</option></select>
+                        </div>
+                        <div class="li-field li-admin-only">
+                            <label for="fDept">Departemen</label>
+                            <select id="fDept"><option value="">Semua Departemen</option></select>
+                        </div>
+                        <div class="li-field li-admin-only">
+                            <label for="fArea">Area</label>
+                            <select id="fArea"><option value="">Semua Area</option></select>
+                        </div>
+                        <div class="li-field">
+                            <label for="fKategori">Kategori</label>
+                            <select id="fKategori"><option value="">Semua Kategori</option></select>
+                        </div>
+                        <div class="li-field">
+                            <label>Rentang Tanggal</label>
+                            <div class="li-date-row">
+                                <input type="date" id="fFrom" aria-label="Tanggal dari">
+                                <input type="date" id="fTo" aria-label="Tanggal sampai">
+                            </div>
+                        </div>
+                        <div class="li-filter-actions">
+                            <button type="button" class="li-btn-plain" id="btnFilterReset">Reset</button>
+                            <button type="button" class="li-btn-primary" id="btnFilterApply">Terapkan</button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn-tool" id="btnDownload">
+                    <i class="fa-solid fa-file-arrow-down"></i><span>Download Excel</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 4: TABEL
+             Fungsi: daftar temuan inspeksi, terbaru di paling atas, header sticky.
+             Isi tabel dibuat oleh laporan-inspeksi.js. Klik baris untuk membuka
+             modal detail (Kelompok 5B).
+             ======================================================== -->
+        <div class="li-table-wrapper">
+            <table class="li-table">
+                <thead>
+                    <tr>
+                        <th class="col-no">No</th>
+                        <th>Tanggal</th>
+                        <th>Petugas</th>
+                        <th>Kategori Temuan</th>
+                        <th>Temuan</th>
+                        <th>Deskripsi</th>
+                        <th>Area</th>
+                    </tr>
+                </thead>
+                <tbody id="inspeksiTableBody">
+                    <tr class="row-loading"><td colspan="7"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 5: PAGINATION (20 baris per halaman, diatur JS) -->
+        <div class="li-pagination" id="inspeksiPagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 5B: MODAL DETAIL TEMUAN
+         Fungsi: menampilkan data baris yang diklik, foto temuan (maks. 5),
+         dan peta lokasi (kolom lokasi, format "latitude,longitude").
+         ============================================================ -->
+    <div class="li-overlay" id="detailOverlay" hidden>
+        <div class="li-modal" role="dialog" aria-modal="true" aria-labelledby="detailTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="detailTitle">Detail Temuan Inspeksi</h2>
+                <button type="button" class="li-modal-close" id="btnDetailClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <dl class="li-info">
+                    <dt>Tanggal</dt><dd id="dTanggal">-</dd>
+                    <dt>Petugas</dt><dd id="dPetugas">-</dd>
+                    <dt>Kategori Temuan</dt><dd id="dKategori">-</dd>
+                    <dt>Temuan</dt><dd id="dTemuan">-</dd>
+                    <dt>Deskripsi</dt><dd id="dDeskripsi">-</dd>
+                    <dt>Area</dt><dd id="dArea">-</dd>
+                    <dt>Koordinat</dt><dd id="dKoordinat">-</dd>
+                </dl>
+
+                <div class="li-section-label">Foto Temuan</div>
+                <div class="li-photo-grid" id="photoGrid"></div>
+                <div class="li-note" id="photoNote" hidden></div>
+
+                <div class="li-section-label">Lokasi</div>
+                <div class="li-map" id="liMap"></div>
+                <div class="li-note" id="mapEmpty" hidden></div>
+                <div class="li-map-note" id="mapNote">Posisi berasal dari GPS HP petugas saat inspeksi. Akurasinya bisa meleset beberapa meter, dan lebih besar di dalam gedung.</div>
+            </div>
+            <div class="li-modal-foot">
+                <a class="li-btn-plain" id="btnMapGoogle" href="#" target="_blank" rel="noopener" hidden>Buka di Google Maps</a>
+                <button type="button" class="li-btn-primary" id="btnDetailCloseFoot">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 5C: MODAL PENGATURAN KATEGORI & SUB KATEGORI
+         Fungsi: satu model modal dipakai untuk dua tombol (Kategori dan Sub Kategori),
+         judul dan kolom tabel diisi JS sesuai tombol yang diklik. Dua tab
+         (Aktif / Non Aktif). Di tab Non Aktif, klik baris membuka form edit
+         dengan status "Aktif".
+         ============================================================ -->
+    <div class="li-overlay" id="masterOverlay" hidden>
+        <div class="li-modal lg" role="dialog" aria-modal="true" aria-labelledby="masterTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="masterTitle">Pengaturan Kategori</h2>
+                <button type="button" class="li-modal-close" id="btnMasterClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <div class="li-kat-bar">
+                    <div class="li-tabs" role="tablist">
+                        <button type="button" class="li-tab active" data-tab="aktif" role="tab">Aktif</button>
+                        <button type="button" class="li-tab" data-tab="nonaktif" role="tab">Non Aktif</button>
+                    </div>
+                    <button type="button" class="li-btn-primary" id="btnMasterAdd"><i class="fa-solid fa-plus"></i> <span id="masterAddLabel">Tambah Kategori</span></button>
+                </div>
+                <div class="li-kat-wrap">
+                    <table class="li-kat-table">
+                        <thead><tr id="masterHead"></tr></thead>
+                        <tbody id="masterTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnMasterCloseFoot">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 5D: SUB MODAL FORM
+         Fungsi: form tambah / edit. Isian: Departemen (dept_id), Kategori induk
+         (hanya untuk Sub Kategori), nama, Deskripsi. Saat tambah, is_active
+         otomatis true. Baris Status hanya muncul saat edit.
+         Untuk Supervisor, Departemen terkunci ke departemennya sendiri.
+         ============================================================ -->
+    <div class="li-overlay top" id="masterFormOverlay" hidden>
+        <div class="li-modal sm" role="dialog" aria-modal="true" aria-labelledby="masterFormTitle">
+            <div class="li-modal-head">
+                <h2 class="li-modal-title" id="masterFormTitle">Tambah Kategori</h2>
+                <button type="button" class="li-modal-close" id="btnMasterFormClose" aria-label="Tutup"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="li-modal-body">
+                <div class="li-field">
+                    <label for="mDept">Departemen</label>
+                    <select id="mDept"></select>
+                </div>
+                <div class="li-field" id="mParentField" hidden>
+                    <label for="mParent">Kategori</label>
+                    <select id="mParent"></select>
+                </div>
+                <div class="li-field">
+                    <label for="mName" id="mNameLabel">Kategori</label>
+                    <input type="text" id="mName" maxlength="120" autocomplete="off">
+                </div>
+                <div class="li-field">
+                    <label for="mDesc">Deskripsi</label>
+                    <textarea id="mDesc"></textarea>
+                </div>
+                <div class="li-field" id="mStatusField" hidden>
+                    <label for="mStatus">Status</label>
+                    <select id="mStatus">
+                        <option value="true">Aktif</option>
+                        <option value="false">Non Aktif</option>
+                    </select>
+                </div>
+            </div>
+            <div class="li-modal-foot">
+                <button type="button" class="li-btn-plain" id="btnMasterFormCancel">Batal</button>
+                <button type="button" class="li-btn-primary" id="btnMasterFormSave">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 6: SCRIPT
+         Fungsi: XLSX (download Excel), Supabase (database), Leaflet (peta),
+         lalu skrip halaman. Path disalin dari laporan-patroli.html.
+         PERLU DICEK: samakan dengan lokasi laporan-inspeksi.js Anda.
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/operations/laporan-inspeksi.js"></script>
+</body>
+</html>

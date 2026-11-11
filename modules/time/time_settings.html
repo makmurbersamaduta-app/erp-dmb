@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Settings - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: Bootstrap (tampilan + modal), ikon, font Inter, dan CSS
+         proyek. Gaya khusus halaman ini ada di blok <style> di bawah
+         (kelas berawalan "ts-").
+         Letak file ini: modules/time/time_settings.html
+         ============================================================ -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../css/style.css">
+
+    <style>
+        body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+        #full-container { max-width: 1400px; margin: 0 auto; padding: 0 20px 24px 20px; }
+
+        /* Header tetap di atas saat di-scroll (sama dengan System Config) */
+        .sticky-main-header { position: sticky; top: 0; z-index: 1030; background-color: #f8fafc; padding: 15px 0; }
+
+        .config-card { background: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .config-card-header { padding: 14px 20px; border-bottom: 1px solid #e2e8f0; font-weight: 700; font-size: 0.95rem; }
+
+        .config-layout { display: flex; gap: 16px; align-items: flex-start; }
+        .config-sidebar { width: 240px; flex-shrink: 0; position: sticky; top: 100px; }
+        .config-sidebar .nav-link { width: 100%; text-align: left; font-weight: 600; color: #64748b; border-radius: 8px; padding: 8px 16px; }
+        .config-sidebar .nav-link.active { background-color: #0d6efd; color: #fff; box-shadow: 0 4px 6px -1px rgba(13,110,253,.2); }
+        .config-content { flex: 1 1 auto; min-width: 0; }
+        @media (max-width: 991.98px) {
+            .config-layout { flex-direction: column; }
+            .config-sidebar { width: 100%; position: static; }
+            .config-sidebar .nav { flex-direction: row !important; flex-wrap: nowrap; overflow-x: auto; }
+            .config-sidebar .nav-link { width: auto; white-space: nowrap; }
+        }
+
+        /* Tabel dengan header tetap saat di-scroll */
+        .ts-scroll { max-height: calc(100vh - 290px); min-height: 280px; overflow-y: auto; }
+        .ts-scroll table thead th { position: sticky; top: 0; z-index: 5; background-color: #f8fafc !important; box-shadow: inset 0 -1px 0 #dee2e6; font-size: .78rem; white-space: nowrap; }
+        .ts-scroll table td { font-size: .85rem; vertical-align: middle; }
+
+        /* Kode pola: kotak kecil, hijau = hari kerja, abu = libur/off */
+        .ts-chip { display: inline-block; min-width: 26px; padding: 1px 5px; margin: 1px 2px 1px 0; border-radius: 5px; font-size: .72rem; font-weight: 600; text-align: center; background: #dbeafe; color: #1e40af; }
+        .ts-chip.libur { background: #e2e8f0; color: #475569; }
+
+        /* Editor pola: satu kotak pilihan per hari dalam siklus */
+        .ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-height: 340px; overflow-y: auto; padding: 4px; }
+        .ts-cell label { display: block; font-size: .68rem; font-weight: 700; color: #64748b; margin-bottom: 2px; }
+        .ts-cell select { font-weight: 600; background-color: #eff6ff; }
+        .ts-cell select.libur { background-color: #f1f5f9; color: #475569; }
+        .ts-cell select.kosong { background-color: #fff; border-color: #f59e0b; }
+
+        .ts-label { font-size: .78rem; font-weight: 700; margin-bottom: 3px; }
+    </style>
+</head>
+<body>
+
+<div id="full-container">
+
+    <!-- ============================================================
+         KELOMPOK 2: HEADER
+         Fungsi: tombol Kembali dan judul halaman (tetap di atas).
+         ============================================================ -->
+    <div class="sticky-main-header">
+        <header class="d-flex justify-content-between align-items-center bg-white p-3 rounded-3 shadow-sm border mb-0">
+            <div class="d-flex align-items-center gap-3">
+                <a href="../../index.html" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i><span>Kembali</span>
+                </a>
+                <div class="vr"></div>
+                <h6 class="mb-0 fw-bold text-dark">Time Settings</h6>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 34px; height: 34px;">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <div class="text-start d-none d-sm-block"><div class="fw-bold small lh-1">Pengaturan Waktu Kerja</div></div>
+            </div>
+        </header>
+    </div>
+
+    <div class="alert alert-secondary small py-2 d-none" id="tsReadOnlyNote">
+        <i class="fa-solid fa-lock me-1"></i> Mode lihat saja. Role Anda tidak diizinkan mengubah pengaturan ini.
+    </div>
+
+    <div class="config-layout">
+
+        <!-- ============================================================
+             KELOMPOK 3: MENU SAMPING
+             Fungsi: pindah antar Shift, Libur Nasional, Jenis Time Off, Pola.
+             ============================================================ -->
+        <aside class="config-sidebar">
+            <ul class="nav nav-pills flex-column gap-1 bg-white p-2 rounded-3 border shadow-sm" id="tsTabs">
+                <li class="nav-item"><button class="nav-link active" data-tab="shift"><i class="fa-solid fa-business-time me-2"></i>Master Shift</button></li>
+                <li class="nav-item"><button class="nav-link" data-tab="libur"><i class="fa-solid fa-calendar-day me-2"></i>Libur Nasional</button></li>
+                <li class="nav-item"><button class="nav-link" data-tab="timeoff"><i class="fa-solid fa-umbrella-beach me-2"></i>Jenis Time Off</button></li>
+                <li class="nav-item"><button class="nav-link" data-tab="pola"><i class="fa-solid fa-repeat me-2"></i>Pola Jadwal</button></li>
+            </ul>
+        </aside>
+
+        <div class="config-content">
+
+            <!-- ========================================================
+                 KELOMPOK 4: PANEL MASTER SHIFT
+                 Fungsi: daftar kode shift (hari kerja dan hari libur/off).
+                 ======================================================== -->
+            <div id="pane-shift">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="fa-solid fa-business-time text-primary me-2"></i>Master Shift</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="filterShift" class="form-select form-select-sm" style="width: 140px;">
+                                <option value="aktif" selected>Aktif</option>
+                                <option value="nonaktif">Non-Aktif</option>
+                                <option value="semua">Semua</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm fw-semibold ts-edit-only" id="btnTambahShift"><i class="fa-solid fa-plus me-1"></i>Tambah Shift</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="ts-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Kode</th><th>Nama</th><th>Jenis</th><th>Jam</th>
+                                        <th class="text-center">Toleransi Telat</th>
+                                        <th class="text-center">Clock-in Mulai</th>
+                                        <th class="text-center">Clock-out Sampai</th>
+                                        <th>Status</th><th class="text-center" style="width:120px;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="shiftTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">Jam dan aturan shift yang sudah dipakai di pola tidak bisa diubah. Buat kode baru lalu nonaktifkan yang lama.</div>
+            </div>
+
+            <!-- ========================================================
+                 KELOMPOK 5: PANEL LIBUR NASIONAL
+                 Fungsi: kalender tanggal merah per tahun.
+                 ======================================================== -->
+            <div id="pane-libur" class="d-none">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="fa-solid fa-calendar-day text-primary me-2"></i>Libur Nasional <span class="text-muted fw-normal small" id="liburJumlah"></span></span>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="filterLiburTahun" class="form-select form-select-sm" style="width: 120px;"></select>
+                            <button class="btn btn-primary btn-sm fw-semibold ts-edit-only" id="btnTambahLibur"><i class="fa-solid fa-plus me-1"></i>Tambah Libur</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="ts-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th style="width:60px;" class="text-center">No</th><th>Tanggal</th><th>Keterangan</th><th class="text-center" style="width:120px;">Aksi</th></tr></thead>
+                                <tbody id="liburTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">Perubahan tanggal libur nasional langsung memengaruhi perhitungan jadwal pada tanggal tersebut untuk pola yang mengikuti libur nasional.</div>
+            </div>
+
+            <!-- ========================================================
+                 KELOMPOK 6: PANEL JENIS TIME OFF
+                 Fungsi: daftar jenis izin/sakit/cuti beserta nominal potongan.
+                 ======================================================== -->
+            <div id="pane-timeoff" class="d-none">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="fa-solid fa-umbrella-beach text-primary me-2"></i>Jenis Time Off</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="filterTimeOff" class="form-select form-select-sm" style="width: 140px;">
+                                <option value="aktif" selected>Aktif</option>
+                                <option value="nonaktif">Non-Aktif</option>
+                                <option value="semua">Semua</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm fw-semibold ts-edit-only" id="btnTambahTimeOff"><i class="fa-solid fa-plus me-1"></i>Tambah Jenis</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="ts-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead><tr><th>Kode</th><th>Nama</th><th class="text-end">Potongan per Hari</th><th>Status</th><th class="text-center" style="width:120px;">Aksi</th></tr></thead>
+                                <tbody id="timeOffTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========================================================
+                 KELOMPOK 7: PANEL POLA JADWAL
+                 Fungsi: daftar pola (mis. 7 hari, 21 hari) dan editornya.
+                 Pola yang sudah dipakai karyawan terkunci isinya.
+                 ======================================================== -->
+            <div id="pane-pola" class="d-none">
+                <div class="config-card shadow-sm">
+                    <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="fa-solid fa-repeat text-primary me-2"></i>Pola Jadwal</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <select id="filterPola" class="form-select form-select-sm" style="width: 140px;">
+                                <option value="aktif" selected>Aktif</option>
+                                <option value="nonaktif">Non-Aktif</option>
+                                <option value="semua">Semua</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm fw-semibold ts-edit-only" id="btnTambahPola"><i class="fa-solid fa-plus me-1"></i>Tambah Pola</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="ts-scroll">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Nama Pola</th><th class="text-center">Siklus</th><th>Isi Pola</th>
+                                        <th class="text-center">Libur Nasional</th><th class="text-center">Dipakai</th>
+                                        <th>Status</th><th class="text-center" style="width:150px;">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="polaTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="small text-muted mt-2">Pola ditetapkan ke karyawan (dan pola default) lewat halaman Jadwal Kerja.</div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     KELOMPOK 8: MODAL SHIFT
+     ============================================================ -->
+<div class="modal fade" id="modalShift" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalShiftTitle">Tambah Shift</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formShift" novalidate>
+                <div class="modal-body">
+                    <div id="shiftMsg" class="alert d-none py-2 small"></div>
+                    <div class="alert alert-warning py-2 small d-none" id="shiftLockNote">
+                        <i class="fa-solid fa-lock me-1"></i> Shift ini sudah dipakai di pola. Jenis, jam, dan aturannya terkunci; hanya nama yang bisa diubah.
+                    </div>
+                    <input type="hidden" id="shiftEditKode">
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="ts-label" for="fShiftKode">Kode <span class="text-danger">*</span></label>
+                            <input type="text" id="fShiftKode" class="form-control form-control-sm" maxlength="10" autocomplete="off" placeholder="mis. 1L">
+                        </div>
+                        <div class="col-8">
+                            <label class="ts-label" for="fShiftNama">Nama <span class="text-danger">*</span></label>
+                            <input type="text" id="fShiftNama" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Shift 1 Longshift">
+                        </div>
+                        <div class="col-12">
+                            <label class="ts-label" for="fShiftJenis">Jenis <span class="text-danger">*</span></label>
+                            <select id="fShiftJenis" class="form-select form-select-sm">
+                                <option value="kerja">Hari kerja (punya jam)</option>
+                                <option value="libur">Hari libur / off (tanpa jam)</option>
+                            </select>
+                        </div>
+                        <div class="col-6" data-jam>
+                            <label class="ts-label" for="fShiftJamMasuk">Jam Masuk <span class="text-danger">*</span></label>
+                            <input type="time" id="fShiftJamMasuk" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-6" data-jam>
+                            <label class="ts-label" for="fShiftJamPulang">Jam Pulang <span class="text-danger">*</span></label>
+                            <input type="time" id="fShiftJamPulang" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-12" data-jam>
+                            <div class="form-text mt-0">Jika jam pulang lebih kecil atau sama dengan jam masuk, sistem menganggap shift lintas hari (malam).</div>
+                        </div>
+                        <div class="col-4" data-jam>
+                            <label class="ts-label" for="fShiftToleransi">Toleransi Telat (mnt)</label>
+                            <input type="number" id="fShiftToleransi" class="form-control form-control-sm" min="0" value="0">
+                        </div>
+                        <div class="col-4" data-jam>
+                            <label class="ts-label" for="fShiftBatasAwal">Clock-in Mulai (mnt sebelum masuk)</label>
+                            <input type="number" id="fShiftBatasAwal" class="form-control form-control-sm" min="0" value="120">
+                        </div>
+                        <div class="col-4" data-jam>
+                            <label class="ts-label" for="fShiftBatasAkhir">Clock-out Sampai (mnt setelah pulang)</label>
+                            <input type="number" id="fShiftBatasAkhir" class="form-control form-control-sm" min="0" value="240">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanShift">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     KELOMPOK 9: MODAL LIBUR NASIONAL
+     ============================================================ -->
+<div class="modal fade" id="modalLibur" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalLiburTitle">Tambah Libur Nasional</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formLibur" novalidate>
+                <div class="modal-body">
+                    <div id="liburMsg" class="alert d-none py-2 small"></div>
+                    <input type="hidden" id="liburEditTanggal">
+                    <div class="mb-2">
+                        <label class="ts-label" for="fLiburTanggal">Tanggal <span class="text-danger">*</span></label>
+                        <input type="date" id="fLiburTanggal" class="form-control form-control-sm">
+                    </div>
+                    <div>
+                        <label class="ts-label" for="fLiburKeterangan">Keterangan <span class="text-danger">*</span></label>
+                        <input type="text" id="fLiburKeterangan" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Hari Kemerdekaan RI">
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanLibur">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     KELOMPOK 10: MODAL JENIS TIME OFF
+     ============================================================ -->
+<div class="modal fade" id="modalTimeOff" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalTimeOffTitle">Tambah Jenis Time Off</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formTimeOff" novalidate>
+                <div class="modal-body">
+                    <div id="timeOffMsg" class="alert d-none py-2 small"></div>
+                    <input type="hidden" id="timeOffEditId">
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="ts-label" for="fTimeOffKode">Kode <span class="text-danger">*</span></label>
+                            <input type="text" id="fTimeOffKode" class="form-control form-control-sm" maxlength="10" autocomplete="off" placeholder="mis. SKT">
+                        </div>
+                        <div class="col-8">
+                            <label class="ts-label" for="fTimeOffNama">Nama <span class="text-danger">*</span></label>
+                            <input type="text" id="fTimeOffNama" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Sakit dengan surat dokter">
+                        </div>
+                        <div class="col-12">
+                            <label class="ts-label" for="fTimeOffPotongan">Potongan per Hari (Rp)</label>
+                            <input type="number" id="fTimeOffPotongan" class="form-control form-control-sm" min="0" step="1" value="0">
+                            <div class="form-text">Isi 0 jika jenis ini tidak memotong gaji.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanTimeOff">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     KELOMPOK 11: MODAL EDITOR POLA
+     Fungsi: nama, panjang siklus, pengaturan libur nasional, dan isi pola
+     (satu kotak pilihan per hari). Ada isi cepat dan tempel dari Excel.
+     ============================================================ -->
+<div class="modal fade" id="modalPola" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalPolaTitle">Tambah Pola</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formPola" novalidate>
+                <div class="modal-body">
+                    <div id="polaMsg" class="alert d-none py-2 small"></div>
+                    <div class="alert alert-warning py-2 small d-none" id="polaLockNote">
+                        <i class="fa-solid fa-lock me-1"></i> Pola ini sudah dipakai karyawan. Isinya terkunci; yang bisa diubah hanya nama, keterangan, dan status. Klik <b>Duplikat</b> untuk membuat versi baru.
+                    </div>
+                    <input type="hidden" id="polaEditId">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="ts-label" for="fPolaNama">Nama Pola <span class="text-danger">*</span></label>
+                            <input type="text" id="fPolaNama" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Umum 6 Kerja 1 Off">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="ts-label" for="fPolaSiklus">Panjang Siklus (hari) <span class="text-danger">*</span></label>
+                            <input type="number" id="fPolaSiklus" class="form-control form-control-sm" min="1" max="366" value="7">
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" id="fPolaLiburNasional">
+                                <label class="form-check-label small fw-semibold" for="fPolaLiburNasional">Ikut libur nasional</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="ts-label" for="fPolaKet">Keterangan</label>
+                            <input type="text" id="fPolaKet" class="form-control form-control-sm" autocomplete="off">
+                        </div>
+                        <div class="col-12" id="wrapPolaAktif">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="fPolaAktif" checked>
+                                <label class="form-check-label small fw-semibold" for="fPolaAktif">Pola aktif (bisa dipilih untuk penugasan baru)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border rounded-3 p-2 mb-2 bg-light" id="polaTools">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-5">
+                                <label class="ts-label" for="polaFillKode">Isi semua hari dengan</label>
+                                <div class="input-group input-group-sm">
+                                    <select id="polaFillKode" class="form-select form-select-sm"></select>
+                                    <button type="button" class="btn btn-outline-secondary" id="btnIsiSemua">Isi</button>
+                                </div>
+                            </div>
+                            <div class="col-md-7">
+                                <label class="ts-label" for="polaPaste">Tempel dari Excel / ketik (pisah spasi)</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" id="polaPaste" class="form-control form-control-sm" placeholder="mis. PG PG PG PG PG PG O" autocomplete="off">
+                                    <button type="button" class="btn btn-outline-secondary" id="btnTerapkanPaste">Terapkan</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ts-label">Isi pola <span class="text-muted fw-normal">(urutan hari ke-1 sampai terakhir dalam siklus)</span></div>
+                    <div class="ts-grid" id="polaGrid"></div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm me-auto d-none" id="btnDuplikatPola"><i class="fa-regular fa-copy me-1"></i>Duplikat</button>
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanPola">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+<!-- ============================================================
+     KELOMPOK 12: SCRIPT
+     Urutan penting: Supabase, Bootstrap, supabase.js, auth.js, lalu skrip halaman.
+     PERLU DICEK: path js/module/time/ (sesuaikan bila folder Anda berbeda).
+     ============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../../js/supabase.js"></script>
+<script src="../../js/auth.js"></script>
+<script src="../../js/module/time/time_settings.js"></script>
+
+</body>
+</html>
