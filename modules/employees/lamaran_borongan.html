@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Lamaran Kerja Borongan - DMB ERP</title>
+
+    <!-- ============================================================
+         KELOMPOK 1: LIBRARY & STYLE
+         Fungsi: Bootstrap (hanya untuk modal), ikon Font Awesome, font Inter,
+         dan seluruh gaya halaman (tema sama dengan Users Account).
+         Prefix "lb-" = lamaran borongan.
+         ============================================================ -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --lb-primary: #2b6cb0;
+            --lb-primary-dark: #1e4e8c;
+            --lb-bg-soft: #e1ecf5;
+            --lb-border: #d3dfea;
+            --lb-text: #1f2d3d;
+            --lb-muted: #6b7c93;
+            --lb-success: #2f9e44;
+            --lb-danger: #d64545;
+            --lb-radius: 8px;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; margin: 0; }
+        body { display: flex; flex-direction: column; font-family: 'Inter', sans-serif; background: #f4f7fb; color: var(--lb-text); }
+
+        /* --- Header --- */
+        .lb-header { display: flex; align-items: center; gap: 14px; padding: 14px 20px; background: #fff; border-bottom: 1px solid var(--lb-border); flex-shrink: 0; }
+        .lb-back { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--lb-border); background: var(--lb-bg-soft); color: var(--lb-primary-dark); text-decoration: none; flex-shrink: 0; }
+        .lb-back:hover { background: var(--lb-primary); color: #fff; }
+        .lb-title { margin: 0; font-size: 18px; font-weight: 600; }
+
+        /* --- Tab --- */
+        .lb-tabs { display: flex; gap: 4px; padding: 10px 20px 0; background: #fff; border-bottom: 1px solid var(--lb-border); flex-shrink: 0; }
+        .lb-tab { border: none; background: none; padding: 10px 16px; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--lb-muted); border-bottom: 3px solid transparent; cursor: pointer; }
+        .lb-tab:hover { color: var(--lb-primary-dark); }
+        .lb-tab.active { color: var(--lb-primary-dark); border-bottom-color: var(--lb-primary); }
+        .lb-tab-count { font-weight: 500; color: var(--lb-muted); }
+
+        /* --- Area utama --- */
+        .lb-main { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px 20px; overflow: hidden; }
+
+        /* --- Toolbar --- */
+        .lb-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; flex-shrink: 0; }
+        .lb-search { display: flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); padding: 8px 12px; flex: 1; min-width: 180px; max-width: 340px; }
+        .lb-search i { color: var(--lb-muted); font-size: 13px; }
+        .lb-search input { border: none; outline: none; flex: 1; min-width: 0; font-size: 14px; font-family: inherit; background: transparent; }
+        .lb-spacer { flex: 1; }
+        .lb-btn { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); padding: 8px 14px; font-size: 14px; font-family: inherit; color: var(--lb-text); cursor: pointer; }
+        .lb-btn:hover { border-color: var(--lb-primary); }
+        .lb-btn-primary { background: var(--lb-primary); border-color: var(--lb-primary); color: #fff; font-weight: 600; }
+        .lb-btn-primary:hover { background: var(--lb-primary-dark); border-color: var(--lb-primary-dark); }
+        .lb-btn[hidden] { display: none; }
+        .lb-badge { background: var(--lb-primary); color: #fff; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 1px 7px; }
+        .lb-badge[hidden] { display: none; }
+
+        /* --- Panel filter --- */
+        .lb-filter-wrap { position: relative; }
+        .lb-filter-panel { position: absolute; top: calc(100% + 6px); left: 0; width: 300px; max-width: 90vw; background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); box-shadow: 0 8px 24px rgba(31,45,61,.12); z-index: 60; max-height: 70vh; overflow-y: auto; }
+        .lb-filter-panel[hidden] { display: none; }
+        .lb-fg { border-bottom: 1px solid var(--lb-border); }
+        .lb-fg-head { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 10px 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--lb-text); cursor: pointer; }
+        .lb-fg-head i { font-size: 11px; color: var(--lb-muted); transition: transform .15s; }
+        .lb-fg-head.open i { transform: rotate(180deg); }
+        .lb-fg-body { display: none; flex-direction: column; padding: 0 14px 10px; max-height: 170px; overflow-y: auto; }
+        .lb-fg-body.open { display: flex; }
+        .lb-fg-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; cursor: pointer; }
+        .lb-fg-item input { accent-color: var(--lb-primary); }
+        .lb-fg-input { width: 100%; border: 1px solid var(--lb-border); border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; outline: none; }
+        .lb-fg-hint { font-size: 11.5px; color: var(--lb-muted); margin-top: 4px; }
+        .lb-filter-foot { display: flex; justify-content: space-between; padding: 10px 14px; background: var(--lb-bg-soft); position: sticky; bottom: 0; }
+        .lb-link { background: none; border: none; font-family: inherit; font-size: 13px; color: var(--lb-muted); cursor: pointer; }
+        .lb-link:hover { color: var(--lb-danger); }
+        .lb-apply { background: var(--lb-primary); color: #fff; border: none; border-radius: 6px; padding: 6px 16px; font-size: 13px; font-weight: 500; font-family: inherit; cursor: pointer; }
+
+        /* --- Tabel: lebar mengikuti layar (table-layout fixed), tanpa scroll samping --- */
+        .lb-table-wrap { background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); overflow: auto; flex: 1; min-height: 0; }
+        .lb-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+        .lb-table thead th { position: sticky; top: 0; z-index: 10; background: var(--lb-bg-soft); font-weight: 600; text-align: left; padding: 11px 8px; border-bottom: 2px solid var(--lb-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .lb-table tbody td { padding: 9px 8px; border-bottom: 1px solid var(--lb-border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lb-table tbody tr.lb-row { cursor: pointer; }
+        .lb-table tbody tr.lb-row:hover { background: #f7fafc; }
+        .lb-table tbody tr.lb-row.sel { background: #eef5fc; }
+        .lb-c { text-align: center !important; }
+        .lb-telp { color: var(--lb-primary-dark); font-weight: 600; cursor: copy; font-variant-numeric: tabular-nums; }
+        .lb-telp:hover { text-decoration: underline; }
+        .lb-ok { color: var(--lb-success); }
+        .lb-table input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--lb-primary); cursor: pointer; }
+        .lb-empty td { text-align: center !important; padding: 30px !important; color: var(--lb-muted); white-space: normal !important; }
+        .lb-dash { color: var(--lb-muted); }
+
+        /* Layar menengah: sembunyikan kolom kurang penting agar No Telp tetap terlihat */
+        @media (max-width: 1000px) { .hide-md { display: none; } }
+        @media (max-width: 640px)  { .hide-sm { display: none; } .lb-main, .lb-header, .lb-tabs { padding-left: 10px; padding-right: 10px; } .lb-title { font-size: 16px; } }
+
+        /* --- Pagination --- */
+        .lb-pag { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 12px; flex-shrink: 0; min-height: 34px; }
+        .lb-pag button { min-width: 34px; height: 34px; border: 1px solid var(--lb-border); background: #fff; border-radius: 6px; font-size: 13px; font-family: inherit; color: var(--lb-text); cursor: pointer; }
+        .lb-pag button:hover { border-color: var(--lb-primary); }
+        .lb-pag button.active { background: var(--lb-primary); border-color: var(--lb-primary); color: #fff; }
+        .lb-pag button:disabled { opacity: .4; cursor: not-allowed; }
+        .lb-pag-info { font-size: 12.5px; color: var(--lb-muted); margin-left: 8px; }
+
+        /* --- Modal detail --- */
+        .lb-dl { display: grid; grid-template-columns: 170px 1fr; gap: 8px 14px; margin: 0; font-size: 14px; }
+        .lb-dl dt { color: var(--lb-muted); font-weight: 600; }
+        .lb-dl dd { margin: 0; font-weight: 500; word-break: break-word; white-space: pre-line; }
+        @media (max-width: 520px) { .lb-dl { grid-template-columns: 1fr; gap: 2px; } .lb-dl dd { margin-bottom: 8px; } }
+        .lb-tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+        .lb-tag-red { background: #fdecec; color: #8f2222; }
+        .lb-tag-green { background: #e6f6ea; color: #237a37; }
+
+        .lb-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2000; background: #1f2d3d; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; max-width: 90vw; }
+    </style>
+</head>
+<body>
+
+    <!-- ============================================================
+         KELOMPOK 2: HEADER
+         Fungsi: tombol Kembali (ke index.html) dan judul halaman.
+         ============================================================ -->
+    <header class="lb-header">
+        <a href="../../index.html" class="lb-back" title="Kembali"><i class="fa-solid fa-arrow-left"></i></a>
+        <h1 class="lb-title">Data Lamaran Kerja Borongan</h1>
+    </header>
+
+    <!-- ============================================================
+         KELOMPOK 3: TAB
+         Fungsi: Waiting List (is_active = true) dan History (is_active = false).
+         ============================================================ -->
+    <div class="lb-tabs">
+        <button type="button" class="lb-tab active" data-tab="waiting">Waiting List <span class="lb-tab-count" id="cntWaiting"></span></button>
+        <button type="button" class="lb-tab" data-tab="history">History <span class="lb-tab-count" id="cntHistory"></span></button>
+    </div>
+
+    <main class="lb-main">
+
+        <!-- ========================================================
+             KELOMPOK 4: TOOLBAR
+             Fungsi: Search (nama), Filter (isi panel dibuat JS, beda per tab),
+             dan tombol "Panggil Karyawan" (hanya Waiting List, muncul bila ada
+             baris yang dicentang).
+             ======================================================== -->
+        <div class="lb-toolbar">
+            <div class="lb-search">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="inputSearch" placeholder="Cari nama pelamar..." autocomplete="off">
+            </div>
+
+            <div class="lb-filter-wrap">
+                <button type="button" class="lb-btn" id="btnFilter"><i class="fa-solid fa-filter"></i><span>Filter</span><span class="lb-badge" id="filterBadge" hidden>0</span></button>
+                <div class="lb-filter-panel" id="filterPanel" hidden>
+                    <div id="filterGroups"></div>
+                    <div class="lb-filter-foot">
+                        <button type="button" class="lb-link" id="btnFilterReset">Reset</button>
+                        <button type="button" class="lb-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lb-spacer"></div>
+            <button type="button" class="lb-btn lb-btn-primary" id="btnPanggil" hidden><i class="fa-solid fa-phone-volume"></i><span id="btnPanggilText">Panggil Karyawan</span></button>
+        </div>
+
+        <!-- ========================================================
+             KELOMPOK 5: TABEL
+             Fungsi: judul kolom dan isi dibuat JS sesuai tab. Header sticky.
+             ======================================================== -->
+        <div class="lb-table-wrap">
+            <table class="lb-table">
+                <colgroup id="tblCols"></colgroup>
+                <thead><tr id="tblHead"></tr></thead>
+                <tbody id="tblBody"><tr class="lb-empty"><td colspan="10">Memuat data...</td></tr></tbody>
+            </table>
+        </div>
+
+        <!-- KELOMPOK 6: PAGINATION (maks 50 baris per halaman) -->
+        <div class="lb-pag" id="pagination"></div>
+    </main>
+
+    <!-- ============================================================
+         KELOMPOK 7: MODAL DETAIL PELAMAR (isi dibuat JS)
+         ============================================================ -->
+    <div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detail Pelamar</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body"><dl class="lb-dl" id="detailBody"></dl></div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Tutup</button></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         KELOMPOK 8: MODAL PANGGIL KARYAWAN
+         Fungsi: isi tanggal pemanggilan; berlaku untuk semua baris yang dicentang.
+         ============================================================ -->
+    <div class="modal fade" id="modalPanggil" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Panggil Karyawan</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Tutup"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="panggilMsg" class="alert alert-danger py-2 small d-none"></div>
+                    <p class="small text-muted mb-3" id="panggilInfo"></p>
+                    <label class="form-label small fw-semibold" for="inputTglPanggil">Tanggal Pemanggilan <span class="text-danger">*</span></label>
+                    <input type="date" class="form-control" id="inputTglPanggil">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btnPanggilSubmit"><i class="fa-solid fa-check"></i> Proses</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="lb-toast" id="lbToast"></div>
+
+    <!-- ============================================================
+         KELOMPOK 9: SCRIPT
+         PERLU DICEK: path supabase.js dan lamaran_borongan.js. Saya mengasumsikan
+         halaman ini di modules/employees/ (sama seperti directory.html).
+         ============================================================ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/employees/lamaran_borongan.js"></script>
+</body>
+</html>
