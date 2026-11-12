@@ -57,6 +57,8 @@ function esc(v) {
         .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
+// Tampilan nama: huruf depan tiap kata kapital (hanya tampilan, data asli tidak diubah)
+const titleCase = (s) => String(s ?? "").toLowerCase().replace(/(^|[\s.'\-(])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
 const digits = (s) => String(s || "").replace(/\D/g, "");
 const fmtKtp = (s) => { const d = digits(s); return [d.slice(0, 6), d.slice(6, 12), d.slice(12, 16)].filter(Boolean).join(" "); };
 const fmtTelp = (s) => { const d = digits(s); return [d.slice(0, 4), d.slice(4, 8), d.slice(8)].filter(Boolean).join(" "); };
@@ -299,26 +301,26 @@ async function loadPage() {
 // ===================================================
 function columnDefs() {
     const cols = [];
-    if (isWaiting()) cols.push({ k: "chk", w: "38px", cls: "lb-c" });
-    cols.push({ k: "no", label: "No", w: "42px", cls: "lb-c" });
-    if (!isWaiting()) cols.push({ k: "tgl", label: "Tgl Pemanggilan", w: "112px" });
+    if (isWaiting()) cols.push({ k: "chk", cls: "lb-c" });
+    cols.push({ k: "no", label: "No", cls: "lb-c" });
+    if (!isWaiting()) cols.push({ k: "tgl", label: "Tanggal Pemanggilan", cls: "lb-c" });
     cols.push({ k: "nama", label: "Nama" });
-    cols.push({ k: "alamat", label: "Alamat", cls: "hide-md" });
-    cols.push({ k: "jk", label: "Jenis Kelamin", w: "96px", cls: "hide-sm" });
-    cols.push({ k: "pend", label: "Pendidikan", w: "84px", cls: "hide-sm" });
-    cols.push({ k: "usia", label: "Usia", w: "52px", cls: "hide-sm lb-c" });
-    cols.push({ k: "ref", label: "Referensi", cls: "hide-md" });
-    cols.push({ k: "telp", label: "No Telp", w: "122px" });
-    cols.push({ k: "riw", label: "Riwayat Kerja", w: "78px", cls: "lb-c" });
+    cols.push({ k: "alamat", label: "Alamat", cls: "hide-md lb-alamat" });
+    cols.push({ k: "jk", label: "Jenis Kelamin", cls: "hide-sm lb-c" });
+    cols.push({ k: "pend", label: "Pendidikan", cls: "hide-sm lb-c" });
+    cols.push({ k: "usia", label: "Usia", cls: "hide-sm lb-c" });
+    cols.push({ k: "ref", label: "Referensi", cls: "hide-md lb-ref" });
+    cols.push({ k: "telp", label: "No Telp" });
+    cols.push({ k: "riw", label: "Riwayat Kerja", cls: "lb-c" });
     return cols;
 }
 
 function renderTableHead() {
     const cols = columnDefs();
-    $("tblCols").innerHTML = cols.map(c => `<col class="${(c.cls || "").replace("lb-c", "")}" ${c.w ? `style="width:${c.w}"` : ""}>`).join("");
+    $("tblCols").innerHTML = "";   // lebar kolom otomatis mengikuti isi dan judul
     $("tblHead").innerHTML = cols.map(c => {
         if (c.k === "chk") return `<th class="${c.cls}"><input type="checkbox" id="chkAll" title="Pilih semua baris di halaman ini"></th>`;
-        return `<th class="${c.cls || ""}" title="${esc(c.label)}">${esc(c.label)}</th>`;
+        return `<th class="${c.cls || ""}">${esc(c.label)}</th>`;
     }).join("");
 }
 
@@ -342,14 +344,14 @@ function renderBody() {
             switch (c.k) {
                 case "chk": return `<td class="${cl}"><input type="checkbox" class="row-chk" data-id="${esc(r.id)}" ${sel ? "checked" : ""}></td>`;
                 case "no": return `<td class="${cl}">${start + i + 1}</td>`;
-                case "tgl": return `<td>${esc(fmtTgl(r.tanggal_pemanggilan))}</td>`;
-                case "nama": return `<td title="${esc(r.nama)}">${esc(r.nama)}</td>`;
-                case "alamat": return `<td class="${cl}" title="${esc(r.alamat)}">${esc(r.alamat)}</td>`;
+                case "tgl": return `<td class="lb-c">${esc(fmtTgl(r.tanggal_pemanggilan))}</td>`;
+                case "nama": return `<td>${esc(titleCase(r.nama))}</td>`;
+                case "alamat": return `<td class="${cl}">${esc(r.alamat)}</td>`;
                 case "jk": return `<td class="${cl}">${esc(r.jenis_kelamin)}</td>`;
                 case "pend": return `<td class="${cl}">${esc(r.pendidikan)}</td>`;
                 case "usia": return `<td class="${cl}">${esc(r.usia)}</td>`;
-                case "ref": return `<td class="${cl}" title="${esc(r.referensi || "")}">${r.referensi ? esc(r.referensi) : dash}</td>`;
-                case "telp": return `<td class="lb-telp" data-telp="${esc(digits(r.no_telp))}" title="Klik untuk menyalin">${esc(fmtTelp(r.no_telp))}</td>`;
+                case "ref": return `<td class="${cl}">${r.referensi ? esc(titleCase(r.referensi)) : dash}</td>`;
+                case "telp": return `<td class="lb-telp lb-c" data-telp="${esc(digits(r.no_telp))}" title="Klik untuk menyalin">${esc(fmtTelp(r.no_telp))}</td>`;
                 case "riw": return `<td class="${cl}">${r.pernah_di_dmb ? '<i class="fa-solid fa-check lb-ok"></i>' : dash}</td>`;
                 default: return "<td></td>";
             }
@@ -453,7 +455,7 @@ function renderPagination() {
 function openDetail(r) {
     const rows = [
         ["No KTP", fmtKtp(r.nik_ktp)],
-        ["Nama", r.nama],
+        ["Nama", titleCase(r.nama)],
         ["Alamat", r.alamat],
         ["Jenis Kelamin", r.jenis_kelamin],
         ["Pendidikan", r.pendidikan],
@@ -461,7 +463,7 @@ function openDetail(r) {
         ["Riwayat Kerja", r.pernah_di_dmb ? "Pernah Bekerja" : "Baru"]
     ];
     if (r.deskripsi_pernah_di_dmb) rows.push(["Deskripsi Riwayat Kerja", r.deskripsi_pernah_di_dmb]);
-    if (r.referensi) rows.push(["Referensi", r.referensi]);
+    if (r.referensi) rows.push(["Referensi", titleCase(r.referensi)]);
     if (r.deskripsi_referensi) rows.push(["Deskripsi Referensi", r.deskripsi_referensi]);
 
     let html = rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");

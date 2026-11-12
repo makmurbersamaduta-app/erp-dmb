@@ -69,8 +69,8 @@
         .lb-fg-head { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 10px 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--lb-text); cursor: pointer; }
         .lb-fg-head i { font-size: 11px; color: var(--lb-muted); transition: transform .15s; }
         .lb-fg-head.open i { transform: rotate(180deg); }
-        .lb-fg-body { display: none; flex-direction: column; padding: 0 14px 10px; max-height: 170px; overflow-y: auto; }
-        .lb-fg-body.open { display: flex; }
+        .lb-fg-body { display: none; padding: 0 14px 10px; max-height: 150px; overflow-y: auto; }
+        .lb-fg-body.open { display: block; }
         .lb-fg-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; cursor: pointer; }
         .lb-fg-item input { accent-color: var(--lb-primary); }
         .lb-fg-input { width: 100%; border: 1px solid var(--lb-border); border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: inherit; outline: none; }
@@ -82,13 +82,17 @@
 
         /* --- Tabel: lebar mengikuti layar (table-layout fixed), tanpa scroll samping --- */
         .lb-table-wrap { background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); overflow: auto; flex: 1; min-height: 0; }
-        .lb-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
-        .lb-table thead th { position: sticky; top: 0; z-index: 10; background: var(--lb-bg-soft); font-weight: 600; text-align: left; padding: 11px 8px; border-bottom: 2px solid var(--lb-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .lb-table tbody td { padding: 9px 8px; border-bottom: 1px solid var(--lb-border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lb-table { width: 100%; border-collapse: collapse; font-size: 13px; }   /* lebar kolom mengikuti isi */
+        .lb-table thead th { position: sticky; top: 0; z-index: 10; background: var(--lb-bg-soft); font-weight: 600; text-align: center; vertical-align: middle; padding: 8px 8px; line-height: 1.25; border-bottom: 2px solid var(--lb-border); white-space: normal; }
+        .lb-table tbody td { padding: 9px 8px; border-bottom: 1px solid var(--lb-border); vertical-align: middle; white-space: nowrap; }
         .lb-table tbody tr.lb-row { cursor: pointer; }
         .lb-table tbody tr.lb-row:hover { background: #f7fafc; }
         .lb-table tbody tr.lb-row.sel { background: #eef5fc; }
         .lb-c { text-align: center !important; }
+        /* Alamat: kolom paling lebar, teks turun ke bawah jika tidak cukup */
+        .lb-table .lb-alamat { white-space: normal; word-break: break-word; line-height: 1.35; width: 100%; min-width: 190px; text-align: left; }
+        /* Referensi: dibatasi lebarnya agar teks panjang turun ke bawah */
+        .lb-table td.lb-ref { white-space: normal; max-width: 170px; word-break: break-word; line-height: 1.35; }
         .lb-telp { color: var(--lb-primary-dark); font-weight: 600; cursor: copy; font-variant-numeric: tabular-nums; }
         .lb-telp:hover { text-decoration: underline; }
         .lb-ok { color: var(--lb-success); }
