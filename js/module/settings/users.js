@@ -43,6 +43,11 @@ const ROWS_PER_PAGE = 25;
 // (bukan semua data -- karena sekarang server-side pagination)
 let currentPageData = [];
 
+// Karyawan AKTIF yang akun login-nya masih di-BAN (mis. sisa dari proses resign sebelum rehire).
+// key: user_id (public.users.id), value: username. Diisi oleh refreshBannedBanner().
+let bannedActiveMap = new Map();
+let showOnlyBanned = false;   // true = tabel hanya menampilkan baris di atas
+
 // ===================================================
 // 2. INISIALISASI
 // ===================================================
@@ -55,6 +60,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     await loadReferenceData();
     renderFilterPanel();
+
+    setupBannedBanner();
+    await refreshBannedBanner();
 
     await loadUsersPage();
 });
@@ -181,6 +189,11 @@ async function loadUsersPage() {
         if (activeFilters.area_id.length > 0) query = query.in("area_id", activeFilters.area_id);
         if (activeFilters.bagian_id.length > 0) query = query.in("bagian_id", activeFilters.bagian_id);
         if (activeFilters.role_id.length > 0) query = query.in("role_id", activeFilters.role_id);
+
+        // Mode "Tampilkan" dari banner akun terblokir: hanya baris-baris tersebut
+        if (showOnlyBanned && bannedActiveMap.size > 0) {
+            query = query.in("user_id", Array.from(bannedActiveMap.keys()));
+        }
 
         // Pagination: hitung range berdasarkan halaman aktif
         const start = (currentPage - 1) * ROWS_PER_PAGE;
@@ -385,7 +398,11 @@ function renderTable() {
             return `<input type="checkbox" class="auth-checkbox" data-user-id="${u.user_id}" data-mode="create" ${pendingAuthActions.has(u.user_id) ? 'checked' : ''} title="Buat akun login baru">`;
         }
         if (u.auth_sync_pending) {
-            return `<input type="checkbox" class="auth-checkbox" data-user-id="${u.user_id}" data-mode="resync" ${pendingAuthActions.has(u.user_id) ? 'checked' : ''} title="Sinkron ulang (NIK berubah)">`;
+            return `<input type="checkbox" class="auth-checkbox" data-user-id="${u.user_id}" data-mode="resync" ${pendingAuthActions.has(u.user_id) ? 'checked' : ''} title="Sinkron ulang (NIK berubah)${bannedActiveMap.has(u.user_id) ? ' -- akun juga akan diaktifkan kembali karena diblokir' : ''}">`;
+        }
+        if (bannedActiveMap.has(u.user_id)) {
+            return `<input type="checkbox" class="auth-checkbox" data-user-id="${u.user_id}" data-mode="reactivate" ${pendingAuthActions.has(u.user_id) ? 'checked' : ''} title="Karyawan AKTIF tetapi akun login DIBLOKIR. Centang lalu klik 'Proses Akun Login' untuk mengaktifkan kembali.">
+                    <i class="fa-solid fa-user-lock ms-1" style="color: #d97706;" title="Akun login diblokir (ban)"></i>`;
         }
         return `<i class="fa-solid fa-circle-check" style="color: var(--users-success);" title="Akun login aktif & tersinkron"></i>`;
     })()}
@@ -571,14 +588,17 @@ async function executeBulkAuthCreate() {
 
     for (const [userId, mode] of entries) {
         try {
-            // mode "create" -> action "create", mode "resync" -> action "resync"
-            const { data, error } = await supabaseClient.functions.invoke("sync-auth", {
-                body: { action: mode, user_id: userId }
-            });
+            // mode "create" -> "create", "resync" -> "resync", "reactivate" -> "reactivate"
+            let hasil = await invokeSyncAuth(mode, userId);
 
-            if (error || !data?.success) {
-                const realMessage = await extractEdgeFunctionMessage(error, data, "Gagal");
-                gagal.push({ userId, message: realMessage });
+            // Akun yang NIK-nya berubah DAN sedang diblokir: setelah sinkron ulang, aktifkan juga
+            // (resync hanya mengganti email & password, tidak mencabut blokir).
+            if (hasil.ok && mode === "resync" && bannedActiveMap.has(userId)) {
+                hasil = await invokeSyncAuth("reactivate", userId);
+            }
+
+            if (!hasil.ok) {
+                gagal.push({ userId, message: hasil.message });
             } else {
                 sukses++;
             }
@@ -597,6 +617,101 @@ async function executeBulkAuthCreate() {
     }
 
     updateCreateAuthButtonState();
+    await refreshBannedBanner();
+    await loadUsersPage();
+}
+
+// Panggil Edge Function sync-auth; hasil seragam { ok, message }
+async function invokeSyncAuth(action, userId) {
+    const { data, error } = await supabaseClient.functions.invoke("sync-auth", {
+        body: { action, user_id: userId }
+    });
+    if (error || !data?.success) {
+        return { ok: false, message: await extractEdgeFunctionMessage(error, data, "Gagal") };
+    }
+    return { ok: true, message: data.message || "OK" };
+}
+
+// ===================================================
+// AKUN LOGIN TERBLOKIR PADA KARYAWAN AKTIF
+// Fungsi database public.list_active_but_banned_users() mengembalikan karyawan yang
+// is_active = true tetapi akun auth-nya masih di-ban. Banner di atas tabel menampilkan
+// jumlahnya, dengan tombol untuk menyaring tabel dan mengaktifkan semuanya sekaligus.
+// Jika fungsi belum dibuat / pengguna tidak berwenang, banner disembunyikan (halaman tetap jalan).
+// ===================================================
+function setupBannedBanner() {
+    if (document.getElementById("bannedBanner")) return;
+    const anchor = document.querySelector(".users-table-wrapper");
+    if (!anchor) return;
+    anchor.insertAdjacentHTML("beforebegin", `
+        <div id="bannedBanner" class="alert alert-warning d-none d-flex flex-wrap align-items-center gap-2 py-2 px-3 mb-2" role="alert">
+            <i class="fa-solid fa-user-lock"></i>
+            <span id="bannedBannerText" class="flex-grow-1"></span>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnShowBanned">Tampilkan</button>
+            <button type="button" class="btn btn-sm btn-warning fw-semibold" id="btnReactivateAll">Aktifkan Semua</button>
+        </div>`);
+
+    document.getElementById("btnShowBanned").addEventListener("click", () => {
+        showOnlyBanned = !showOnlyBanned;
+        currentPage = 1;
+        updateBannedBannerUI();
+        loadUsersPage();
+    });
+    document.getElementById("btnReactivateAll").addEventListener("click", reactivateAllBanned);
+}
+
+function updateBannedBannerUI() {
+    const banner = document.getElementById("bannedBanner");
+    if (!banner) return;
+    const n = bannedActiveMap.size;
+    banner.classList.toggle("d-none", n === 0);
+    document.getElementById("bannedBannerText").textContent =
+        `${n} karyawan aktif tetapi akun login-nya diblokir (tidak bisa login).`;
+    document.getElementById("btnShowBanned").textContent = showOnlyBanned ? "Tampilkan Semua" : "Tampilkan";
+}
+
+async function refreshBannedBanner() {
+    try {
+        const { data, error } = await supabaseClient.rpc("list_active_but_banned_users");
+        if (error) throw error;
+        bannedActiveMap = new Map((data || []).map(r => [Number(r.user_id), r.username]));
+    } catch (err) {
+        console.warn("Daftar akun terblokir tidak dapat dimuat:", err.message || err);
+        bannedActiveMap = new Map();
+    }
+    if (bannedActiveMap.size === 0) showOnlyBanned = false;
+    updateBannedBannerUI();
+}
+
+async function reactivateAllBanned() {
+    const ids = Array.from(bannedActiveMap.keys());
+    if (ids.length === 0) return;
+    if (!confirm(`Aktifkan kembali ${ids.length} akun login karyawan aktif yang sedang diblokir?`)) return;
+
+    const btn = document.getElementById("btnReactivateAll");
+    btn.disabled = true;
+    const gagal = [];
+    let sukses = 0;
+
+    for (let i = 0; i < ids.length; i++) {
+        btn.textContent = `Memproses ${i + 1}/${ids.length}...`;
+        try {
+            const hasil = await invokeSyncAuth("reactivate", ids[i]);
+            if (hasil.ok) sukses++; else gagal.push({ userId: ids[i], message: hasil.message });
+        } catch (err) {
+            gagal.push({ userId: ids[i], message: err.message });
+        }
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Aktifkan Semua";
+    if (gagal.length === 0) {
+        showToast(`Berhasil mengaktifkan ${sukses} akun.`, "success");
+    } else {
+        console.error("Detail kegagalan aktivasi akun:", gagal);
+        showToast(`${sukses} berhasil, ${gagal.length} gagal. Lihat console untuk detail.`, "danger");
+    }
+    await refreshBannedBanner();
     await loadUsersPage();
 }
 

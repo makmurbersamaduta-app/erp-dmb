@@ -607,7 +607,30 @@ async function handleFormSubmit(e) {
 
         if (assignError) throw assignError;
 
-        alert("Proses Rehire Berhasil! Status karyawan kembali Aktif dengan NIK dan Penempatan Baru.");
+        // Akun login di-ban saat resign -> aktifkan kembali. Jika gagal, rehire tetap berhasil
+        // (data kepegawaian sudah tersimpan); admin diberi peringatan dan bisa memakai
+        // tombol "Aktifkan Semua" di halaman Users Account.
+        let authWarning = "";
+        try {
+            const { data: userRow, error: userLookupErr } = await supabaseClient
+                .from("users")
+                .select("id, auth_uid")
+                .eq("employee_id", currentEmpId)
+                .maybeSingle();
+
+            if (!userLookupErr && userRow?.auth_uid) {
+                const { data: reactData, error: reactErr } = await supabaseClient.functions.invoke("sync-auth", {
+                    body: { action: "reactivate", user_id: userRow.id }
+                });
+                if (reactErr || !reactData?.success) {
+                    authWarning = "\n\nPERINGATAN: akun login karyawan ini GAGAL diaktifkan kembali otomatis -- aktifkan lewat halaman Users Account.";
+                }
+            }
+        } catch (e) {
+            authWarning = "\n\nPERINGATAN: akun login karyawan ini GAGAL diaktifkan kembali otomatis -- aktifkan lewat halaman Users Account.";
+        }
+
+        alert("Proses Rehire Berhasil! Status karyawan kembali Aktif dengan NIK dan Penempatan Baru." + authWarning);
         window.location.href = "directory.html";
 
     } catch (err) {
