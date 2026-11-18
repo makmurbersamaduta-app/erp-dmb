@@ -37,7 +37,7 @@ let activeFilters = {
 let searchKeyword = "";
 let currentPage = 1;
 let totalRows = 0;
-const ROWS_PER_PAGE = 25;
+const ROWS_PER_PAGE = 50;
 
 // Menyimpan data baris yang SEDANG ditampilkan di halaman aktif saja
 // (bukan semua data -- karena sekarang server-side pagination)
@@ -167,53 +167,146 @@ async function loadReferenceData() {
 //    diterapkan di level query (bukan di JS), lalu dipotong
 //    per halaman pakai .range()
 // ===================================================
-async function loadUsersPage() {
+// ---------------------------------------------------
+// 5A. ATURAN URUTAN (tanpa baris sub-judul; hanya mengurutkan)
+// Urutan: (1) Perlu Penanganan -> Akun Normal
+//         (2) Role (Employee paling bawah)
+//         (3) Branch  (4) Cost Center
+// ---------------------------------------------------
+
+// role_id Employee -- selalu diletakkan paling bawah. Ubah angka ini kalau id-nya berbeda.
+const EMPLOYEE_ROLE_ID = 5;
+
+// Cache urutan lengkap (data ringan) supaya pindah halaman tidak query ulang semuanya.
+// null = belum dimuat / perlu dimuat ulang.
+let sortedUserRows = null;
+
+// "Perlu Penanganan" = admin harus bertindak:
+//   - must_change_password = 'open' (karyawan mengajukan reset, menunggu admin)
+//   - belum punya akun login (auth_uid kosong)
+//   - NIK berubah, perlu sinkron ulang (auth_sync_pending)
+// 'progress' TIDAK dihitung: itu menunggu karyawan, bukan admin.
+function getGroupInfo(r) {
+    const handling = r.must_change_password === "open" || !r.auth_uid || r.auth_sync_pending === true;
+    return { handling };
+}
+
+// Role: urut role_id naik, kecuali Employee yang dipaksa paling bawah
+function roleOrder(roleId) {
+    if (roleId === EMPLOYEE_ROLE_ID) return 2000000000;
+    if (roleId === null || roleId === undefined) return 1000000000;
+    return roleId;
+}
+
+function nullLast(v) {
+    return v === null || v === undefined ? Number.MAX_SAFE_INTEGER : v;
+}
+
+function compareUserRows(a, b) {
+    const pa = getGroupInfo(a).handling ? 0 : 1;
+    const pb = getGroupInfo(b).handling ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+
+    const ra = roleOrder(a.role_id), rb = roleOrder(b.role_id);
+    if (ra !== rb) return ra - rb;
+
+    const ba = nullLast(a.branch_id), bb = nullLast(b.branch_id);
+    if (ba !== bb) return ba - bb;
+
+    const ca = nullLast(a.costcenter_id), cb = nullLast(b.costcenter_id);
+    if (ca !== cb) return ca - cb;
+
+    const ja = nullLast(a.jabatan_id), jb = nullLast(b.jabatan_id);
+    if (ja !== jb) return ja - jb;
+
+    return String(a.username || "").localeCompare(String(b.username || ""), undefined, { numeric: true });
+}
+
+// ---------------------------------------------------
+// 5B. QUERY: search + filter dipasang di server (sama seperti sebelumnya)
+// ---------------------------------------------------
+function applyUserFilters(query) {
+    if (searchKeyword) {
+        query = query.or(`username.ilike.%${searchKeyword}%,nama_karyawan.ilike.%${searchKeyword}%`);
+    }
+    if (activeFilters.branch_id.length > 0) query = query.in("branch_id", activeFilters.branch_id);
+    if (activeFilters.costcenter_id.length > 0) query = query.in("costcenter_id", activeFilters.costcenter_id);
+    if (activeFilters.departemen_id.length > 0) query = query.in("departemen_id", activeFilters.departemen_id);
+    if (activeFilters.jabatan_id.length > 0) query = query.in("jabatan_id", activeFilters.jabatan_id);
+    if (activeFilters.area_id.length > 0) query = query.in("area_id", activeFilters.area_id);
+    if (activeFilters.bagian_id.length > 0) query = query.in("bagian_id", activeFilters.bagian_id);
+    if (activeFilters.role_id.length > 0) query = query.in("role_id", activeFilters.role_id);
+    return query;
+}
+
+// Ambil kolom RINGAN (hanya kunci pengurutan) untuk SEMUA baris yang lolos
+// search/filter. Diambil bertahap karena Supabase membatasi jumlah baris per request.
+async function fetchAllUserSortKeys() {
+    let all = [];
+    let from = 0;
+    let total = null;
+
+    while (true) {
+        let query = supabaseClient
+            .from("users_directory_view")
+            .select("user_id, username, role_id, branch_id, costcenter_id, jabatan_id, auth_uid, auth_sync_pending, must_change_password", { count: "exact" });
+
+        query = applyUserFilters(query)
+            .order("user_id", { ascending: true })   // urutan tetap supaya antar-potongan tidak tumpang tindih
+            .range(from, from + 999);
+
+        const { data, error, count } = await query;
+        if (error) throw error;
+
+        if (total === null) total = count || 0;
+        if (!data || data.length === 0) break;
+
+        all = all.concat(data);
+        from += data.length;
+        if (all.length >= total) break;
+    }
+    return all;
+}
+
+// ---------------------------------------------------
+// 5C. MUAT HALAMAN AKTIF
+// Langkah: (a) ambil kunci ringan semua baris -> urutkan di JS,
+//          (b) potong 50 baris untuk halaman aktif,
+//          (c) ambil data LENGKAP hanya untuk 50 baris itu.
+// opts.keepOrder = true  -> pakai urutan cache (dipakai saat pindah halaman)
+// ---------------------------------------------------
+async function loadUsersPage(opts = {}) {
     const tbody = document.getElementById("usersTableBody");
     tbody.innerHTML = `<tr class="row-loading"><td colspan="10"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>`;
 
     try {
-        let query = supabaseClient
-            .from("users_directory_view")
-            .select("*", { count: "exact" });
-
-        // Search: NIK atau nama karyawan
-        if (searchKeyword) {
-            query = query.or(`username.ilike.%${searchKeyword}%,nama_karyawan.ilike.%${searchKeyword}%`);
+        if (!opts.keepOrder || sortedUserRows === null) {
+            const rows = await fetchAllUserSortKeys();
+            rows.sort(compareUserRows);
+            sortedUserRows = rows;
+            totalRows = rows.length;
         }
 
-        // Filter checklist -- pakai .in() untuk tiap kolom yang ada isinya
-        if (activeFilters.branch_id.length > 0) query = query.in("branch_id", activeFilters.branch_id);
-        if (activeFilters.costcenter_id.length > 0) query = query.in("costcenter_id", activeFilters.costcenter_id);
-        if (activeFilters.departemen_id.length > 0) query = query.in("departemen_id", activeFilters.departemen_id);
-        if (activeFilters.jabatan_id.length > 0) query = query.in("jabatan_id", activeFilters.jabatan_id);
-        if (activeFilters.area_id.length > 0) query = query.in("area_id", activeFilters.area_id);
-        if (activeFilters.bagian_id.length > 0) query = query.in("bagian_id", activeFilters.bagian_id);
-        if (activeFilters.role_id.length > 0) query = query.in("role_id", activeFilters.role_id);
+        // Kalau data berkurang (mis. setelah simpan) dan halaman aktif sudah tidak ada
+        const totalPages = Math.max(1, Math.ceil(totalRows / ROWS_PER_PAGE));
+        if (currentPage > totalPages) currentPage = totalPages;
 
-        // Mode "Tampilkan" dari banner akun terblokir: hanya baris-baris tersebut
-        if (showOnlyBanned && bannedActiveMap.size > 0) {
-            query = query.in("user_id", Array.from(bannedActiveMap.keys()));
-        }
-
-        // Pagination: hitung range berdasarkan halaman aktif
         const start = (currentPage - 1) * ROWS_PER_PAGE;
-        const end = start + ROWS_PER_PAGE - 1;
-                // Urutan: auth_uid kosong (belum punya akun login) tetap prioritas
-        // paling atas (operasional, supaya admin lihat yang perlu dibuatkan
-        // akun dulu), lalu dikelompokkan Branch -> Cost Center -> Jabatan.
-        query = query
-        .order("auth_uid", { ascending: true, nullsFirst: true })
-        .order("branch_id", { ascending: true })
-        .order("costcenter_id", { ascending: true })
-        .order("jabatan_id", { ascending: true })
-        .range(start, end);
+        const pageIds = sortedUserRows.slice(start, start + ROWS_PER_PAGE).map(r => r.user_id);
 
-        const { data, error, count } = await query;
+        if (pageIds.length === 0) {
+            currentPageData = [];
+        } else {
+            const { data, error } = await supabaseClient
+                .from("users_directory_view")
+                .select("*")
+                .in("user_id", pageIds);
+            if (error) throw error;
 
-        if (error) throw error;
-
-        currentPageData = data || [];
-        totalRows = count || 0;
+            // .in() tidak menjamin urutan -> susun ulang sesuai urutan hasil pengurutan
+            const byId = new Map((data || []).map(u => [u.user_id, u]));
+            currentPageData = pageIds.map(id => byId.get(id)).filter(Boolean);
+        }
 
         renderTable();
         renderPagination();
@@ -758,15 +851,15 @@ function renderPagination() {
                 pendingChanges.clear();
             }
             currentPage = parseInt(btn.getAttribute("data-page"));
-            loadUsersPage();
+            loadUsersPage({ keepOrder: true });
         });
     });
 
     const prevBtn = document.getElementById("pagePrev");
     const nextBtn = document.getElementById("pageNext");
     if (prevBtn) prevBtn.addEventListener("click", () => prevBtn.click === prevBtn ? null : null);
-    if (prevBtn) prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; loadUsersPage(); } };
-    if (nextBtn) nextBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; loadUsersPage(); } };
+    if (prevBtn) prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; loadUsersPage({ keepOrder: true }); } };
+    if (nextBtn) nextBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; loadUsersPage({ keepOrder: true }); } };
 }
 
 // ===================================================

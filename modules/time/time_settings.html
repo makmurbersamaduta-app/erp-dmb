@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 
     <style>
         body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
@@ -56,6 +57,26 @@
         .ts-cell select.kosong { background-color: #fff; border-color: #f59e0b; }
 
         .ts-label { font-size: .78rem; font-weight: 700; margin-bottom: 3px; }
+
+        /* Daftar centang (cost center, karyawan) dalam kotak yang bisa di-scroll */
+        .ts-box { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; max-height: 220px; overflow-y: auto; }
+        .ts-check { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: .84rem; cursor: pointer; margin: 0; }
+        .ts-check:hover { background: #f8fafc; }
+        .ts-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px; font-size: .82rem; border-bottom: 1px solid #f1f5f9; }
+        .ts-row:last-child { border-bottom: 0; }
+
+        /* Lokasi absen: peta dan daftar titik */
+        #lkMap { height: 380px; border-radius: 8px; border: 1px solid #e2e8f0; }
+        .lk-titik { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fff; cursor: pointer; }
+        .lk-titik.active { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
+        .lk-titik .ts-label { font-size: .68rem; color: #64748b; margin-bottom: 1px; }
+        #lkTabs .nav-link { font-weight: 600; font-size: .85rem; }
+
+        /* Modal: <form> membungkus isi dan tombol, jadi ia harus ikut menjadi kolom flex
+           agar isi modal bisa di-scroll dan tombol Simpan/Batal selalu terlihat */
+        .modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        .modal-content > form > .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+        .modal-content > form > .modal-footer { flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -100,6 +121,7 @@
                 <li class="nav-item"><button class="nav-link" data-tab="libur"><i class="fa-solid fa-calendar-day me-2"></i>Libur Nasional</button></li>
                 <li class="nav-item"><button class="nav-link" data-tab="timeoff"><i class="fa-solid fa-umbrella-beach me-2"></i>Jenis Time Off</button></li>
                 <li class="nav-item"><button class="nav-link" data-tab="pola"><i class="fa-solid fa-repeat me-2"></i>Pola Jadwal</button></li>
+                <li class="nav-item"><button class="nav-link" data-tab="lokasi"><i class="fa-solid fa-location-dot me-2"></i>Lokasi Absen</button></li>
             </ul>
         </aside>
 
@@ -129,6 +151,7 @@
                                     <tr>
                                         <th>Kode</th><th>Nama</th><th>Jenis</th><th>Jam</th>
                                         <th class="text-center">Toleransi Telat</th>
+                                        <th class="text-center">Grace Period</th>
                                         <th class="text-center">Clock-in Mulai</th>
                                         <th class="text-center">Clock-out Sampai</th>
                                         <th>Status</th><th class="text-center" style="width:120px;">Aksi</th>
@@ -164,12 +187,12 @@
                         </div>
                     </div>
                 </div>
-                <div class="small text-muted mt-2">Perubahan tanggal libur nasional langsung memengaruhi perhitungan jadwal pada tanggal tersebut untuk pola yang mengikuti libur nasional.</div>
+                <div class="small text-muted mt-2">Tanggal dan keterangan bisa diubah bila ada kesalahan input atau perubahan dari pemerintah; satu tanggal hanya boleh terdaftar sekali. Perubahan tanggal libur nasional langsung memengaruhi perhitungan jadwal pada tanggal tersebut untuk pola yang mengikuti libur nasional.</div>
             </div>
 
             <!-- ========================================================
                  KELOMPOK 6: PANEL JENIS TIME OFF
-                 Fungsi: daftar jenis izin/sakit/cuti beserta nominal potongan.
+                 Fungsi: daftar jenis izin/sakit/cuti beserta aturan durasi, saldo, lampiran, dan cost center.
                  ======================================================== -->
             <div id="pane-timeoff" class="d-none">
                 <div class="config-card shadow-sm">
@@ -187,7 +210,7 @@
                     <div class="card-body p-0">
                         <div class="ts-scroll">
                             <table class="table table-hover align-middle mb-0">
-                                <thead><tr><th>Kode</th><th>Nama</th><th class="text-end">Potongan per Hari</th><th>Status</th><th class="text-center" style="width:120px;">Aksi</th></tr></thead>
+                                <thead><tr><th>Kode</th><th>Nama</th><th>Durasi</th><th>Saldo</th><th class="text-center">Lampiran</th><th>Berlaku Untuk</th><th>Status</th><th class="text-center" style="width:120px;">Aksi</th></tr></thead>
                                 <tbody id="timeOffTableBody"></tbody>
                             </table>
                         </div>
@@ -231,6 +254,91 @@
                 <div class="small text-muted mt-2">Pola ditetapkan ke karyawan (dan pola default) lewat halaman Jadwal Kerja.</div>
             </div>
 
+            <!-- ========================================================
+                 KELOMPOK 7B: PANEL LOKASI ABSEN
+                 Fungsi: dua tabel utama.
+                  1) Setting Lokasi : daftar setting (GPS Flexible / Set Lokasi),
+                     titik lokasinya, dan jumlah karyawannya.
+                  2) Karyawan       : semua karyawan aktif, bisa langsung diatur
+                     setting lokasinya satu per satu.
+                 Aturan: 1 karyawan hanya boleh punya 1 setting lokasi.
+                 ======================================================== -->
+            <div id="pane-lokasi" class="d-none">
+                <ul class="nav nav-tabs mb-2" id="lkTabs">
+                    <li class="nav-item"><button type="button" class="nav-link active" data-lktab="setting">Setting Lokasi</button></li>
+                    <li class="nav-item"><button type="button" class="nav-link" data-lktab="karyawan">Karyawan</button></li>
+                </ul>
+
+                <div id="lk-pane-setting">
+                    <div class="config-card shadow-sm">
+                        <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span><i class="fa-solid fa-location-dot text-primary me-2"></i>Setting Lokasi Absen</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <select id="filterLokasi" class="form-select form-select-sm" style="width: 140px;">
+                                    <option value="aktif" selected>Aktif</option>
+                                    <option value="nonaktif">Non-Aktif</option>
+                                    <option value="semua">Semua</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm fw-semibold ts-edit-only" id="btnTambahLokasi"><i class="fa-solid fa-plus me-1"></i>Tambah Setting</button>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="ts-scroll">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Nama Setting</th><th>Mode</th><th>Titik Lokasi</th>
+                                            <th class="text-center">Karyawan</th><th>Status</th>
+                                            <th class="text-center" style="width:120px;">Aksi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lokasiTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">Perubahan berlaku langsung tanpa tanggal efektif. Setting yang masih dipakai karyawan tidak bisa dinonaktifkan.</div>
+                </div>
+
+                <div id="lk-pane-karyawan" class="d-none">
+                    <div class="config-card shadow-sm">
+                        <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span><i class="fa-solid fa-users text-primary me-2"></i>Setting Lokasi per Karyawan</span>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <input type="text" id="lkKarCari" class="form-control form-control-sm" style="width: 200px;" placeholder="Cari NIK atau nama..." autocomplete="off">
+                                <select id="lkKarCc" class="form-select form-select-sm" style="width: 180px;"></select>
+                                <select id="lkKarStatus" class="form-select form-select-sm" style="width: 160px;">
+                                    <option value="semua">Semua</option>
+                                    <option value="belum">Belum diatur</option>
+                                    <option value="sudah">Sudah diatur</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="ts-scroll">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:60px;" class="text-center">No</th><th>NIK</th><th>Nama</th>
+                                            <th>Cost Center</th><th style="min-width:220px;">Setting Lokasi</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lkKarBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center p-2 border-top">
+                            <span class="small text-muted" id="lkKarInfo"></span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" id="lkKarPrev"><i class="fa-solid fa-chevron-left"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" id="lkKarNext"><i class="fa-solid fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">Pilihan di kolom Setting Lokasi langsung tersimpan. Hanya karyawan aktif (tidak blacklist) yang tampil.</div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -239,7 +347,7 @@
      KELOMPOK 8: MODAL SHIFT
      ============================================================ -->
 <div class="modal fade" id="modalShift" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom py-2">
                 <h6 class="modal-title fw-bold" id="modalShiftTitle">Tambah Shift</h6>
@@ -279,17 +387,31 @@
                         <div class="col-12" data-jam>
                             <div class="form-text mt-0">Jika jam pulang lebih kecil atau sama dengan jam masuk, sistem menganggap shift lintas hari (malam).</div>
                         </div>
-                        <div class="col-4" data-jam>
+                        <div class="col-12" data-jam>
                             <label class="ts-label" for="fShiftToleransi">Toleransi Telat (mnt)</label>
                             <input type="number" id="fShiftToleransi" class="form-control form-control-sm" min="0" value="0">
                         </div>
-                        <div class="col-4" data-jam>
-                            <label class="ts-label" for="fShiftBatasAwal">Clock-in Mulai (mnt sebelum masuk)</label>
-                            <input type="number" id="fShiftBatasAwal" class="form-control form-control-sm" min="0" value="120">
+                        <div class="col-12" data-jam>
+                            <div class="ts-label">Grace Period</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftGrace" id="fShiftGraceOff" value="0" checked>
+                                    <label class="form-check-label small" for="fShiftGraceOff">Disable</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="shiftGrace" id="fShiftGraceOn" value="1">
+                                    <label class="form-check-label small" for="fShiftGraceOn">Enable</label>
+                                </div>
+                            </div>
+                            <div class="form-text mt-1">Disable: tidak ada batas jendela waktu clock-in/clock-out (lembur panjang tidak terpotong). Enable: absensi hanya dibaca di dalam jendela waktu di bawah.</div>
                         </div>
-                        <div class="col-4" data-jam>
-                            <label class="ts-label" for="fShiftBatasAkhir">Clock-out Sampai (mnt setelah pulang)</label>
-                            <input type="number" id="fShiftBatasAkhir" class="form-control form-control-sm" min="0" value="240">
+                        <div class="col-6 d-none" data-jam data-grace>
+                            <label class="ts-label" for="fShiftBatasAwal">Clock-in Mulai (mnt sebelum masuk) <span class="text-danger">*</span></label>
+                            <input type="number" id="fShiftBatasAwal" class="form-control form-control-sm" min="0" placeholder="mis. 120">
+                        </div>
+                        <div class="col-6 d-none" data-jam data-grace>
+                            <label class="ts-label" for="fShiftBatasAkhir">Clock-out Sampai (mnt setelah pulang) <span class="text-danger">*</span></label>
+                            <input type="number" id="fShiftBatasAkhir" class="form-control form-control-sm" min="0" placeholder="mis. 240">
                         </div>
                     </div>
                 </div>
@@ -306,7 +428,7 @@
      KELOMPOK 9: MODAL LIBUR NASIONAL
      ============================================================ -->
 <div class="modal fade" id="modalLibur" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom py-2">
                 <h6 class="modal-title fw-bold" id="modalLiburTitle">Tambah Libur Nasional</h6>
@@ -315,7 +437,7 @@
             <form id="formLibur" novalidate>
                 <div class="modal-body">
                     <div id="liburMsg" class="alert d-none py-2 small"></div>
-                    <input type="hidden" id="liburEditTanggal">
+                    <input type="hidden" id="liburEditId">
                     <div class="mb-2">
                         <label class="ts-label" for="fLiburTanggal">Tanggal <span class="text-danger">*</span></label>
                         <input type="date" id="fLiburTanggal" class="form-control form-control-sm">
@@ -338,7 +460,7 @@
      KELOMPOK 10: MODAL JENIS TIME OFF
      ============================================================ -->
 <div class="modal fade" id="modalTimeOff" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom py-2">
                 <h6 class="modal-title fw-bold" id="modalTimeOffTitle">Tambah Jenis Time Off</h6>
@@ -348,19 +470,75 @@
                 <div class="modal-body">
                     <div id="timeOffMsg" class="alert d-none py-2 small"></div>
                     <input type="hidden" id="timeOffEditId">
-                    <div class="row g-2">
+                    <div class="row g-3">
                         <div class="col-4">
                             <label class="ts-label" for="fTimeOffKode">Kode <span class="text-danger">*</span></label>
-                            <input type="text" id="fTimeOffKode" class="form-control form-control-sm" maxlength="10" autocomplete="off" placeholder="mis. SKT">
+                            <input type="text" id="fTimeOffKode" class="form-control form-control-sm" maxlength="10" autocomplete="off" placeholder="mis. CT">
                         </div>
                         <div class="col-8">
                             <label class="ts-label" for="fTimeOffNama">Nama <span class="text-danger">*</span></label>
-                            <input type="text" id="fTimeOffNama" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Sakit dengan surat dokter">
+                            <input type="text" id="fTimeOffNama" class="form-control form-control-sm" autocomplete="off" placeholder="mis. Cuti Tahunan">
                         </div>
+
+                        <div class="col-md-6">
+                            <div class="ts-label">Durasi</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toDurasi" id="toDurasiFull" value="full_day" checked><label class="form-check-label small" for="toDurasiFull">Full Day</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toDurasi" id="toDurasiHalf" value="half_day"><label class="form-check-label small" for="toDurasiHalf">Half Day</label></div>
+                            </div>
+                            <div class="form-text mt-1">Half Day dipakai untuk izin pulang cepat / datang terlambat.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="ts-label">Lampiran saat pengajuan</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toLampiran" id="toLampiranTidak" value="0" checked><label class="form-check-label small" for="toLampiranTidak">Tidak wajib</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toLampiran" id="toLampiranYa" value="1"><label class="form-check-label small" for="toLampiranYa">Wajib</label></div>
+                            </div>
+                        </div>
+
                         <div class="col-12">
-                            <label class="ts-label" for="fTimeOffPotongan">Potongan per Hari (Rp)</label>
-                            <input type="number" id="fTimeOffPotongan" class="form-control form-control-sm" min="0" step="1" value="0">
-                            <div class="form-text">Isi 0 jika jenis ini tidak memotong gaji.</div>
+                            <div class="ts-label">Saldo (balance)</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toSaldo" id="toSaldoUnlimited" value="unlimited" checked><label class="form-check-label small" for="toSaldoUnlimited">Unlimited</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toSaldo" id="toSaldoLimit" value="limit"><label class="form-check-label small" for="toSaldoLimit">Limit</label></div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 d-none" data-limit>
+                            <label class="ts-label" for="fTimeOffJumlah">Jumlah limit per tahun (hari) <span class="text-danger">*</span></label>
+                            <input type="number" id="fTimeOffJumlah" class="form-control form-control-sm" min="0.5" step="0.5" placeholder="mis. 12">
+                            <div class="form-text">Kelipatan 0,5 hari.</div>
+                        </div>
+                        <div class="col-md-6 d-none" data-limit>
+                            <label class="ts-label" for="fTimeOffMasaKerja">Minimal masa kerja pada 1 Januari (bulan)</label>
+                            <input type="number" id="fTimeOffMasaKerja" class="form-control form-control-sm" min="0" step="1" placeholder="mis. 12">
+                            <div class="form-text">Kosongkan bila tanpa syarat. Contoh cuti tahunan: 12 berarti karyawan yang pada 1 Januari sudah bekerja 12 bulan atau lebih mendapat jatah tahun itu.</div>
+                        </div>
+                        <div class="col-12 d-none" data-limit>
+                            <div class="alert alert-secondary py-2 small mb-0"><i class="fa-solid fa-circle-info me-1"></i> Aturan tetap: jatah berlaku 1 Januari sampai 31 Desember dan sisa saldo tidak diakumulasi ke tahun berikutnya.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="ts-label">Berlaku untuk</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toBerlaku" id="toBerlakuSemua" value="semua" checked><label class="form-check-label small" for="toBerlakuSemua">Semua cost center</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="toBerlaku" id="toBerlakuPilih" value="pilih"><label class="form-check-label small" for="toBerlakuPilih">Cost center tertentu</label></div>
+                            </div>
+                        </div>
+                        <div class="col-12 d-none" id="timeOffCcWrap">
+                            <div class="d-flex gap-2 align-items-center mb-2 flex-wrap">
+                                <input type="text" id="fTimeOffCcSearch" class="form-control form-control-sm" style="max-width: 240px;" placeholder="Cari cost center..." autocomplete="off">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnTimeOffCcSemua">Pilih yang tampil</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnTimeOffCcKosong">Kosongkan yang tampil</button>
+                                <span class="small text-muted ms-auto" id="timeOffCcCount"></span>
+                            </div>
+                            <div class="ts-box" id="timeOffCcList"></div>
+                        </div>
+
+                        <div class="col-12" id="wrapTimeOffAktif">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="fTimeOffAktif" checked>
+                                <label class="form-check-label small fw-semibold" for="fTimeOffAktif">Jenis aktif (bisa dipilih untuk pengajuan baru)</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -451,18 +629,109 @@
     </div>
 </div>
 
+<!-- ============================================================
+     KELOMPOK 11B: MODAL SETTING LOKASI
+     Fungsi: nama setting, mode (GPS Flexible / Set Lokasi), titik lokasi
+     (nama, radius, pin di peta, koordinat, cari alamat), dan karyawan yang
+     memakai setting ini (hanya yang belum punya setting lokasi).
+     ============================================================ -->
+<div class="modal fade" id="modalLokasi" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalLokasiTitle">Tambah Setting Lokasi</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formLokasi" novalidate>
+                <div class="modal-body">
+                    <div id="lokasiMsg" class="alert d-none py-2 small"></div>
+                    <input type="hidden" id="lokasiEditId">
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-5">
+                            <label class="ts-label" for="fLokasiNama">Nama Setting <span class="text-danger">*</span></label>
+                            <input type="text" id="fLokasiNama" class="form-control form-control-sm" maxlength="100" autocomplete="off" placeholder="mis. Kantor Pusat">
+                        </div>
+                        <div class="col-md-5">
+                            <div class="ts-label">Mode Lokasi</div>
+                            <div class="d-flex gap-4">
+                                <div class="form-check"><input class="form-check-input" type="radio" name="lkMode" id="lkModeLokasi" value="lokasi" checked><label class="form-check-label small" for="lkModeLokasi">Set Lokasi</label></div>
+                                <div class="form-check"><input class="form-check-input" type="radio" name="lkMode" id="lkModeFlexible" value="flexible"><label class="form-check-label small" for="lkModeFlexible">GPS Flexible</label></div>
+                            </div>
+                            <div class="form-text mt-1">GPS Flexible: bisa absen di mana saja, tanpa titik.</div>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end" id="wrapLokasiAktif">
+                            <div class="form-check mb-1">
+                                <input class="form-check-input" type="checkbox" id="fLokasiAktif" checked>
+                                <label class="form-check-label small fw-semibold" for="fLokasiAktif">Aktif</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="lkLokasiSection" class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="row g-3">
+                            <div class="col-lg-5">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="ts-label mb-0">Titik Lokasi</div>
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnTambahTitik"><i class="fa-solid fa-plus me-1"></i>Tambah Titik</button>
+                                </div>
+                                <div id="lkTitikList" style="max-height: 400px; overflow-y: auto;"></div>
+                            </div>
+                            <div class="col-lg-7">
+                                <div class="input-group input-group-sm mb-2">
+                                    <input type="text" id="lkCari" class="form-control" placeholder="Cari alamat untuk memindahkan pin..." autocomplete="off">
+                                    <button type="button" class="btn btn-outline-secondary" id="btnCariAlamat"><i class="fa-solid fa-magnifying-glass me-1"></i>Cari</button>
+                                </div>
+                                <div class="list-group mb-2" id="lkCariHasil"></div>
+                                <div id="lkMap"></div>
+                                <div class="form-text" id="lkMapMsg">Pilih satu titik di daftar, lalu klik peta, seret pin, atau pilih hasil pencarian alamat untuk menentukan koordinatnya.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ts-label">Karyawan yang memakai setting ini <span class="text-muted fw-normal" id="lkSelCount"></span></div>
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" id="lkPickCari" class="form-control form-control-sm" placeholder="Cari NIK atau nama..." autocomplete="off">
+                                <select id="lkPickCc" class="form-select form-select-sm" style="max-width: 170px;"></select>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small text-muted" id="lkPickInfo"></span>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnLkTambahSemua">Tambah semua yang tampil</button>
+                            </div>
+                            <div class="ts-box" id="lkPickList"></div>
+                            <div class="form-text">Hanya karyawan yang belum memiliki setting lokasi yang tampil.</div>
+                        </div>
+                        <div class="col-lg-6">
+                            <input type="text" id="lkSelFilter" class="form-control form-control-sm mb-2" placeholder="Filter karyawan terpilih..." autocomplete="off">
+                            <div class="ts-box" id="lkSelList"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanLokasi">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
 
 <!-- ============================================================
      KELOMPOK 12: SCRIPT
      Urutan penting: Supabase, Bootstrap, supabase.js, auth.js, lalu skrip halaman.
-     PERLU DICEK: path js/module/time/ (sesuaikan bila folder Anda berbeda).
+     time_lokasi.js harus dimuat SETELAH time_settings.js. PERLU DICEK: path js/module/time/ (sesuaikan bila folder Anda berbeda).
      ============================================================ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="../../js/supabase.js"></script>
 <script src="../../js/auth.js"></script>
 <script src="../../js/module/time/time_settings.js"></script>
+<script src="../../js/module/time/time_lokasi.js"></script>
 
 </body>
 </html>

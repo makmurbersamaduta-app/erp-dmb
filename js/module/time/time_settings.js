@@ -1,7 +1,8 @@
 // ===================================================
 // js/module/time/time_settings.js
 // Halaman Time Settings: Master Shift, Libur Nasional, Jenis Time Off, Pola Jadwal.
-// Semua tabel ada di schema "hrd" (lihat time_modul1.sql).
+// Bagian Lokasi Absen ada di file terpisah: time_lokasi.js (dimuat SETELAH file ini).
+// Tabel ada di schema "hrd" (lihat time_modul1.sql, time_modul1b.sql, time_modul1c_lokasi.sql).
 // Catatan: variabel "supabaseClient" sudah dibuat oleh js/auth.js, jadi TIDAK
 // dibuat ulang di sini (kalau dibuat lagi, halaman error "already declared").
 // ===================================================
@@ -20,6 +21,8 @@ const TS_MAX_CHIP = 28;
 
 // ===================================================
 // KELOMPOK 2: STATE (data sementara di memori)
+// costCenters dipakai bersama oleh Jenis Time Off dan Lokasi Absen (time_lokasi.js).
+// toCcPilih = id cost center yang dicentang di form Jenis Time Off.
 // ===================================================
 const tsState = {
     canEdit: false,
@@ -28,7 +31,9 @@ const tsState = {
     libur: [],
     timeOff: [],
     pola: [],
+    costCenters: [],
     shiftLocked: false,
+    toCcPilih: new Set(),
     polaEditor: { locked: false, hari: [] }
 };
 
@@ -82,6 +87,8 @@ function tsPesanError(err) {
         if (/master_time_off/.test(msg)) return "Kode time off sudah dipakai.";
         if (/libur_nasional/.test(msg)) return "Tanggal ini sudah terdaftar sebagai libur nasional.";
         if (/jadwal_pola_nama/.test(msg)) return "Nama pola sudah dipakai.";
+        if (/lokasi_setting_nama/.test(msg)) return "Nama setting lokasi sudah dipakai.";
+        if (/lokasi_absen_karyawan/.test(msg)) return "Karyawan ini sudah memiliki setting lokasi lain.";
         return "Data kembar: " + msg;
     }
     if (err && err.code === "23503") return "Data ini masih dipakai di tempat lain sehingga tidak bisa diubah/dihapus.";
@@ -160,6 +167,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     tsSetupLibur();
     tsSetupTimeOff();
     tsSetupPola();
+    if (typeof tsSetupLokasi === "function") tsSetupLokasi(); // dari time_lokasi.js
     await tsLoadAll();
 });
 
@@ -168,28 +176,42 @@ function tsSetupTabs() {
         btn.addEventListener("click", () => {
             const tab = btn.dataset.tab;
             document.querySelectorAll("#tsTabs .nav-link").forEach(b => b.classList.toggle("active", b === btn));
-            ["shift", "libur", "timeoff", "pola"].forEach(t => {
+            ["shift", "libur", "timeoff", "pola", "lokasi"].forEach(t => {
                 tsEl("pane-" + t).classList.toggle("d-none", t !== tab);
             });
+            if (tab === "lokasi" && typeof tsLokasiOnOpen === "function") tsLokasiOnOpen();
         });
     });
 }
 
+// Membaca / mengisi pilihan radio berdasarkan nama grupnya
+function tsRadioGet(name) {
+    const el = document.querySelector(`input[name="${name}"]:checked`);
+    return el ? el.value : "";
+}
+function tsRadioSet(name, value) {
+    const el = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (el) el.checked = true;
+}
+
 async function tsLoadAll() {
     const bodies = ["shiftTableBody", "liburTableBody", "timeOffTableBody", "polaTableBody"];
-    bodies.forEach(id => { tsEl(id).innerHTML = tsRowKosong(9, "Memuat data..."); });
+    bodies.forEach(id => { tsEl(id).innerHTML = tsRowKosong(10, "Memuat data..."); });
     try {
-        const [shifts, libur, timeOff, pola] = await Promise.all([
+        const [shifts, libur, timeOff, pola, cc] = await Promise.all([
             tsDb().from("master_shift").select("*").order("kode"),
             tsDb().from("libur_nasional").select("*").order("tanggal"),
-            tsDb().from("master_time_off").select("*").order("nama"),
-            tsDb().from("v_jadwal_pola").select("*").order("nama")
+            tsDb().from("v_master_time_off").select("*").order("nama"),
+            tsDb().from("v_jadwal_pola").select("*").order("nama"),
+            supabaseClient.from("cost_centers").select("id, costcenter_name").eq("is_active", true).order("costcenter_name")
         ]);
         [shifts, libur, timeOff, pola].forEach(r => { if (r.error) throw r.error; });
+        if (cc.error) console.error("Gagal memuat cost center:", cc.error);
         tsState.shifts = shifts.data || [];
         tsState.libur = libur.data || [];
         tsState.timeOff = timeOff.data || [];
         tsState.pola = pola.data || [];
+        tsState.costCenters = cc.data || [];
         tsRenderShift();
         tsFillTahunLibur();
         tsRenderLibur();
@@ -197,8 +219,8 @@ async function tsLoadAll() {
         tsRenderPola();
     } catch (err) {
         console.error("Gagal memuat data Time Settings:", err);
-        const pesan = `Gagal memuat data: ${tsEsc(tsPesanError(err))}. Pastikan time_modul1.sql sudah dijalankan.`;
-        bodies.forEach(id => { tsEl(id).innerHTML = tsRowKosong(9, pesan); });
+        const pesan = `Gagal memuat data: ${tsEsc(tsPesanError(err))}. Pastikan time_modul1.sql dan time_modul1b.sql sudah dijalankan.`;
+        bodies.forEach(id => { tsEl(id).innerHTML = tsRowKosong(10, pesan); });
     }
 }
 
@@ -217,7 +239,7 @@ async function tsReload(which) {
         tsFillTahunLibur();
         tsRenderLibur();
     } else if (which === "timeoff") {
-        const r = await tsDb().from("master_time_off").select("*").order("nama");
+        const r = await tsDb().from("v_master_time_off").select("*").order("nama");
         if (r.error) throw r.error;
         tsState.timeOff = r.data || [];
         tsRenderTimeOff();
@@ -232,14 +254,18 @@ async function tsReload(which) {
 // ===================================================
 // KELOMPOK 5: MASTER SHIFT
 // Fungsi: daftar, tambah, ubah, aktif/nonaktifkan shift.
-// Shift yang sudah dipakai di pola: jenis, jam, dan aturan terkunci
-// (dijaga juga oleh database; di sini hanya agar pengguna tahu sebabnya).
+// Grace Period bersifat opsional (radio Disable/Enable):
+//  - Disable : batas clock-in/clock-out kosong (lembur panjang tidak terpotong).
+//  - Enable  : "Clock-in Mulai" dan "Clock-out Sampai" wajib diisi.
+// Shift yang sudah dipakai di pola: jenis, jam, dan aturan (termasuk grace)
+// terkunci (dijaga juga oleh database; di sini hanya agar pengguna tahu sebabnya).
 // ===================================================
 function tsSetupShift() {
     tsEl("filterShift").addEventListener("change", tsRenderShift);
     tsEl("btnTambahShift").addEventListener("click", () => tsOpenShift(null));
     tsEl("formShift").addEventListener("submit", tsSaveShift);
     tsEl("fShiftJenis").addEventListener("change", tsToggleJamShift);
+    document.querySelectorAll('input[name="shiftGrace"]').forEach(r => r.addEventListener("change", tsToggleJamShift));
     tsEl("shiftTableBody").addEventListener("click", (e) => {
         const btn = e.target.closest("[data-act]");
         if (!btn) return;
@@ -257,14 +283,19 @@ function tsRenderShift() {
             return String(a.kode).localeCompare(String(b.kode), "id", { numeric: true });
         });
 
-    if (rows.length === 0) { tsEl("shiftTableBody").innerHTML = tsRowKosong(9, "Belum ada shift."); return; }
+    if (rows.length === 0) { tsEl("shiftTableBody").innerHTML = tsRowKosong(10, "Belum ada shift."); return; }
 
     tsEl("shiftTableBody").innerHTML = rows.map(s => {
         const kerja = s.jenis === "kerja";
         const jam = kerja
             ? `${tsJam(s.jam_masuk)} - ${tsJam(s.jam_pulang)}${s.lintas_hari ? ' <span class="badge bg-warning-subtle text-dark ms-1">lintas hari</span>' : ""}`
             : '<span class="text-muted">-</span>';
-        const angka = (v) => kerja ? `${v} mnt` : '<span class="text-muted">-</span>';
+        const strip = '<span class="text-muted">-</span>';
+        const grace = !kerja ? strip : (s.is_grace_period
+            ? '<span class="badge bg-primary-subtle text-primary">Enable</span>'
+            : '<span class="text-muted">Disable</span>');
+        const batas = (v) => (kerja && s.is_grace_period && v != null) ? `${v} mnt` : strip;
+        const toleransi = kerja ? `${s.toleransi_telat_menit} mnt` : strip;
         const aksi = tsState.canEdit ? `
             <button class="btn btn-sm btn-light text-primary me-1" data-act="edit" data-kode="${tsEsc(s.kode)}" title="Ubah"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-light ${s.is_active ? "text-danger" : "text-success"}" data-act="toggle" data-kode="${tsEsc(s.kode)}" title="${s.is_active ? "Nonaktifkan" : "Aktifkan"}"><i class="fa-solid ${s.is_active ? "fa-ban" : "fa-check"}"></i></button>` : "";
@@ -273,24 +304,28 @@ function tsRenderShift() {
             <td>${tsEsc(s.nama)}</td>
             <td>${kerja ? "Hari kerja" : "Libur / off"}</td>
             <td>${jam}</td>
-            <td class="text-center">${angka(s.toleransi_telat_menit)}</td>
-            <td class="text-center">${angka(s.batas_awal_masuk_menit)}</td>
-            <td class="text-center">${angka(s.batas_akhir_pulang_menit)}</td>
+            <td class="text-center">${toleransi}</td>
+            <td class="text-center">${grace}</td>
+            <td class="text-center">${batas(s.batas_awal_masuk_menit)}</td>
+            <td class="text-center">${batas(s.batas_akhir_pulang_menit)}</td>
             <td>${tsBadgeAktif(s.is_active)}</td>
             <td class="text-center">${aksi}</td>
         </tr>`;
     }).join("");
 }
 
-// Tampilkan / sembunyikan isian jam sesuai jenis (libur tidak punya jam)
+// Tampilkan / sembunyikan isian sesuai jenis (libur tidak punya jam)
+// dan sesuai pilihan grace (batas hanya muncul bila Enable)
 function tsToggleJamShift() {
     const kerja = tsEl("fShiftJenis").value === "kerja";
     document.querySelectorAll("#formShift [data-jam]").forEach(el => el.classList.toggle("d-none", !kerja));
+    const grace = kerja && tsRadioGet("shiftGrace") === "1";
+    document.querySelectorAll("#formShift [data-grace]").forEach(el => el.classList.toggle("d-none", !grace));
 }
 
 function tsSetShiftLocked(locked) {
     tsState.shiftLocked = locked;
-    ["fShiftJenis", "fShiftJamMasuk", "fShiftJamPulang", "fShiftToleransi", "fShiftBatasAwal", "fShiftBatasAkhir"]
+    ["fShiftJenis", "fShiftJamMasuk", "fShiftJamPulang", "fShiftToleransi", "fShiftBatasAwal", "fShiftBatasAkhir", "fShiftGraceOff", "fShiftGraceOn"]
         .forEach(id => { tsEl(id).disabled = locked; });
     tsEl("shiftLockNote").classList.toggle("d-none", !locked);
 }
@@ -311,8 +346,9 @@ async function tsOpenShift(kode) {
     tsEl("fShiftJamMasuk").value = baru ? "" : tsJam(s.jam_masuk).replace("-", "");
     tsEl("fShiftJamPulang").value = baru ? "" : tsJam(s.jam_pulang).replace("-", "");
     tsEl("fShiftToleransi").value = baru ? 0 : s.toleransi_telat_menit;
-    tsEl("fShiftBatasAwal").value = baru ? 120 : s.batas_awal_masuk_menit;
-    tsEl("fShiftBatasAkhir").value = baru ? 240 : s.batas_akhir_pulang_menit;
+    tsRadioSet("shiftGrace", (!baru && s.is_grace_period) ? "1" : "0");
+    tsEl("fShiftBatasAwal").value = (baru || s.batas_awal_masuk_menit == null) ? "" : s.batas_awal_masuk_menit;
+    tsEl("fShiftBatasAkhir").value = (baru || s.batas_akhir_pulang_menit == null) ? "" : s.batas_akhir_pulang_menit;
     tsToggleJamShift();
 
     // Cek apakah shift sudah dipakai di pola; kalau ya, kunci isian utamanya
@@ -336,6 +372,7 @@ async function tsSaveShift(e) {
     const jamMasuk = tsEl("fShiftJamMasuk").value;
     const jamPulang = tsEl("fShiftJamPulang").value;
     const toleransi = parseInt(tsEl("fShiftToleransi").value, 10);
+    const grace = kerja && tsRadioGet("shiftGrace") === "1";
     const batasAwal = parseInt(tsEl("fShiftBatasAwal").value, 10);
     const batasAkhir = parseInt(tsEl("fShiftBatasAkhir").value, 10);
 
@@ -344,34 +381,33 @@ async function tsSaveShift(e) {
     if (!tsState.shiftLocked && kerja) {
         if (!jamMasuk || !jamPulang) { tsSetMsg("shiftMsg", "Jam masuk dan jam pulang wajib diisi untuk hari kerja."); return; }
         if (jamMasuk === jamPulang) { tsSetMsg("shiftMsg", "Jam masuk dan jam pulang tidak boleh sama."); return; }
-        if ([toleransi, batasAwal, batasAkhir].some(v => isNaN(v) || v < 0)) { tsSetMsg("shiftMsg", "Toleransi dan batas waktu harus berupa angka 0 atau lebih."); return; }
+        if (isNaN(toleransi) || toleransi < 0) { tsSetMsg("shiftMsg", "Toleransi telat harus berupa angka 0 atau lebih."); return; }
+        if (grace && [batasAwal, batasAkhir].some(v => isNaN(v) || v < 0)) {
+            tsSetMsg("shiftMsg", "Grace period Enable: Clock-in Mulai dan Clock-out Sampai wajib diisi dengan angka 0 atau lebih."); return;
+        }
     }
+
+    // Nilai yang dikirim ke database. Tanpa grace, kedua batas HARUS kosong (null).
+    const isi = {
+        jenis,
+        jam_masuk: kerja ? jamMasuk : null,
+        jam_pulang: kerja ? jamPulang : null,
+        toleransi_telat_menit: kerja ? toleransi : 0,
+        is_grace_period: grace,
+        batas_awal_masuk_menit: grace ? batasAwal : null,
+        batas_akhir_pulang_menit: grace ? batasAkhir : null
+    };
 
     const btn = tsEl("btnSimpanShift");
     tsBusy(btn, true, "Menyimpan...");
     try {
         let error;
         if (baru) {
-            ({ error } = await tsDb().from("master_shift").insert({
-                kode, nama, jenis,
-                jam_masuk: kerja ? jamMasuk : null,
-                jam_pulang: kerja ? jamPulang : null,
-                toleransi_telat_menit: kerja ? toleransi : 0,
-                batas_awal_masuk_menit: kerja ? batasAwal : 120,
-                batas_akhir_pulang_menit: kerja ? batasAkhir : 240,
-                created_by: tsNik()
-            }));
+            ({ error } = await tsDb().from("master_shift").insert({ kode, nama, ...isi, created_by: tsNik() }));
         } else if (tsState.shiftLocked) {
             ({ error } = await tsDb().from("master_shift").update({ nama }).eq("kode", editKode));
         } else {
-            ({ error } = await tsDb().from("master_shift").update({
-                nama, jenis,
-                jam_masuk: kerja ? jamMasuk : null,
-                jam_pulang: kerja ? jamPulang : null,
-                toleransi_telat_menit: kerja ? toleransi : 0,
-                batas_awal_masuk_menit: kerja ? batasAwal : 120,
-                batas_akhir_pulang_menit: kerja ? batasAkhir : 240
-            }).eq("kode", editKode));
+            ({ error } = await tsDb().from("master_shift").update({ nama, ...isi }).eq("kode", editKode));
         }
         if (error) throw error;
         tsModal("modalShift").hide();
@@ -401,9 +437,9 @@ async function tsToggleShift(kode) {
 
 // ===================================================
 // KELOMPOK 6: LIBUR NASIONAL
-// Fungsi: daftar per tahun, tambah, ubah keterangan, hapus.
-// Tanggal tidak bisa diubah (itu kunci data): untuk memindah tanggal,
-// hapus lalu tambah baru.
+// Fungsi: daftar per tahun, tambah, ubah (tanggal dan keterangan), hapus.
+// Baris dikenali dari kolom id (bukan tanggal), jadi tanggal bisa dikoreksi.
+// Satu tanggal hanya boleh terdaftar sekali (dijaga database).
 // ===================================================
 function tsSetupLibur() {
     tsEl("filterLiburTahun").addEventListener("change", tsRenderLibur);
@@ -412,8 +448,8 @@ function tsSetupLibur() {
     tsEl("liburTableBody").addEventListener("click", (e) => {
         const btn = e.target.closest("[data-act]");
         if (!btn) return;
-        if (btn.dataset.act === "edit") tsOpenLibur(btn.dataset.tanggal);
-        else if (btn.dataset.act === "hapus") tsDeleteLibur(btn.dataset.tanggal);
+        if (btn.dataset.act === "edit") tsOpenLibur(btn.dataset.id);
+        else if (btn.dataset.act === "hapus") tsDeleteLibur(btn.dataset.id);
     });
 }
 
@@ -436,8 +472,8 @@ function tsRenderLibur() {
     if (rows.length === 0) { tsEl("liburTableBody").innerHTML = tsRowKosong(4, `Belum ada libur nasional pada tahun ${tahun}.`); return; }
     tsEl("liburTableBody").innerHTML = rows.map((l, i) => {
         const aksi = tsState.canEdit ? `
-            <button class="btn btn-sm btn-light text-primary me-1" data-act="edit" data-tanggal="${tsEsc(l.tanggal)}" title="Ubah keterangan"><i class="fa-solid fa-pen"></i></button>
-            <button class="btn btn-sm btn-light text-danger" data-act="hapus" data-tanggal="${tsEsc(l.tanggal)}" title="Hapus"><i class="fa-solid fa-trash"></i></button>` : "";
+            <button class="btn btn-sm btn-light text-primary me-1" data-act="edit" data-id="${tsEsc(l.id)}" title="Ubah"><i class="fa-solid fa-pen"></i></button>
+            <button class="btn btn-sm btn-light text-danger" data-act="hapus" data-id="${tsEsc(l.id)}" title="Hapus"><i class="fa-solid fa-trash"></i></button>` : "";
         return `<tr>
             <td class="text-center">${i + 1}</td>
             <td class="fw-semibold">${tsEsc(tsFormatTanggal(l.tanggal))}</td>
@@ -447,23 +483,22 @@ function tsRenderLibur() {
     }).join("");
 }
 
-function tsOpenLibur(tanggal) {
-    const baru = !tanggal;
-    const l = baru ? null : tsState.libur.find(x => x.tanggal === tanggal);
+function tsOpenLibur(id) {
+    const baru = !id;
+    const l = baru ? null : tsState.libur.find(x => String(x.id) === String(id));
     if (!baru && !l) return;
     tsEl("formLibur").reset();
     tsSetMsg("liburMsg", "");
-    tsEl("liburEditTanggal").value = baru ? "" : l.tanggal;
+    tsEl("liburEditId").value = baru ? "" : l.id;
     tsEl("modalLiburTitle").textContent = baru ? "Tambah Libur Nasional" : "Ubah Libur Nasional";
-    tsEl("fLiburTanggal").value = baru ? "" : l.tanggal;
-    tsEl("fLiburTanggal").readOnly = !baru;
+    tsEl("fLiburTanggal").value = baru ? "" : String(l.tanggal).slice(0, 10);
     tsEl("fLiburKeterangan").value = baru ? "" : l.keterangan;
     tsModal("modalLibur").show();
 }
 
 async function tsSaveLibur(e) {
     e.preventDefault();
-    const edit = tsEl("liburEditTanggal").value;
+    const id = tsEl("liburEditId").value;
     const tanggal = tsEl("fLiburTanggal").value;
     const keterangan = tsEl("fLiburKeterangan").value.trim();
     if (!tanggal) { tsSetMsg("liburMsg", "Tanggal wajib diisi."); return; }
@@ -473,13 +508,15 @@ async function tsSaveLibur(e) {
     tsBusy(btn, true, "Menyimpan...");
     try {
         let error;
-        if (edit) ({ error } = await tsDb().from("libur_nasional").update({ keterangan }).eq("tanggal", edit));
+        if (id) ({ error } = await tsDb().from("libur_nasional").update({ tanggal, keterangan }).eq("id", id));
         else ({ error } = await tsDb().from("libur_nasional").insert({ tanggal, keterangan, created_by: tsNik() }));
         if (error) throw error;
         tsModal("modalLibur").hide();
         await tsReload("libur");
-        if (!edit) tsEl("filterLiburTahun").value = tanggal.slice(0, 4), tsRenderLibur();
-        tsToast(edit ? "Libur nasional diperbarui." : "Libur nasional ditambahkan.");
+        // Pindah ke tahun dari tanggal yang baru disimpan agar barisnya langsung terlihat
+        tsEl("filterLiburTahun").value = tanggal.slice(0, 4);
+        tsRenderLibur();
+        tsToast(id ? "Libur nasional diperbarui." : "Libur nasional ditambahkan.");
     } catch (err) {
         console.error("Gagal menyimpan libur nasional:", err);
         tsSetMsg("liburMsg", tsPesanError(err));
@@ -488,12 +525,12 @@ async function tsSaveLibur(e) {
     }
 }
 
-async function tsDeleteLibur(tanggal) {
-    const l = tsState.libur.find(x => x.tanggal === tanggal);
+async function tsDeleteLibur(id) {
+    const l = tsState.libur.find(x => String(x.id) === String(id));
     if (!l) return;
     if (!confirm(`Hapus libur nasional ini?\n\n${tsFormatTanggal(l.tanggal)}\n${l.keterangan}`)) return;
     try {
-        const { error } = await tsDb().from("libur_nasional").delete().eq("tanggal", tanggal);
+        const { error } = await tsDb().from("libur_nasional").delete().eq("id", id);
         if (error) throw error;
         await tsReload("libur");
         tsToast("Libur nasional dihapus.");
@@ -504,13 +541,33 @@ async function tsDeleteLibur(tanggal) {
 
 // ===================================================
 // KELOMPOK 7: JENIS TIME OFF
-// Fungsi: daftar jenis izin/sakit/cuti beserta nominal potongan per hari.
+// Fungsi: daftar jenis izin/sakit/cuti beserta aturannya:
+//  - Durasi    : Full Day / Half Day (pulang cepat, datang terlambat)
+//  - Saldo     : Unlimited, atau Limit (jumlah hari per tahun kalender,
+//                kelipatan 0,5, dengan syarat masa kerja pada 1 Januari;
+//                berlaku 1 Jan - 31 Des, sisa tidak diakumulasi)
+//  - Lampiran  : wajib / tidak wajib saat pengajuan
+//  - Berlaku   : semua cost center, atau cost center tertentu
+// Penyimpanan lewat fungsi database simpan_time_off (satu transaksi).
 // Ini hanya DAFTAR JENIS; pencatatan izin karyawan ada di tahap pengajuan.
+// Nominal potongan tidak diatur di sini (ditangani payroll).
 // ===================================================
 function tsSetupTimeOff() {
     tsEl("filterTimeOff").addEventListener("change", tsRenderTimeOff);
     tsEl("btnTambahTimeOff").addEventListener("click", () => tsOpenTimeOff(null));
     tsEl("formTimeOff").addEventListener("submit", tsSaveTimeOff);
+    document.querySelectorAll('input[name="toSaldo"], input[name="toBerlaku"]')
+        .forEach(r => r.addEventListener("change", tsToggleTimeOffForm));
+    tsEl("fTimeOffCcSearch").addEventListener("input", tsRenderCcTimeOff);
+    tsEl("btnTimeOffCcSemua").addEventListener("click", () => tsCcMassal(true));
+    tsEl("btnTimeOffCcKosong").addEventListener("click", () => tsCcMassal(false));
+    tsEl("timeOffCcList").addEventListener("change", (e) => {
+        const cb = e.target.closest('input[type="checkbox"]');
+        if (!cb) return;
+        const id = Number(cb.value);
+        if (cb.checked) tsState.toCcPilih.add(id); else tsState.toCcPilih.delete(id);
+        tsEl("timeOffCcCount").textContent = `${tsState.toCcPilih.size} dipilih`;
+    });
     tsEl("timeOffTableBody").addEventListener("click", (e) => {
         const btn = e.target.closest("[data-act]");
         if (!btn) return;
@@ -519,23 +576,72 @@ function tsSetupTimeOff() {
     });
 }
 
+function tsNamaCc(id) {
+    const c = tsState.costCenters.find(x => Number(x.id) === Number(id));
+    return c ? c.costcenter_name : `#${id}`;
+}
+
+// 12 -> "12", 0.5 -> "0,5"
+function tsAngka(n) { return String(Number(n)).replace(".", ","); }
+
 function tsRenderTimeOff() {
     const f = tsEl("filterTimeOff").value;
     const rows = tsState.timeOff.filter(t => f === "semua" ? true : (f === "aktif" ? t.is_active : !t.is_active));
-    if (rows.length === 0) { tsEl("timeOffTableBody").innerHTML = tsRowKosong(5, "Belum ada jenis time off."); return; }
+    if (rows.length === 0) { tsEl("timeOffTableBody").innerHTML = tsRowKosong(8, "Belum ada jenis time off."); return; }
     tsEl("timeOffTableBody").innerHTML = rows.map(t => {
-        const potong = Number(t.potongan_nominal) > 0 ? tsRupiah(t.potongan_nominal) : '<span class="text-muted">Tidak dipotong</span>';
+        const durasi = t.durasi === "half_day"
+            ? '<span class="badge bg-info-subtle text-info-emphasis">Half Day</span>'
+            : '<span class="badge bg-secondary-subtle text-secondary-emphasis">Full Day</span>';
+        const saldo = t.saldo_tipe === "limit"
+            ? `${tsAngka(t.saldo_jumlah_hari)} hari / tahun<div class="small text-muted">${t.saldo_masa_kerja_min_bulan != null ? `min. masa kerja ${t.saldo_masa_kerja_min_bulan} bln pada 1 Jan` : "tanpa syarat masa kerja"}</div>`
+            : "Unlimited";
+        const lampiran = t.wajib_lampiran ? '<span class="badge bg-warning-subtle text-dark">Wajib</span>' : '<span class="text-muted">Tidak</span>';
+        let berlaku = "Semua cost center";
+        if (!t.berlaku_semua_costcenter) {
+            const ids = t.costcenter_ids || [];
+            const nama = ids.map(tsNamaCc);
+            berlaku = `<span title="${tsEsc(nama.join(", "))}">${tsEsc(nama.slice(0, 2).join(", "))}${nama.length > 2 ? ` <span class="text-muted">+${nama.length - 2}</span>` : ""}</span>`;
+        }
         const aksi = tsState.canEdit ? `
             <button class="btn btn-sm btn-light text-primary me-1" data-act="edit" data-id="${tsEsc(t.id)}" title="Ubah"><i class="fa-solid fa-pen"></i></button>
             <button class="btn btn-sm btn-light ${t.is_active ? "text-danger" : "text-success"}" data-act="toggle" data-id="${tsEsc(t.id)}" title="${t.is_active ? "Nonaktifkan" : "Aktifkan"}"><i class="fa-solid ${t.is_active ? "fa-ban" : "fa-check"}"></i></button>` : "";
         return `<tr>
             <td><code>${tsEsc(t.kode)}</code></td>
             <td>${tsEsc(t.nama)}</td>
-            <td class="text-end">${potong}</td>
+            <td>${durasi}</td>
+            <td>${saldo}</td>
+            <td class="text-center">${lampiran}</td>
+            <td>${berlaku}</td>
             <td>${tsBadgeAktif(t.is_active)}</td>
             <td class="text-center">${aksi}</td>
         </tr>`;
     }).join("");
+}
+
+// Tampilkan isian limit hanya bila saldo = Limit, dan daftar cost center hanya bila "tertentu"
+function tsToggleTimeOffForm() {
+    const limit = tsRadioGet("toSaldo") === "limit";
+    document.querySelectorAll("#formTimeOff [data-limit]").forEach(el => el.classList.toggle("d-none", !limit));
+    tsEl("timeOffCcWrap").classList.toggle("d-none", tsRadioGet("toBerlaku") !== "pilih");
+}
+
+function tsRenderCcTimeOff() {
+    const q = tsEl("fTimeOffCcSearch").value.trim().toLowerCase();
+    const rows = tsState.costCenters.filter(c => !q || String(c.costcenter_name).toLowerCase().includes(q));
+    tsEl("timeOffCcList").innerHTML = rows.length
+        ? rows.map(c => `<label class="ts-check"><input type="checkbox" class="form-check-input mt-0" value="${c.id}" ${tsState.toCcPilih.has(Number(c.id)) ? "checked" : ""}><span>${tsEsc(c.costcenter_name)}</span></label>`).join("")
+        : '<div class="text-muted small p-2">Tidak ada cost center.</div>';
+    tsEl("timeOffCcCount").textContent = `${tsState.toCcPilih.size} dipilih`;
+}
+
+// Centang / kosongkan semua cost center yang sedang tampil (sesuai hasil cari)
+function tsCcMassal(pilih) {
+    tsEl("timeOffCcList").querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        const id = Number(cb.value);
+        cb.checked = pilih;
+        if (pilih) tsState.toCcPilih.add(id); else tsState.toCcPilih.delete(id);
+    });
+    tsEl("timeOffCcCount").textContent = `${tsState.toCcPilih.size} dipilih`;
 }
 
 function tsOpenTimeOff(id) {
@@ -548,7 +654,18 @@ function tsOpenTimeOff(id) {
     tsEl("modalTimeOffTitle").textContent = baru ? "Tambah Jenis Time Off" : "Ubah Jenis Time Off";
     tsEl("fTimeOffKode").value = baru ? "" : t.kode;
     tsEl("fTimeOffNama").value = baru ? "" : t.nama;
-    tsEl("fTimeOffPotongan").value = baru ? 0 : Number(t.potongan_nominal);
+    tsRadioSet("toDurasi", baru ? "full_day" : t.durasi);
+    tsRadioSet("toLampiran", (!baru && t.wajib_lampiran) ? "1" : "0");
+    tsRadioSet("toSaldo", baru ? "unlimited" : t.saldo_tipe);
+    tsEl("fTimeOffJumlah").value = (baru || t.saldo_tipe !== "limit") ? "" : Number(t.saldo_jumlah_hari);
+    tsEl("fTimeOffMasaKerja").value = (baru || t.saldo_masa_kerja_min_bulan == null) ? "" : t.saldo_masa_kerja_min_bulan;
+    tsRadioSet("toBerlaku", (baru || t.berlaku_semua_costcenter) ? "semua" : "pilih");
+    tsState.toCcPilih = new Set(baru ? [] : (t.costcenter_ids || []).map(Number));
+    tsEl("fTimeOffCcSearch").value = "";
+    tsEl("fTimeOffAktif").checked = baru ? true : !!t.is_active;
+    tsEl("wrapTimeOffAktif").classList.toggle("d-none", baru);
+    tsToggleTimeOffForm();
+    tsRenderCcTimeOff();
     tsModal("modalTimeOff").show();
 }
 
@@ -557,17 +674,40 @@ async function tsSaveTimeOff(e) {
     const id = tsEl("timeOffEditId").value;
     const kode = tsEl("fTimeOffKode").value.trim();
     const nama = tsEl("fTimeOffNama").value.trim();
-    const potongan = Number(tsEl("fTimeOffPotongan").value);
+    const limit = tsRadioGet("toSaldo") === "limit";
+    const semua = tsRadioGet("toBerlaku") === "semua";
+    const jumlah = parseFloat(tsEl("fTimeOffJumlah").value);
+    const masaKerjaTeks = tsEl("fTimeOffMasaKerja").value.trim();
+    const masaKerja = masaKerjaTeks === "" ? null : parseInt(masaKerjaTeks, 10);
+
     if (!/^\S{1,10}$/.test(kode)) { tsSetMsg("timeOffMsg", "Kode wajib diisi, maksimal 10 karakter, tanpa spasi."); return; }
     if (!nama) { tsSetMsg("timeOffMsg", "Nama wajib diisi."); return; }
-    if (isNaN(potongan) || potongan < 0) { tsSetMsg("timeOffMsg", "Potongan harus angka 0 atau lebih."); return; }
+    if (limit) {
+        if (isNaN(jumlah) || jumlah <= 0) { tsSetMsg("timeOffMsg", "Jumlah limit wajib diisi dan lebih dari 0."); return; }
+        if (!Number.isInteger(jumlah * 2)) { tsSetMsg("timeOffMsg", "Jumlah limit harus kelipatan 0,5 hari."); return; }
+        if (masaKerja !== null && (isNaN(masaKerja) || masaKerja < 0)) { tsSetMsg("timeOffMsg", "Minimal masa kerja harus angka 0 atau lebih."); return; }
+    }
+    if (!semua && tsState.toCcPilih.size === 0) { tsSetMsg("timeOffMsg", "Pilih minimal satu cost center, atau pilih \"Semua cost center\"."); return; }
 
     const btn = tsEl("btnSimpanTimeOff");
     tsBusy(btn, true, "Menyimpan...");
     try {
-        let error;
-        if (id) ({ error } = await tsDb().from("master_time_off").update({ kode, nama, potongan_nominal: potongan }).eq("id", id));
-        else ({ error } = await tsDb().from("master_time_off").insert({ kode, nama, potongan_nominal: potongan, created_by: tsNik() }));
+        const { error } = await tsDb().rpc("simpan_time_off", {
+            p_data: {
+                id: id ? Number(id) : null,
+                kode,
+                nama,
+                durasi: tsRadioGet("toDurasi"),
+                saldo_tipe: limit ? "limit" : "unlimited",
+                saldo_jumlah_hari: limit ? jumlah : null,
+                saldo_masa_kerja_min_bulan: limit ? masaKerja : null,
+                wajib_lampiran: tsRadioGet("toLampiran") === "1",
+                berlaku_semua_costcenter: semua,
+                costcenter_ids: semua ? [] : Array.from(tsState.toCcPilih),
+                is_active: id ? tsEl("fTimeOffAktif").checked : true,
+                oleh: tsNik()
+            }
+        });
         if (error) throw error;
         tsModal("modalTimeOff").hide();
         await tsReload("timeoff");

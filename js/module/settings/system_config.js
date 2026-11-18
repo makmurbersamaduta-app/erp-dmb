@@ -1036,15 +1036,19 @@ function renderZonaDropdowns() {
         .join("");
 
     const zcSel = document.getElementById("zc_zona_id");
-    if (zcSel) zcSel.innerHTML = options;
+    if (zcSel) zcSel.innerHTML = `<option value="" selected disabled>-- Pilih Zona --</option>` + options;
 
     const deptOptions = departmentList.map(d => `<option value="${d.id}">${d.department_name}</option>`).join("");
     const deptSel = document.getElementById("zc_departemen_id");
-    if (deptSel) deptSel.innerHTML = deptOptions;
+    if (deptSel) deptSel.innerHTML = `<option value="" selected disabled>-- Pilih Departemen --</option>` + deptOptions;
 
-    const areaOptions = areaList.map(a => `<option value="${a.id}">${a.area_name}</option>`).join("");
+    // Nama cabang ikut ditampilkan supaya area bernama sama di cabang berbeda tidak tertukar
+    const areaOptions = areaList.map(a => {
+        const br = getBranchForArea(a.id);
+        return `<option value="${a.id}">${a.area_name}${br ? ` (${br.branch_name})` : ""}</option>`;
+    }).join("");
     const areaSel = document.getElementById("zc_area_id");
-    if (areaSel) areaSel.innerHTML = areaOptions;
+    if (areaSel) areaSel.innerHTML = `<option value="" selected disabled>-- Pilih Area --</option>` + areaOptions;
 }
 
 // ---------------------------------------------------
@@ -1062,6 +1066,7 @@ async function loadZonaCoverageList() {
     }
     zonaCoverageList = data || [];
     renderZonaCoverageTable();
+    renderZonaCoverageInactiveTable();
 }
 
 // Cari cabang dari sebuah area: area -> cost center -> cabang
@@ -1073,53 +1078,82 @@ function getBranchForArea(areaId) {
     return branchList.find(b => b.id == cc.branch_id) || null;
 }
 
+// ---------------------------------------------------
+// 7.2A. BANTUAN TAMPILAN: info 1 baris + pengurutan
+// Urutan: Cabang -> Departemen -> Area (-> Zona). Hanya MENGURUTKAN,
+// tidak ada baris sub-judul tambahan selain judul Cabang yang sudah ada.
+// ---------------------------------------------------
+function buildZonaCoverageRowInfo(zc) {
+    const br = getBranchForArea(zc.area_id);
+    const dept = departmentList.find(d => d.id === zc.departemen_id);
+    const area = areaAllList.find(a => a.id === zc.area_id);
+    const zona = zonaList.find(z => z.id === zc.zona_id);
+    return {
+        zc,
+        branchId: br ? br.id : null,
+        branchName: br ? br.branch_name : "Tanpa Cabang",
+        deptName: dept ? dept.department_name : "",
+        areaName: area ? area.area_name : "",
+        zonaName: zona ? zona.zona_name : ""
+    };
+}
+
+function compareZonaCoverageRows(a, b) {
+    // "Tanpa Cabang" selalu paling bawah
+    if (a.branchId === null && b.branchId !== null) return 1;
+    if (b.branchId === null && a.branchId !== null) return -1;
+    return a.branchName.localeCompare(b.branchName, "id")
+        || (Number(a.branchId) - Number(b.branchId))
+        || a.deptName.localeCompare(b.deptName, "id", { numeric: true })
+        || a.areaName.localeCompare(b.areaName, "id", { numeric: true })
+        || a.zonaName.localeCompare(b.zonaName, "id", { numeric: true });
+}
+
+function describeZonaCoverage(zc) {
+    const info = buildZonaCoverageRowInfo(zc);
+    return `Cabang ${info.branchName} / Departemen ${info.deptName || "-"} / Area ${info.areaName || "-"} / ${info.zonaName || "-"}`;
+}
+
+// ---------------------------------------------------
+// 7.2B. TABEL UTAMA -- hanya Zona Coverage AKTIF (yang non-aktif ada di
+// modal "Zona non Aktif"). Judul grup hanya per Cabang (sama seperti sebelumnya).
+// ---------------------------------------------------
 function renderZonaCoverageTable() {
     const tbody = document.getElementById("zonaCoverageTableBody");
     if (!tbody) return;
 
-    if (zonaCoverageList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Belum ada Zona Coverage.</td></tr>`;
+    // Penghitung di tombol merah "Zona non Aktif"
+    const countEl = document.getElementById("zcInactiveCount");
+    if (countEl) countEl.textContent = zonaCoverageList.filter(zc => !zc.is_active).length;
+
+    const activeRows = zonaCoverageList.filter(zc => zc.is_active);
+    if (activeRows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Belum ada Zona Coverage aktif.</td></tr>`;
         return;
     }
 
-    // Tempelkan info cabang ke tiap baris, lalu urutkan per nama cabang
-    // ("Tanpa Cabang" di paling bawah). Urutan awal (per zona) tetap terjaga
-    // di dalam tiap cabang karena sort() browser modern bersifat stabil.
-    const rows = zonaCoverageList.map(zc => {
-        const br = getBranchForArea(zc.area_id);
-        return { zc, branchId: br ? br.id : null, branchName: br ? br.branch_name : "Tanpa Cabang" };
-    });
-    rows.sort((a, b) => {
-        if (a.branchId === null && b.branchId !== null) return 1;
-        if (b.branchId === null && a.branchId !== null) return -1;
-        return a.branchName.localeCompare(b.branchName, "id");
-    });
+    const rows = activeRows.map(buildZonaCoverageRowInfo).sort(compareZonaCoverageRows);
 
     let html = "";
-    let lastBranchId;   // undefined di awal supaya header kelompok pertama tetap tercetak
-    rows.forEach(({ zc, branchId, branchName }, idx) => {
+    let lastBranchId;   // undefined di awal supaya judul cabang pertama tetap tercetak
+    rows.forEach(({ zc, branchId, branchName, deptName, areaName, zonaName }, idx) => {
         if (branchId !== lastBranchId) {
-            html += `<tr class="table-group-header"><td colspan="8" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
+            html += `<tr class="table-group-header"><td colspan="7" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
             lastBranchId = branchId;
         }
-
-        const zona = zonaList.find(z => z.id === zc.zona_id);
-        const dept = departmentList.find(d => d.id === zc.departemen_id);
-        const area = areaAllList.find(a => a.id === zc.area_id);
 
         // Nomor urut berjalan menerus lintas cabang (tidak reset per kelompok)
         html += `
             <tr class="text-center">
                 <td>${idx + 1}</td>
-                <td><code>${zc.kode_zona_coverage}</code></td>
-                <td>${zona ? zona.zona_name : '-'}</td>
-                <td>${dept ? dept.department_name : '-'}</td>
-                <td>${area ? area.area_name : '-'}</td>
+                <td>${zonaName || '-'}</td>
+                <td>${deptName || '-'}</td>
+                <td>${areaName || '-'}</td>
                 <td class="text-start small text-muted">${zc.keterangan || '-'}</td>
-                <td>${zc.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
+                <td><span class="badge bg-success-subtle text-success">Aktif</span></td>
                 <td>
                     <button class="btn btn-sm btn-light text-primary me-1" onclick="openZonaCoverageModal(${zc.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
-                    <button class="btn btn-sm btn-light text-danger" onclick="deleteZonaCoverage(${zc.id})" title="Hapus"><i class="fa-solid fa-trash"></i></button>
+                    <button class="btn btn-sm btn-light text-danger" onclick="deactivateZonaCoverage(${zc.id})" title="Nonaktifkan"><i class="fa-solid fa-ban"></i></button>
                 </td>
             </tr>`;
     });
@@ -1127,7 +1161,163 @@ function renderZonaCoverageTable() {
     tbody.innerHTML = html;
 }
 
-// Kode format: {zona_code}-{urutan}, nomor reset PER ZONA (sesuai catatan keputusan)
+// ---------------------------------------------------
+// 7.2C. MODAL "ZONA NON AKTIF" -- daftar yang non-aktif + tombol Aktifkan
+// ---------------------------------------------------
+
+// Alasan sebuah baris TIDAK boleh diaktifkan lagi (kosong = boleh).
+function getReactivationBlockReason(zc) {
+    const zona = zonaList.find(z => z.id === zc.zona_id);
+    if (zona && !zona.is_active) {
+        return `Zona "${zona.zona_name}" masih non-aktif.`;
+    }
+    const conflict = zonaCoverageList.find(x =>
+        x.id !== zc.id && x.is_active &&
+        x.zona_id === zc.zona_id && x.departemen_id === zc.departemen_id && x.area_id === zc.area_id
+    );
+    if (conflict) {
+        return "Kombinasi Zona + Departemen + Area yang sama persis sudah aktif di baris lain.";
+    }
+    return "";
+}
+
+function renderZonaCoverageInactiveTable() {
+    const tbody = document.getElementById("zonaCoverageInactiveTableBody");
+    if (!tbody) return;
+
+    const rows = zonaCoverageList.filter(zc => !zc.is_active)
+        .map(buildZonaCoverageRowInfo)
+        .sort(compareZonaCoverageRows);
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted py-4">Tidak ada Zona Coverage non-aktif.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = rows.map(({ zc, branchName, deptName, areaName, zonaName }, idx) => {
+        const reason = getReactivationBlockReason(zc);
+        const action = reason
+            ? `<button class="btn btn-sm btn-secondary" disabled title="${reason}"><i class="fa-solid fa-lock me-1"></i>Aktifkan</button>
+               <div class="text-danger small mt-1">${reason}</div>`
+            : `<button class="btn btn-sm btn-success" onclick="reactivateZonaCoverage(${zc.id})"><i class="fa-solid fa-rotate-left me-1"></i>Aktifkan</button>`;
+        return `
+            <tr class="text-center">
+                <td>${idx + 1}</td>
+                <td>${branchName}</td>
+                <td>${zonaName || '-'}</td>
+                <td>${deptName || '-'}</td>
+                <td>${areaName || '-'}</td>
+                <td class="text-start small text-muted">${zc.keterangan || '-'}</td>
+                <td>${action}</td>
+            </tr>`;
+    }).join("");
+}
+
+function openZonaCoverageInactiveModal() {
+    renderZonaCoverageInactiveTable();
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("modalZonaCoverageInactive")).show();
+}
+
+async function reactivateZonaCoverage(id) {
+    const zc = zonaCoverageList.find(x => x.id === id);
+    if (!zc) { alert("Data tidak ditemukan."); return; }
+
+    // Pengaman ulang (tombol sudah dikunci di tampilan, ini untuk jaga-jaga)
+    const reason = getReactivationBlockReason(zc);
+    if (reason) { alert("Tidak bisa diaktifkan: " + reason); return; }
+
+    try {
+        const { error } = await supabaseClient.from("zona_coverage").update({ is_active: true }).eq("id", id);
+        if (error) {
+            if (error.code === "23505") {
+                throw new Error(explainZonaCoverageDbConflict(error));
+            }
+            throw error;
+        }
+    } catch (err) {
+        alert("Gagal mengaktifkan: " + (err.message || err));
+    }
+    await loadZonaCoverageList();   // refresh tabel utama + tabel non-aktif
+}
+
+// ---------------------------------------------------
+// 7.2D. CEK DUPLIKASI (patokan: Zona + Departemen + Area) + HARDLOCK
+// ---------------------------------------------------
+// Mengembalikan {type, row} kalau bentrok, atau null kalau aman.
+// Patokan HANYA kombinasi persis sama: Zona + Departemen + Area.
+// Departemen + Area yang sama di zona LAIN tidak dianggap duplikat.
+//  - "exact_active"   : kombinasi persis sama sudah ADA dan aktif
+//  - "exact_inactive" : kombinasi persis sama sudah ADA tapi non-aktif (aktifkan, jangan buat baru)
+function findZonaCoverageDuplicate(zonaId, departemenId, areaId) {
+    const exact = zonaCoverageList.find(zc =>
+        zc.zona_id === zonaId && zc.departemen_id === departemenId && zc.area_id === areaId
+    );
+    if (!exact) return null;
+    return { type: exact.is_active ? "exact_active" : "exact_inactive", row: exact };
+}
+
+function buildZonaCoverageDuplicateMessage(dup) {
+    const desc = describeZonaCoverage(dup.row);
+    if (dup.type === "exact_active") {
+        return `Pengaturan yang sama persis sudah ada dan aktif: ${desc}. Tidak boleh dibuat ganda.`;
+    }
+    return `Pengaturan yang sama persis sudah ada tetapi NON-AKTIF: ${desc}. Aktifkan kembali lewat tombol "Zona non Aktif", jangan dibuat baru.`;
+}
+
+// Penjelasan kalau DATABASE yang menolak (kode error 23505 = bentrok unik)
+function explainZonaCoverageDbConflict(error) {
+    const text = `${error.message || ""} ${error.details || ""}`;
+    if (text.includes("dept_area")) {
+        return 'Ditolak database: Departemen + Area ini masih dikunci hanya untuk SATU zona aktif (index unik "zona_coverage_dept_area_active_uidx"). Index itu bertentangan dengan aturan baru dan perlu disesuaikan oleh admin database.';
+    }
+    return "Bentrok di database: data yang sama baru saja disimpan pengguna lain. Data sudah dimuat ulang, silakan periksa kembali.";
+}
+
+// Hardlock: pesan merah di dalam modal + tombol Simpan dikunci
+function showZonaCoverageLock(message) {
+    const alertEl = document.getElementById("zc_duplicate_alert");
+    const msgEl = document.getElementById("zc_duplicate_message");
+    const btn = document.getElementById("btnSaveZonaCoverage");
+    if (msgEl) msgEl.textContent = message;
+    if (alertEl) alertEl.classList.remove("d-none");
+    if (btn) btn.disabled = true;
+}
+
+function clearZonaCoverageLock() {
+    const alertEl = document.getElementById("zc_duplicate_alert");
+    const btn = document.getElementById("btnSaveZonaCoverage");
+    if (alertEl) alertEl.classList.add("d-none");
+    if (btn) btn.disabled = false;
+}
+
+// Dipanggil otomatis tiap Zona / Departemen / Area diganti (mode Tambah).
+// Mengembalikan true kalau bentrok (dan modal terkunci).
+function checkZonaCoverageDuplicate() {
+    if (editingZonaCoverageId !== null) return false;   // mode Edit tidak mengubah kombinasi
+
+    const zonaId = parseInt(document.getElementById("zc_zona_id").value);
+    const departemenId = parseInt(document.getElementById("zc_departemen_id").value);
+    const areaId = parseInt(document.getElementById("zc_area_id").value);
+
+    // Belum lengkap dipilih -> belum ada yang dicek
+    if (!zonaId || !departemenId || !areaId) {
+        clearZonaCoverageLock();
+        return false;
+    }
+
+    const dup = findZonaCoverageDuplicate(zonaId, departemenId, areaId);
+    if (dup) {
+        showZonaCoverageLock(buildZonaCoverageDuplicateMessage(dup));
+        return true;
+    }
+    clearZonaCoverageLock();
+    return false;
+}
+
+// ---------------------------------------------------
+// 7.2E. KODE OTOMATIS (tetap dibuat di belakang layar, tidak ditampilkan)
+// Format: {zona_code}-{urutan}, nomor reset PER ZONA
+// ---------------------------------------------------
 function computeNextZonaCoverageCode(zonaCode, zonaId) {
     const regex = new RegExp(`^${zonaCode}-(\\d+)$`);
     let maxNum = 0;
@@ -1145,24 +1335,9 @@ function computeNextZonaCoverageCode(zonaCode, zonaId) {
     return `${zonaCode}-${String(maxNum + 1).padStart(2, "0")}`;
 }
 
-function updateZonaCoverageCodePreview() {
-    if (editingZonaCoverageId !== null) return; // mode edit: kode tidak berubah
-
-    const sel = document.getElementById("zc_zona_id");
-    const preview = document.getElementById("zc_code_preview");
-    if (!sel || !preview) return;
-
-    const opt = sel.options[sel.selectedIndex];
-    const zonaCode = opt ? opt.getAttribute("data-code") : null;
-    const zonaId = sel.value ? parseInt(sel.value) : null;
-
-    if (!zonaCode || !zonaId) {
-        preview.value = "(pilih zona dulu)";
-        return;
-    }
-    preview.value = computeNextZonaCoverageCode(zonaCode, zonaId);
-}
-
+// ---------------------------------------------------
+// 7.2F. MODAL TAMBAH / EDIT
+// ---------------------------------------------------
 function openZonaCoverageModal(editId = null) {
     const form = document.getElementById("formZonaCoverage");
     if (form) form.reset();
@@ -1172,6 +1347,11 @@ function openZonaCoverageModal(editId = null) {
     const zonaWrapper = document.getElementById("zc_zona_wrapper");
     const deptWrapper = document.getElementById("zc_dept_wrapper");
     const areaWrapper = document.getElementById("zc_area_wrapper");
+    const lockedInfo = document.getElementById("zc_locked_info");
+
+    clearZonaCoverageLock();
+    lockedInfo.classList.add("d-none");
+    lockedInfo.innerHTML = "";
 
     if (editId === null) {
         // ---- MODE TAMBAH ----
@@ -1181,25 +1361,21 @@ function openZonaCoverageModal(editId = null) {
         areaWrapper.classList.remove("d-none");
         document.getElementById("zc_edit_id").value = "";
         renderZonaDropdowns();
-        updateZonaCoverageCodePreview();
+        checkZonaCoverageDuplicate();
 
     } else {
         // ---- MODE EDIT -- Zona/Departemen/Area DIKUNCI ----
         const zc = zonaCoverageList.find(x => x.id === editId);
         if (!zc) { alert("Data tidak ditemukan."); return; }
 
-        const zona = zonaList.find(z => z.id === zc.zona_id);
-        const dept = departmentList.find(d => d.id === zc.departemen_id);
-        const area = areaList.find(a => a.id === zc.area_id);
-
-        if (title) title.textContent = `Edit Zona Coverage: ${zc.kode_zona_coverage}`;
+        if (title) title.textContent = "Edit Zona Coverage";
         zonaWrapper.classList.add("d-none");
         deptWrapper.classList.add("d-none");
         areaWrapper.classList.add("d-none");
 
         document.getElementById("zc_edit_id").value = zc.id;
-        document.getElementById("zc_code_preview").value =
-            `${zc.kode_zona_coverage}  (${zona?.zona_name || '-'} / ${dept?.department_name || '-'} / ${area?.area_name || '-'} -- tidak bisa diubah)`;
+        lockedInfo.classList.remove("d-none");
+        lockedInfo.innerHTML = `<div class="alert alert-secondary py-2 small mb-0">${describeZonaCoverage(zc)}<br><span class="text-muted">Tidak bisa diubah di sini -- nonaktifkan &amp; buat baru kalau perlu pindah.</span></div>`;
         document.getElementById("zc_keterangan").value = zc.keterangan || "";
         document.getElementById("zc_is_active").value = zc.is_active ? "true" : "false";
     }
@@ -1210,8 +1386,21 @@ function openZonaCoverageModal(editId = null) {
 async function handleSaveZonaCoverage(e) {
     if (e) e.preventDefault();
 
+    const wasEditing = editingZonaCoverageId !== null;
     const keterangan = document.getElementById("zc_keterangan").value.trim();
     const isActive = document.getElementById("zc_is_active").value === "true";
+
+    // ---- HARDLOCK sisi aplikasi (mode Tambah): validasi + cek duplikat SEBELUM apa pun dikirim ----
+    if (!wasEditing) {
+        const zonaId = parseInt(document.getElementById("zc_zona_id").value);
+        const departemenId = parseInt(document.getElementById("zc_departemen_id").value);
+        const areaId = parseInt(document.getElementById("zc_area_id").value);
+        if (!zonaId || !departemenId || !areaId) {
+            alert("Zona, Departemen, dan Area wajib dipilih.");
+            return;
+        }
+        if (checkZonaCoverageDuplicate()) return;   // pesan sudah tampil di modal
+    }
 
     const btnSubmit = e.target.querySelector("button[type='submit']");
     const origText = btnSubmit ? btnSubmit.innerHTML : "Simpan";
@@ -1220,31 +1409,24 @@ async function handleSaveZonaCoverage(e) {
         btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...`;
     }
 
+    let saved = false;
+    let dbConflictMessage = "";
+
     try {
-        if (editingZonaCoverageId !== null) {
+        if (wasEditing) {
             // ---- UPDATE -- hanya keterangan & status ----
             const { error } = await supabaseClient
                 .from("zona_coverage")
                 .update({ keterangan: keterangan || null, is_active: isActive })
                 .eq("id", editingZonaCoverageId);
             if (error) throw error;
+            saved = true;
 
         } else {
             // ---- INSERT BARU ----
             const zonaId = parseInt(document.getElementById("zc_zona_id").value);
             const departemenId = parseInt(document.getElementById("zc_departemen_id").value);
             const areaId = parseInt(document.getElementById("zc_area_id").value);
-
-            // Cek duplikat AKTIF untuk kombinasi departemen+area ini --
-            // pengecekan sisi client supaya pesan error ramah; index unik
-            // partial di DB (zona_coverage_dept_area_active_uidx) adalah
-            // jaring pengaman terakhir kalau ada race condition.
-            const dupActive = zonaCoverageList.find(zc =>
-                zc.departemen_id === departemenId && zc.area_id === areaId && zc.is_active
-            );
-            if (dupActive) {
-                throw new Error(`Kombinasi Departemen+Area ini sudah terdaftar aktif di kode ${dupActive.kode_zona_coverage}. Nonaktifkan dulu baris lama kalau mau pindah zona.`);
-            }
 
             const zonaOpt = document.getElementById("zc_zona_id");
             const zonaCode = zonaOpt.options[zonaOpt.selectedIndex].getAttribute("data-code");
@@ -1260,36 +1442,54 @@ async function handleSaveZonaCoverage(e) {
             }]);
 
             if (error) {
-                if (error.code === '23505') {
-                    throw new Error("Kombinasi ini atau kode-nya sudah ada (kemungkinan ada insert lain barengan). Coba lagi.");
+                // 23505 = bentrok di database (jaring pengaman terakhir kalau ada
+                // admin lain menyimpan kombinasi yang sama di saat bersamaan)
+                if (error.code === "23505") {
+                    dbConflictMessage = explainZonaCoverageDbConflict(error);
+                } else {
+                    throw error;
                 }
-                throw error;
+            } else {
+                saved = true;
             }
         }
 
-        bootstrap.Modal.getInstance(document.getElementById("modalZonaCoverage"))?.hide();
+        if (saved) {
+            bootstrap.Modal.getInstance(document.getElementById("modalZonaCoverage"))?.hide();
+        }
         await loadZonaCoverageList();
-        alert(editingZonaCoverageId !== null ? "Zona Coverage berhasil diperbarui!" : "Zona Coverage berhasil ditambahkan!");
+        if (saved) alert(wasEditing ? "Zona Coverage berhasil diperbarui!" : "Zona Coverage berhasil ditambahkan!");
 
     } catch (err) {
         alert("Gagal menyimpan: " + (err.message || err));
     } finally {
-        editingZonaCoverageId = null;
+        // Mode Edit dipertahankan kalau gagal, supaya klik Simpan berikutnya tetap UPDATE (bukan INSERT)
+        if (saved) editingZonaCoverageId = null;
         if (btnSubmit) {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = origText;
         }
     }
+
+    // Bentrok dari database: data sudah dimuat ulang, kunci modal dengan pesan yang jelas
+    if (dbConflictMessage) {
+        if (!checkZonaCoverageDuplicate()) {
+            showZonaCoverageLock(dbConflictMessage);
+        }
+    }
 }
 
-async function deleteZonaCoverage(id) {
-    if (!confirm("Yakin hapus Zona Coverage ini?")) return;
+// Tombol "Nonaktifkan": hanya mengubah is_active menjadi false (SOFT DELETE).
+// Data tetap ada di database dan muncul di modal "Zona non Aktif"
+// sehingga bisa diaktifkan kembali.
+async function deactivateZonaCoverage(id) {
+    if (!confirm('Nonaktifkan Zona Coverage ini?\n\nData TIDAK dihapus -- hanya dipindah ke daftar "Zona non Aktif" dan bisa diaktifkan kembali.')) return;
     try {
-        const { error } = await supabaseClient.from("zona_coverage").delete().eq("id", id);
+        const { error } = await supabaseClient.from("zona_coverage").update({ is_active: false }).eq("id", id);
         if (error) throw error;
-        await loadZonaCoverageList();
+        await loadZonaCoverageList();   // refresh tabel utama + modal non-aktif
     } catch (e) {
-        alert("Gagal menghapus: " + (e.message || e));
+        alert("Gagal menonaktifkan: " + (e.message || e));
     }
 }
 
