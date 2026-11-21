@@ -168,6 +168,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     tsSetupTimeOff();
     tsSetupPola();
     if (typeof tsSetupLokasi === "function") tsSetupLokasi(); // dari time_lokasi.js
+    if (typeof tsSetupPolaKaryawan === "function") tsSetupPolaKaryawan(); // dari time_pola_karyawan.js
     await tsLoadAll();
 });
 

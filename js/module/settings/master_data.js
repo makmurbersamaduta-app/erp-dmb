@@ -350,10 +350,19 @@ async function toggleActiveStatus(id, currentStatus) {
 
 // ===================================================
 // SUPERVISOR ZONA (dipindahkan dari system_config.js)
-// Pengaturan & tampilan sama dengan versi lama, ditambah:
-//  - kolom No (nomor urut menerus lintas cabang)
-//  - pengelompokan per cabang (cabang diambil dari penempatan AKTIF karyawan)
+// Tampilan & pengaturan dari system_config, ditambah:
+//  - kolom No + pengelompokan per cabang
+//  - JALUR approval: Semua / Barang / Non-Barang
+//  - PERAN: Utama / Cadangan
+//    Cadangan HANYA dipakai kalau pemohon = approver Utama (aturan ada di database).
 // ===================================================
+
+const SV_JALUR_LABEL = { SEMUA: "Semua", BARANG: "Barang", NON_BARANG: "Non-Barang" };
+const SV_JALUR_ORDER = { SEMUA: 0, BARANG: 1, NON_BARANG: 2 };
+const SV_JALUR_BADGE = { SEMUA: "bg-secondary-subtle text-secondary", BARANG: "bg-info-subtle text-info", NON_BARANG: "bg-warning-subtle text-warning" };
+const SV_PERAN_LABEL = { UTAMA: "Utama", CADANGAN: "Cadangan" };
+const SV_PERAN_ORDER = { UTAMA: 0, CADANGAN: 1 };
+const SV_PERAN_BADGE = { UTAMA: "bg-primary-subtle text-primary", CADANGAN: "bg-secondary-subtle text-secondary" };
 
 // ---------------------------------------------------
 // S1. STATE
@@ -375,7 +384,7 @@ let isSupervisorSubmitting = false;
 async function loadSupervisorZonesList() {
     const tbody = document.getElementById("supervisorZonesTableBody");
     if (!tbody) return;
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">Memuat data...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">Memuat data...</td></tr>`;
 
     try {
         const [zonas, depts, branches, szRes] = await Promise.all([
@@ -412,7 +421,6 @@ async function loadSupervisorZonesList() {
             (empRes.data || []).forEach(e => { svEmployeeMap[e.id] = e; });
 
             // Kalau ada >1 penempatan aktif, pakai yang start_date-nya paling baru
-            // (diurutkan naik, jadi yang terakhir menimpa yang sebelumnya).
             (asgRes.data || [])
                 .sort((a, b) => String(a.start_date || "").localeCompare(String(b.start_date || "")))
                 .forEach(a => { svBranchByEmployee[a.employee_id] = a.branch_id; });
@@ -421,11 +429,12 @@ async function loadSupervisorZonesList() {
         renderSupervisorZoneDropdowns();
         renderSupervisorZonesTable();
     } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Gagal memuat data: ${err.message || err}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Gagal memuat data: ${err.message || err}</td></tr>`;
     }
 }
 
-// Isi dropdown Zona (hanya zona aktif) & Departemen di modal Supervisor
+// Isi dropdown Zona (hanya zona aktif) & Departemen di modal. Diawali "-- Pilih --"
+// supaya pilihan pertama tidak terpilih otomatis.
 function renderSupervisorZoneDropdowns() {
     const zonaOptions = svZonaList
         .filter(z => z.is_active !== false)
@@ -436,24 +445,24 @@ function renderSupervisorZoneDropdowns() {
         .join("");
 
     const zonaSel = document.getElementById("sz_zona_id");
-    if (zonaSel) zonaSel.innerHTML = zonaOptions;
+    if (zonaSel) zonaSel.innerHTML = `<option value="" selected disabled>-- Pilih Zona --</option>` + zonaOptions;
     const deptSel = document.getElementById("sz_departemen_id");
-    if (deptSel) deptSel.innerHTML = deptOptions;
+    if (deptSel) deptSel.innerHTML = `<option value="" selected disabled>-- Pilih Departemen --</option>` + deptOptions;
 }
 
 // ---------------------------------------------------
-// S3. TAMPILAN TABEL (kolom No + grup per cabang)
+// S3. TAMPILAN TABEL (No + grup per cabang + Jalur + Peran)
+// Urutan: Cabang -> Zona -> Departemen -> Jalur -> Peran (Utama dulu)
 // ---------------------------------------------------
 function renderSupervisorZonesTable() {
     const tbody = document.getElementById("supervisorZonesTableBody");
     if (!tbody) return;
 
     if (supervisorZonesList.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Belum ada supervisor terdaftar.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Belum ada supervisor terdaftar.</td></tr>`;
         return;
     }
 
-    // Tentukan cabang tiap baris, lalu urutkan per nama cabang ("Tanpa Cabang" paling bawah)
     const rows = supervisorZonesList.map(sz => {
         const branchId = svBranchByEmployee[sz.employee_id] ?? null;
         const br = branchId !== null ? svBranchList.find(b => b.id == branchId) : null;
@@ -462,14 +471,19 @@ function renderSupervisorZonesTable() {
     rows.sort((a, b) => {
         if (a.branchId === null && b.branchId !== null) return 1;
         if (b.branchId === null && a.branchId !== null) return -1;
-        return a.branchName.localeCompare(b.branchName, "id");
+        return a.branchName.localeCompare(b.branchName, "id")
+            || (Number(a.branchId) - Number(b.branchId))
+            || (a.sz.zona_id - b.sz.zona_id)
+            || (a.sz.departemen_id - b.sz.departemen_id)
+            || ((SV_JALUR_ORDER[a.sz.jalur] ?? 9) - (SV_JALUR_ORDER[b.sz.jalur] ?? 9))
+            || ((SV_PERAN_ORDER[a.sz.peran] ?? 9) - (SV_PERAN_ORDER[b.sz.peran] ?? 9));
     });
 
     let html = "";
     let lastBranchId;   // undefined di awal supaya header kelompok pertama tetap tercetak
     rows.forEach(({ sz, branchId, branchName }, idx) => {
         if (branchId !== lastBranchId) {
-            html += `<tr class="table-group-header"><td colspan="6" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
+            html += `<tr class="table-group-header"><td colspan="8" class="fw-bold bg-light text-start"><i class="fa-solid fa-building me-2 text-secondary"></i>${branchName}</td></tr>`;
             lastBranchId = branchId;
         }
 
@@ -484,6 +498,8 @@ function renderSupervisorZonesTable() {
                 <td class="text-start fw-semibold">${empLabel}</td>
                 <td>${zona ? zona.zona_name : '-'}</td>
                 <td>${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
+                <td><span class="badge ${SV_JALUR_BADGE[sz.jalur] || ''}">${SV_JALUR_LABEL[sz.jalur] || sz.jalur}</span></td>
+                <td><span class="badge ${SV_PERAN_BADGE[sz.peran] || ''}">${SV_PERAN_LABEL[sz.peran] || sz.peran}</span></td>
                 <td>${sz.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>
                 <td>
                     <button class="btn btn-sm btn-light text-primary me-1" onclick="openSupervisorZoneModal(${sz.id})" title="Edit"><i class="fa-solid fa-pen"></i></button>
@@ -501,6 +517,10 @@ function renderSupervisorZonesTable() {
 // ---------------------------------------------------
 function handleSupervisorEmployeeSearch() {
     clearTimeout(supervisorSearchTimeout);
+    // Mengetik ulang = pilihan karyawan sebelumnya dibatalkan
+    document.getElementById("sz_selected_employee_id").value = "";
+    checkSupervisorConflict();
+
     const query = document.getElementById("sz_employee_search").value.trim();
     const resultsEl = document.getElementById("sz_employee_search_results");
 
@@ -524,8 +544,7 @@ function handleSupervisorEmployeeSearch() {
             return;
         }
 
-        // Disimpan di array & dipilih lewat indeks (lebih aman daripada
-        // menyisipkan JSON ke atribut onclick -- nama ber-tanda-petik tidak merusak tombol)
+        // Dipilih lewat indeks (lebih aman daripada JSON di atribut onclick)
         svSearchResults = data;
         resultsEl.innerHTML = data.map((emp, i) => `
             <button type="button" class="list-group-item list-group-item-action small" onclick="selectSupervisorEmployee(${i})">
@@ -540,12 +559,88 @@ function selectSupervisorEmployee(index) {
     document.getElementById("sz_selected_employee_id").value = emp.id;
     document.getElementById("sz_employee_search").value = `${emp.nama} (${emp.nik_karyawan})`;
     document.getElementById("sz_employee_search_results").innerHTML = "";
+    checkSupervisorConflict();
 }
 
 // ---------------------------------------------------
-// S5. MODAL TAMBAH / EDIT
-// Mode Edit: Karyawan, Zona & Departemen DIKUNCI (hanya Status yang bisa diubah)
+// S5. CEK BENTROK + HARDLOCK (pesan di modal, tombol Simpan terkunci)
+// Aturan:
+//  1. 1 slot = Zona + Departemen + Jalur + Peran hanya boleh punya 1 orang AKTIF
+//     (sama dengan index unik di database)
+//  2. Satu orang tidak boleh jadi Utama SEKALIGUS Cadangan di Zona + Departemen + Jalur yang sama
 // ---------------------------------------------------
+function findSupervisorConflict(employeeId, zonaId, deptId, jalur, peran) {
+    const slot = supervisorZonesList.find(x =>
+        x.is_active && x.zona_id === zonaId && x.departemen_id === deptId &&
+        x.jalur === jalur && x.peran === peran);
+    if (slot) return { type: "slot", row: slot };
+
+    if (employeeId) {
+        const sama = supervisorZonesList.find(x =>
+            x.is_active && x.employee_id === employeeId && x.zona_id === zonaId &&
+            x.departemen_id === deptId && x.jalur === jalur && x.peran !== peran);
+        if (sama) return { type: "orang_sama", row: sama };
+    }
+    return null;
+}
+
+function buildSupervisorConflictMessage(c, jalur, peran) {
+    const emp = svEmployeeMap[c.row.employee_id];
+    const nama = emp ? emp.nama : "Karyawan lain";
+    if (c.type === "slot") {
+        return `Slot ini sudah terisi oleh ${nama} (jalur ${SV_JALUR_LABEL[jalur]}, peran ${SV_PERAN_LABEL[peran]}). Nonaktifkan atau hapus dulu supervisor lama.`;
+    }
+    return `${nama} sudah terdaftar sebagai ${SV_PERAN_LABEL[c.row.peran]} untuk zona, departemen, dan jalur yang sama. Satu orang tidak boleh menjadi Utama sekaligus Cadangan.`;
+}
+
+function showSupervisorLock(message) {
+    const alertEl = document.getElementById("sz_duplicate_alert");
+    const msgEl = document.getElementById("sz_duplicate_message");
+    const btn = document.getElementById("btnSaveSupervisorZone");
+    if (msgEl) msgEl.textContent = message;
+    if (alertEl) alertEl.classList.remove("d-none");
+    if (btn) btn.disabled = true;
+}
+
+function clearSupervisorLock() {
+    const alertEl = document.getElementById("sz_duplicate_alert");
+    const btn = document.getElementById("btnSaveSupervisorZone");
+    if (alertEl) alertEl.classList.add("d-none");
+    if (btn) btn.disabled = false;
+}
+
+// Dipanggil otomatis tiap pilihan di modal (mode Tambah) berubah.
+// Mengembalikan true kalau bentrok (modal terkunci).
+function checkSupervisorConflict() {
+    if (editingSupervisorZoneId !== null) return false;
+
+    const zonaId = parseInt(document.getElementById("sz_zona_id").value);
+    const deptId = parseInt(document.getElementById("sz_departemen_id").value);
+    const jalur = document.getElementById("sz_jalur").value;
+    const peran = document.getElementById("sz_peran").value;
+    const employeeId = document.getElementById("sz_selected_employee_id").value;
+    const willBeActive = document.getElementById("sz_is_active").value === "true";
+
+    if (!zonaId || !deptId || !willBeActive) {
+        clearSupervisorLock();
+        return false;
+    }
+
+    const c = findSupervisorConflict(employeeId, zonaId, deptId, jalur, peran);
+    if (c) {
+        showSupervisorLock(buildSupervisorConflictMessage(c, jalur, peran));
+        return true;
+    }
+    clearSupervisorLock();
+    return false;
+}
+
+// ---------------------------------------------------
+// S6. MODAL TAMBAH / EDIT
+// Mode Edit: Karyawan, Zona, Departemen, Jalur & Peran DIKUNCI (hanya Status yang bisa diubah)
+// ---------------------------------------------------
+const SV_ADD_ONLY_IDS = ["sz_employee_search_wrapper", "sz_zona_wrapper", "sz_dept_wrapper", "sz_jalur_wrapper", "sz_peran_wrapper", "sz_help_wrapper"];
+
 function openSupervisorZoneModal(editId = null) {
     const form = document.getElementById("formSupervisorZone");
     if (form) form.reset();
@@ -556,23 +651,20 @@ function openSupervisorZoneModal(editId = null) {
     document.getElementById("sz_selected_employee_id").value = "";
 
     const title = document.getElementById("modalSupervisorZoneTitle");
-    const searchWrapper = document.getElementById("sz_employee_search_wrapper");
-    const zonaWrapper = document.getElementById("sz_zona_wrapper");
-    const deptWrapper = document.getElementById("sz_dept_wrapper");
     const infoEl = document.getElementById("sz_employee_selected_display");
 
     // Reset info terkunci dari sesi Edit sebelumnya
     infoEl.classList.add("d-none");
     infoEl.innerHTML = "";
+    clearSupervisorLock();
 
     if (editId === null) {
         // ---- MODE TAMBAH ----
         if (title) title.textContent = "Tambah Supervisor Zona";
-        searchWrapper.classList.remove("d-none");
-        zonaWrapper.classList.remove("d-none");
-        deptWrapper.classList.remove("d-none");
+        SV_ADD_ONLY_IDS.forEach(id => document.getElementById(id).classList.remove("d-none"));
         document.getElementById("sz_edit_id").value = "";
         renderSupervisorZoneDropdowns();
+        checkSupervisorConflict();
 
     } else {
         // ---- MODE EDIT ----
@@ -581,33 +673,48 @@ function openSupervisorZoneModal(editId = null) {
 
         const zona = svZonaList.find(z => z.id === sz.zona_id);
         const dept = svDeptList.find(d => d.id === sz.departemen_id);
+        const emp = svEmployeeMap[sz.employee_id];
 
         if (title) title.textContent = "Edit Supervisor Zona";
-        searchWrapper.classList.add("d-none");
-        zonaWrapper.classList.add("d-none");
-        deptWrapper.classList.add("d-none");
+        SV_ADD_ONLY_IDS.forEach(id => document.getElementById(id).classList.add("d-none"));
 
         document.getElementById("sz_edit_id").value = sz.id;
         document.getElementById("sz_selected_employee_id").value = sz.employee_id;
         document.getElementById("sz_is_active").value = sz.is_active ? "true" : "false";
 
         infoEl.classList.remove("d-none");
-        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">Zona: <strong>${zona?.zona_name || '-'}</strong> | Departemen: <strong>${dept?.department_name || '-'}</strong> (tidak bisa diubah di sini -- hapus &amp; buat baru kalau perlu pindah)</div>`;
+        infoEl.innerHTML = `<div class="alert alert-secondary py-2 small mb-2">
+            <strong>${emp ? emp.nama : '-'}</strong><br>
+            Zona: <strong>${zona?.zona_name || '-'}</strong> | Departemen: <strong>${dept?.department_name || '-'}</strong><br>
+            Jalur: <strong>${SV_JALUR_LABEL[sz.jalur] || sz.jalur}</strong> | Peran: <strong>${SV_PERAN_LABEL[sz.peran] || sz.peran}</strong><br>
+            <span class="text-muted">Tidak bisa diubah di sini -- hapus &amp; buat baru kalau perlu pindah.</span></div>`;
     }
 
     new bootstrap.Modal(document.getElementById("modalSupervisorZone")).show();
 }
 
 // ---------------------------------------------------
-// S6. SIMPAN & HAPUS
+// S7. SIMPAN & HAPUS
 // ---------------------------------------------------
 async function handleSaveSupervisorZone(e) {
     if (e) e.preventDefault();
     if (isSupervisorSubmitting) return;
-    isSupervisorSubmitting = true;
 
+    const wasEditing = editingSupervisorZoneId !== null;
     const isActive = document.getElementById("sz_is_active").value === "true";
 
+    // ---- HARDLOCK sisi aplikasi (mode Tambah): validasi + cek bentrok SEBELUM dikirim ----
+    if (!wasEditing) {
+        const employeeId = document.getElementById("sz_selected_employee_id").value;
+        const zonaId = parseInt(document.getElementById("sz_zona_id").value);
+        const deptId = parseInt(document.getElementById("sz_departemen_id").value);
+        if (!employeeId) { alert("Pilih karyawan dari hasil pencarian dulu."); return; }
+        if (!zonaId) { alert("Pilih zona dulu."); return; }
+        if (!deptId) { alert("Pilih departemen dulu."); return; }
+        if (checkSupervisorConflict()) return;   // pesan sudah tampil di modal
+    }
+
+    isSupervisorSubmitting = true;
     const btnSubmit = e.target.querySelector("button[type='submit']");
     const origText = btnSubmit ? btnSubmit.innerHTML : "Simpan";
     if (btnSubmit) {
@@ -615,7 +722,8 @@ async function handleSaveSupervisorZone(e) {
         btnSubmit.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Menyimpan...`;
     }
 
-    const wasEditing = editingSupervisorZoneId !== null;
+    let saved = false;
+    let dbConflictMessage = "";
 
     try {
         if (wasEditing) {
@@ -624,54 +732,63 @@ async function handleSaveSupervisorZone(e) {
                 .from("supervisor_zones")
                 .update({ is_active: isActive })
                 .eq("id", editingSupervisorZoneId);
-            if (error) throw error;
+            if (error) {
+                if (error.code === "23505") {
+                    dbConflictMessage = "Tidak bisa diaktifkan: slot (zona + departemen + jalur + peran) ini sudah diisi supervisor aktif lain.";
+                } else {
+                    throw error;
+                }
+            } else {
+                saved = true;
+            }
 
         } else {
             // ---- INSERT BARU ----
-            const employeeId = document.getElementById("sz_selected_employee_id").value;
-            const zonaId = parseInt(document.getElementById("sz_zona_id").value);
-            const departemenId = parseInt(document.getElementById("sz_departemen_id").value);
-
-            if (!employeeId) throw new Error("Pilih karyawan dari hasil pencarian dulu.");
-            if (!zonaId) throw new Error("Pilih zona dulu.");
-            if (!departemenId) throw new Error("Pilih departemen dulu.");
-
-            // Cek duplikat: 1 zona + 1 departemen hanya boleh punya 1 supervisor aktif
-            if (isActive) {
-                const dup = supervisorZonesList.find(x =>
-                    x.is_active && x.zona_id === zonaId && x.departemen_id === departemenId);
-                if (dup) {
-                    throw new Error("Zona + Departemen ini sudah punya supervisor aktif. Nonaktifkan atau hapus dulu supervisor lama.");
-                }
-            }
-
             const { error } = await supabaseClient.from("supervisor_zones").insert([{
-                employee_id: employeeId,
-                zona_id: zonaId,
-                departemen_id: departemenId,
+                employee_id: document.getElementById("sz_selected_employee_id").value,
+                zona_id: parseInt(document.getElementById("sz_zona_id").value),
+                departemen_id: parseInt(document.getElementById("sz_departemen_id").value),
+                jalur: document.getElementById("sz_jalur").value,
+                peran: document.getElementById("sz_peran").value,
                 is_active: isActive
             }]);
-            if (error) throw error;
+            if (error) {
+                // 23505 = bentrok di database (jaring pengaman terakhir)
+                if (error.code === "23505") {
+                    dbConflictMessage = "Slot ini baru saja diisi pengguna lain. Data sudah dimuat ulang, silakan periksa kembali.";
+                } else {
+                    throw error;
+                }
+            } else {
+                saved = true;
+            }
         }
 
-        bootstrap.Modal.getInstance(document.getElementById("modalSupervisorZone"))?.hide();
+        if (saved) {
+            bootstrap.Modal.getInstance(document.getElementById("modalSupervisorZone"))?.hide();
+        }
         await loadSupervisorZonesList();
-        alert(wasEditing ? "Supervisor Zona berhasil diperbarui!" : "Supervisor Zona berhasil ditambahkan!");
+        if (saved) alert(wasEditing ? "Supervisor Zona berhasil diperbarui!" : "Supervisor Zona berhasil ditambahkan!");
 
     } catch (err) {
         alert("Gagal menyimpan: " + (err.message || err));
     } finally {
-        editingSupervisorZoneId = null;
+        // Mode Edit dipertahankan kalau gagal, supaya klik Simpan berikutnya tetap UPDATE
+        if (saved) editingSupervisorZoneId = null;
         isSupervisorSubmitting = false;
         if (btnSubmit) {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = origText;
         }
     }
+
+    if (dbConflictMessage) {
+        if (!checkSupervisorConflict()) showSupervisorLock(dbConflictMessage);
+    }
 }
 
 async function deleteSupervisorZone(id) {
-    if (!confirm("Yakin hapus supervisor dari zona ini?")) return;
+    if (!confirm("Yakin hapus supervisor dari zona ini?\n\nPengajuan yang masih menunggu approver ini akan kehilangan approver sampai approver baru didaftarkan.")) return;
     try {
         const { error } = await supabaseClient.from("supervisor_zones").delete().eq("id", id);
         if (error) throw error;

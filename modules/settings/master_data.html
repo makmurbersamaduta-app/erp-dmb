@@ -187,6 +187,8 @@
                                         <th>Nama Supervisor</th>
                                         <th>Zona</th>
                                         <th>Departemen</th>
+                                        <th style="width: 110px;">Jalur</th>
+                                        <th style="width: 110px;">Peran</th>
                                         <th style="width: 100px;">Status</th>
                                         <th style="width: 100px;">Aksi</th>
                                     </tr>
@@ -243,15 +245,43 @@
                         <div class="col-12 mb-2 d-none" id="sz_employee_selected_display"></div>
                         <div class="col-12 mb-2" id="sz_zona_wrapper">
                             <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
-                            <select id="sz_zona_id" class="form-select form-select-sm"></select>
+                            <select id="sz_zona_id" class="form-select form-select-sm" onchange="checkSupervisorConflict()"></select>
                         </div>
                         <div class="col-12 mb-2" id="sz_dept_wrapper">
                             <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
-                            <select id="sz_departemen_id" class="form-select form-select-sm"></select>
+                            <select id="sz_departemen_id" class="form-select form-select-sm" onchange="checkSupervisorConflict()"></select>
+                        </div>
+                        <div class="col-6 mb-2" id="sz_jalur_wrapper">
+                            <label class="small fw-bold">Jalur <span class="text-danger">*</span></label>
+                            <select id="sz_jalur" class="form-select form-select-sm" onchange="checkSupervisorConflict()">
+                                <option value="SEMUA">Semua</option>
+                                <option value="BARANG">Barang</option>
+                                <option value="NON_BARANG">Non-Barang</option>
+                            </select>
+                        </div>
+                        <div class="col-6 mb-2" id="sz_peran_wrapper">
+                            <label class="small fw-bold">Peran <span class="text-danger">*</span></label>
+                            <select id="sz_peran" class="form-select form-select-sm" onchange="checkSupervisorConflict()">
+                                <option value="UTAMA">Utama</option>
+                                <option value="CADANGAN">Cadangan</option>
+                            </select>
+                        </div>
+                        <div class="col-12 mb-2" id="sz_help_wrapper">
+                            <div class="small text-muted">
+                                <strong>Jalur:</strong> Barang = permintaan barang; Non-Barang = koreksi absensi, ubah jadwal, lembur, ijin; Semua = keduanya (dipakai kalau tidak ada baris jalur khusus).<br>
+                                <strong>Peran:</strong> Cadangan hanya dipakai kalau pemohon sama dengan approver Utama.
+                            </div>
+                        </div>
+                        <!-- HARDLOCK: pesan bentrok, tombol Simpan terkunci selama pesan ini tampil -->
+                        <div class="col-12 d-none" id="sz_duplicate_alert">
+                            <div class="alert alert-danger py-2 small mb-2 d-flex gap-2 align-items-start">
+                                <i class="fa-solid fa-ban mt-1"></i>
+                                <div><strong>Tidak bisa disimpan.</strong> <span id="sz_duplicate_message"></span></div>
+                            </div>
                         </div>
                         <div class="col-12">
                             <label class="small fw-bold">Status</label>
-                            <select id="sz_is_active" class="form-select form-select-sm">
+                            <select id="sz_is_active" class="form-select form-select-sm" onchange="checkSupervisorConflict()">
                                 <option value="true">Aktif</option>
                                 <option value="false">Non-Aktif</option>
                             </select>
@@ -260,7 +290,7 @@
                 </div>
                 <div class="modal-footer border-top py-2">
                     <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-semibold">Simpan</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSaveSupervisorZone">Simpan</button>
                 </div>
             </form>
         </div>

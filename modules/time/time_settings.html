@@ -70,7 +70,7 @@
         .lk-titik { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-bottom: 8px; background: #fff; cursor: pointer; }
         .lk-titik.active { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
         .lk-titik .ts-label { font-size: .68rem; color: #64748b; margin-bottom: 1px; }
-        #lkTabs .nav-link { font-weight: 600; font-size: .85rem; }
+        #lkTabs .nav-link, #polaTabs .nav-link { font-weight: 600; font-size: .85rem; }
 
         /* Modal: <form> membungkus isi dan tombol, jadi ia harus ikut menjadi kolom flex
            agar isi modal bisa di-scroll dan tombol Simpan/Batal selalu terlihat */
@@ -224,6 +224,12 @@
                  Pola yang sudah dipakai karyawan terkunci isinya.
                  ======================================================== -->
             <div id="pane-pola" class="d-none">
+                <ul class="nav nav-tabs mb-2" id="polaTabs">
+                    <li class="nav-item"><button type="button" class="nav-link active" data-polatab="daftar">Pola Jadwal</button></li>
+                    <li class="nav-item"><button type="button" class="nav-link" data-polatab="karyawan">Karyawan</button></li>
+                </ul>
+
+                <div id="pola-pane-daftar">
                 <div class="config-card shadow-sm">
                     <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <span><i class="fa-solid fa-repeat text-primary me-2"></i>Pola Jadwal</span>
@@ -251,7 +257,51 @@
                         </div>
                     </div>
                 </div>
-                <div class="small text-muted mt-2">Pola ditetapkan ke karyawan (dan pola default) lewat halaman Jadwal Kerja.</div>
+                <div class="small text-muted mt-2">Pola dipasang ke karyawan lewat sub tab Karyawan. Pola default (dipakai karyawan yang belum punya pola sendiri) belum punya tampilan pengaturan.</div>
+                </div>
+
+                <!-- ====================================================
+                     SUB TAB KARYAWAN (pola jadwal): pola yang BERLAKU per karyawan
+                     (hanya teks) + tombol Edit dan Jadwal Baru.
+                     ==================================================== -->
+                <div id="pola-pane-karyawan" class="d-none">
+                    <div class="config-card shadow-sm">
+                        <div class="config-card-header bg-light d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <span><i class="fa-solid fa-users text-primary me-2"></i>Pola Jadwal per Karyawan</span>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <input type="text" id="pkKarCari" class="form-control form-control-sm" style="width: 200px;" placeholder="Cari NIK atau nama..." autocomplete="off">
+                                <select id="pkKarCc" class="form-select form-select-sm" style="width: 180px;"></select>
+                                <select id="pkKarStatus" class="form-select form-select-sm" style="width: 170px;">
+                                    <option value="semua">Semua</option>
+                                    <option value="sendiri">Pola sendiri</option>
+                                    <option value="default">Pola default</option>
+                                    <option value="belum">Belum ada pola</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="ts-scroll">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:60px;" class="text-center">No</th><th>NIK</th><th>Nama</th>
+                                            <th>Cost Center</th><th style="min-width:380px;">Pola Jadwal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pkKarBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center p-2 border-top">
+                            <span class="small text-muted" id="pkKarInfo"></span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-secondary" id="pkKarPrev"><i class="fa-solid fa-chevron-left"></i></button>
+                                <button type="button" class="btn btn-outline-secondary" id="pkKarNext"><i class="fa-solid fa-chevron-right"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="small text-muted mt-2">Kolom Pola Jadwal menampilkan pola yang berlaku hari ini. Jadwal Baru menutup pola sebelumnya otomatis (tanggal akhir = tanggal efektif baru - 1 hari). Edit hanya muncul bila karyawan sudah punya lebih dari satu pola, dan mengubah pola terakhir.</div>
+                </div>
             </div>
 
             <!-- ========================================================
@@ -630,6 +680,61 @@
 </div>
 
 <!-- ============================================================
+     KELOMPOK 11C: MODAL POLA JADWAL KARYAWAN (Jadwal Baru / Edit)
+     Fungsi: memilih pola dan tanggal efektif. Shift awal dan tanggal libur
+     pertama diwajibkan sistem pola untuk menentukan posisi awal siklus.
+     Pola sebelumnya otomatis berakhir pada (tanggal efektif - 1 hari).
+     ============================================================ -->
+<div class="modal fade" id="modalPolaKaryawan" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="modalPolaKaryawanTitle">Jadwal Baru</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formPolaKaryawan" novalidate>
+                <div class="modal-body">
+                    <div id="pkMsg" class="alert d-none py-2 small"></div>
+                    <input type="hidden" id="pkEditId">
+                    <div class="mb-3">
+                        <div class="ts-label">Karyawan</div>
+                        <div class="fw-semibold" id="pkKaryawanTeks"></div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="ts-label" for="fPkPola">Pola Jadwal <span class="text-danger">*</span></label>
+                            <select id="fPkPola" class="form-select form-select-sm"></select>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="ts-label" for="fPkMulai">Tanggal Efektif <span class="text-danger">*</span></label>
+                            <input type="date" id="fPkMulai" class="form-control form-control-sm">
+                        </div>
+                        <div class="col-md-7">
+                            <label class="ts-label" for="fPkKode">Shift Awal <span class="text-danger">*</span></label>
+                            <select id="fPkKode" class="form-select form-select-sm"></select>
+                            <div class="form-text">Shift yang dijalani pada tanggal efektif.</div>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="ts-label" for="fPkLibur">Tanggal Libur Pertama <span class="text-danger">*</span></label>
+                            <input type="date" id="fPkLibur" class="form-control form-control-sm">
+                            <div class="form-text">Terisi otomatis dari pola dan shift awal; boleh diubah.</div>
+                        </div>
+                    </div>
+                    <div id="pkPratinjau" class="alert alert-secondary py-2 small mt-3 mb-2" hidden></div>
+                    <div id="pkPeringatan" class="alert alert-warning py-2 small mb-2" hidden></div>
+                    <div class="ts-label mt-3">Riwayat pola karyawan</div>
+                    <div class="ts-box" id="pkRiwayat"></div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanPk">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
      KELOMPOK 11B: MODAL SETTING LOKASI
      Fungsi: nama setting, mode (GPS Flexible / Set Lokasi), titik lokasi
      (nama, radius, pin di peta, koordinat, cari alamat), dan karyawan yang
@@ -732,6 +837,7 @@
 <script src="../../js/auth.js"></script>
 <script src="../../js/module/time/time_settings.js"></script>
 <script src="../../js/module/time/time_lokasi.js"></script>
+<script src="../../js/module/time/time_pola_karyawan.js"></script>
 
 </body>
 </html>
