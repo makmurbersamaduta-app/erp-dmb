@@ -13,7 +13,7 @@
 const supabaseClient = window.supabaseClient;
 
 const RPC_LIST = "lamaran_list";
-const RPC_OPSI = "lamaran_filter_options";
+const RPC_TOLAK = "tolak_lamaran";
 const RPC_PANGGIL = "panggil_lamaran";
 const ROWS_PER_PAGE = 50;
 const LOGIN_PAGE = "../../login.html";   // PERLU DICEK: path login dari halaman ini
@@ -33,8 +33,8 @@ const BULAN = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "
 function newTabState() {
     return {
         search: "",
-        filters: { jk: [], pendidikan: [], periode: [], riwayat: [], pungli: [], referensi: "" },
-        page: 1, total: 0, rows: [], loaded: false, opsiPeriode: []
+        filters: { jk: [], pendidikan: [], riwayat: [], pungli: [], referensi: "", dari: "", sampai: "" },
+        page: 1, total: 0, rows: [], loaded: false
     };
 }
 const state = {
@@ -126,7 +126,6 @@ async function switchTab(tab, force) {
     updatePanggilButton();
     renderTableHead();
     if (!cur().loaded) {
-        loadPeriodeOptions(tab);   // pilihan periode diambil sekali per tab
         await loadPage();
     } else {
         renderBody();
@@ -153,43 +152,55 @@ function setupSearch() {
 // ===================================================
 // KELOMPOK 7: FILTER
 // Fungsi: panel filter berisi Jenis Kelamin, Pendidikan, Periode
-// (Lamaran / Pemanggilan, sesuai tab), Riwayat, Potensi Pungli, dan Referensi
+// (rentang tanggal lamaran / pemanggilan, sesuai tab), Riwayat, Potensi Pungli, dan Referensi
 // (kolom ketik; database mencari teks yang mengandung ATAU mirip, jadi salah
 // ketik ringan seperti "abul" tetap menemukan "Abdul").
 // Filter baru berlaku setelah tombol "Terapkan".
 // ===================================================
-async function loadPeriodeOptions(tab) {
-    try {
-        const { data, error } = await rpc(RPC_OPSI, { p_tab: tab });
-        if (error) throw error;
-        state[tab].opsiPeriode = (data && data.periode) || [];
-        if (state.tab === tab) renderFilterGroups();
-    } catch (err) {
-        console.error("Gagal memuat pilihan periode:", err);
-    }
+// Kalender rentang tanggal (flatpickr) dibuat ulang setiap panel filter dibuka
+let fpTanggal = null;
+let tglPending = { dari: "", sampai: "" };
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+function updateTglInfo() {
+    const a = tglPending.dari, b = tglPending.sampai;
+    $("tglInfo").textContent = !a ? "Belum ada tanggal dipilih." : (a === b ? `Dipilih: ${fmtTgl(a)}` : `Dipilih: ${fmtTgl(a)} s/d ${fmtTgl(b)}`);
 }
 
 function filterGroupDefs() {
     return [
         { key: "jk", label: "Jenis Kelamin", opts: JK_OPTS },
         { key: "pendidikan", label: "Pendidikan", opts: PEND_OPTS },
-        { key: "periode", label: isWaiting() ? "Periode Lamaran" : "Periode Pemanggilan", opts: cur().opsiPeriode.map(v => ({ value: v, label: periodeLabel(v) })) },
         { key: "riwayat", label: "Riwayat", opts: RIWAYAT_OPTS },
         { key: "pungli", label: "Potensi Pungli", opts: PUNGLI_OPTS }
     ];
 }
 
 function renderFilterGroups() {
+    if (fpTanggal) { fpTanggal.destroy(); fpTanggal = null; }
     const f = cur().filters;
-    const groups = filterGroupDefs().map(g => {
+    const html = {};
+    filterGroupDefs().forEach(g => {
         const items = g.opts.map(o => `
             <label class="lb-fg-item"><input type="checkbox" data-key="${g.key}" value="${esc(o.value)}" ${f[g.key].includes(o.value) ? "checked" : ""}><span>${esc(o.label)}</span></label>`).join("");
-        return `
+        html[g.key] = `
             <div class="lb-fg">
                 <button type="button" class="lb-fg-head" data-fg="${g.key}"><span>${esc(g.label)}</span><i class="fa-solid fa-chevron-down"></i></button>
-                <div class="lb-fg-body" id="fgb_${g.key}">${items || '<span class="lb-dash">Belum ada data</span>'}</div>
+                <div class="lb-fg-body" id="fgb_${g.key}">${items}</div>
             </div>`;
-    }).join("");
+    });
+
+    const tglGroup = `
+        <div class="lb-fg">
+            <button type="button" class="lb-fg-head" data-fg="tanggal"><span>Tanggal</span><i class="fa-solid fa-chevron-down"></i></button>
+            <div class="lb-fg-body lb-fg-cal" id="fgb_tanggal">
+                <input type="text" class="lb-cal-input" id="fltTgl">
+                <div class="lb-fg-hint" id="tglInfo"></div>
+                <div class="lb-fg-hint">Berdasarkan tanggal ${isWaiting() ? "lamaran" : "pemanggilan"}. Klik tanggal awal, lalu tanggal akhir. Satu klik saja = satu hari.</div>
+                <button type="button" class="lb-link" id="btnTglClear">Hapus tanggal</button>
+            </div>
+        </div>`;
 
     const refGroup = `
         <div class="lb-fg">
@@ -200,7 +211,26 @@ function renderFilterGroups() {
             </div>
         </div>`;
 
-    $("filterGroups").innerHTML = groups + refGroup;
+    $("filterGroups").innerHTML = html.jk + html.pendidikan + tglGroup + html.riwayat + html.pungli + refGroup;
+
+    tglPending = { dari: f.dari, sampai: f.sampai };
+    if (window.flatpickr) {
+        const loc = (flatpickr.l10ns && flatpickr.l10ns.id) ? "id" : "default";
+        fpTanggal = flatpickr($("fltTgl"), {
+            mode: "range", inline: true, dateFormat: "Y-m-d", locale: loc,
+            defaultDate: [f.dari, f.sampai].filter(Boolean),
+            onChange(sel) {
+                if (sel.length === 0) tglPending = { dari: "", sampai: "" };
+                else if (sel.length === 1) tglPending = { dari: ymd(sel[0]), sampai: ymd(sel[0]) };
+                else tglPending = { dari: ymd(sel[0]), sampai: ymd(sel[1]) };
+                updateTglInfo();
+            }
+        });
+        $("btnTglClear").addEventListener("click", () => { fpTanggal.clear(); });
+    } else {
+        $("tglInfo").textContent = "Kalender gagal dimuat. Periksa koneksi internet.";
+    }
+    updateTglInfo();
 }
 
 function setupFilter() {
@@ -210,8 +240,11 @@ function setupFilter() {
         if (open) renderFilterGroups();     // selalu tampilkan nilai filter tab aktif
         $("filterPanel").hidden = !open;
     });
+    // composedPath dipakai karena kalender menggambar ulang isinya saat diklik
     document.addEventListener("click", (e) => {
-        if (!$("filterPanel").hidden && !e.target.closest(".lb-filter-wrap")) $("filterPanel").hidden = true;
+        if ($("filterPanel").hidden) return;
+        const wrap = document.querySelector(".lb-filter-wrap");
+        if (!e.composedPath().includes(wrap)) $("filterPanel").hidden = true;
     });
     $("filterGroups").addEventListener("click", (e) => {
         const head = e.target.closest(".lb-fg-head");
@@ -222,10 +255,12 @@ function setupFilter() {
 
     $("btnFilterApply").addEventListener("click", () => {
         const f = cur().filters;
-        ["jk", "pendidikan", "periode", "riwayat", "pungli"].forEach(k => {
+        ["jk", "pendidikan", "riwayat", "pungli"].forEach(k => {
             f[k] = Array.from(document.querySelectorAll(`#filterGroups input[data-key="${k}"]:checked`)).map(c => c.value);
         });
         f.referensi = ($("fltReferensi")?.value || "").trim();
+        f.dari = tglPending.dari;
+        f.sampai = tglPending.sampai;
         cur().page = 1;
         $("filterPanel").hidden = true;
         updateFilterBadge();
@@ -233,7 +268,7 @@ function setupFilter() {
     });
 
     $("btnFilterReset").addEventListener("click", () => {
-        cur().filters = { jk: [], pendidikan: [], periode: [], riwayat: [], pungli: [], referensi: "" };
+        cur().filters = { jk: [], pendidikan: [], riwayat: [], pungli: [], referensi: "", dari: "", sampai: "" };
         cur().page = 1;
         renderFilterGroups();
         updateFilterBadge();
@@ -243,7 +278,7 @@ function setupFilter() {
 
 function updateFilterBadge() {
     const f = cur().filters;
-    const n = ["jk", "pendidikan", "periode", "riwayat", "pungli"].reduce((s, k) => s + f[k].length, 0) + (f.referensi ? 1 : 0);
+    const n = ["jk", "pendidikan", "riwayat", "pungli"].reduce((s, k) => s + f[k].length, 0) + (f.referensi ? 1 : 0) + ((f.dari || f.sampai) ? 1 : 0);
     $("filterBadge").textContent = n;
     $("filterBadge").hidden = n === 0;
 }
@@ -265,7 +300,7 @@ async function loadPage() {
         const { data, error } = await rpc(RPC_LIST, {
             p: {
                 tab, search: st.search,
-                jk: f.jk, pendidikan: f.pendidikan, periode: f.periode,
+                jk: f.jk, pendidikan: f.pendidikan, dari: f.dari, sampai: f.sampai,
                 riwayat: f.riwayat, pungli: f.pungli, referensi: f.referensi,
                 page: st.page, page_size: ROWS_PER_PAGE
             }
@@ -485,6 +520,8 @@ function updatePanggilButton() {
     const n = state.selected.size;
     $("btnPanggil").hidden = !(isWaiting() && n > 0);
     $("btnPanggilText").textContent = `Panggil Karyawan (${n})`;
+    $("btnReject").hidden = !(isWaiting() && n > 0);
+    $("btnRejectText").textContent = `Reject (${n})`;
 }
 
 function setupPanggil() {
@@ -497,6 +534,37 @@ function setupPanggil() {
         bootstrap.Modal.getOrCreateInstance($("modalPanggil")).show();
     });
     $("btnPanggilSubmit").addEventListener("click", submitPanggil);
+    $("btnReject").addEventListener("click", submitReject);
+}
+
+// ===================================================
+// KELOMPOK 13: REJECT (khusus Waiting List)
+// Fungsi: mengubah is_reject menjadi true untuk baris yang dicentang.
+// Data yang di-reject tidak tampil lagi di Waiting List maupun History.
+// ===================================================
+async function submitReject() {
+    const n = state.selected.size;
+    if (n === 0 || state.calling) return;
+    if (!confirm(`Reject ${n} pelamar?\n\nData akan hilang dari Waiting List dan History.`)) return;
+
+    const btn = $("btnReject");
+    state.calling = true;
+    btn.disabled = true;
+    try {
+        const ids = Array.from(state.selected).map(Number);
+        const { data, error } = await rpc(RPC_TOLAK, { p: { ids } });
+        if (error) throw error;
+        state.selected.clear();
+        updatePanggilButton();
+        showToast(`${(data && data.jumlah) ?? ids.length} pelamar di-reject`);
+        await loadPage();
+    } catch (err) {
+        console.error("Gagal reject:", err);
+        alert("Gagal reject: " + (err.message || err));
+    } finally {
+        state.calling = false;
+        btn.disabled = false;
+    }
 }
 
 async function submitPanggil() {
@@ -521,11 +589,9 @@ async function submitPanggil() {
         bootstrap.Modal.getOrCreateInstance($("modalPanggil")).hide();
         state.selected.clear();
         state.history.loaded = false;          // History dimuat ulang saat dibuka
-        state.history.opsiPeriode = [];
         updatePanggilButton();
         showToast(`${(data && data.jumlah) ?? ids.length} pelamar dipanggil`);
         await loadPage();
-        loadPeriodeOptions("waiting");
     } catch (err) {
         console.error("Gagal memproses panggilan:", err);
         box.textContent = "Gagal memproses: " + (err.message || err);

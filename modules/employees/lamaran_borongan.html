@@ -13,6 +13,7 @@
          ============================================================ -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <style>
@@ -63,7 +64,7 @@
 
         /* --- Panel filter --- */
         .lb-filter-wrap { position: relative; }
-        .lb-filter-panel { position: absolute; top: calc(100% + 6px); left: 0; width: 300px; max-width: 90vw; background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); box-shadow: 0 8px 24px rgba(31,45,61,.12); z-index: 60; max-height: 70vh; overflow-y: auto; }
+        .lb-filter-panel { position: absolute; top: calc(100% + 6px); left: 0; width: 340px; max-width: 92vw; background: #fff; border: 1px solid var(--lb-border); border-radius: var(--lb-radius); box-shadow: 0 8px 24px rgba(31,45,61,.12); z-index: 60; max-height: 70vh; overflow-y: auto; }
         .lb-filter-panel[hidden] { display: none; }
         .lb-fg { border-bottom: 1px solid var(--lb-border); }
         .lb-fg-head { width: 100%; display: flex; justify-content: space-between; align-items: center; background: none; border: none; padding: 10px 14px; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--lb-text); cursor: pointer; }
@@ -121,6 +122,12 @@
         .lb-tag-red { background: #fdecec; color: #8f2222; }
         .lb-tag-green { background: #e6f6ea; color: #237a37; }
 
+        .lb-btn-danger { background: var(--lb-danger); border-color: var(--lb-danger); color: #fff; font-weight: 600; }
+        .lb-btn-danger:hover { background: #b83737; border-color: #b83737; }
+        .lb-fg-body.lb-fg-cal { max-height: none; overflow: visible; }
+        .lb-cal-input { display: none; }
+        .flatpickr-calendar.inline { box-shadow: none; margin: 0 auto; }
+
         .lb-toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 2000; background: #1f2d3d; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; display: none; max-width: 90vw; }
     </style>
 </head>
@@ -170,6 +177,7 @@
             </div>
 
             <div class="lb-spacer"></div>
+            <button type="button" class="lb-btn lb-btn-danger" id="btnReject" hidden><i class="fa-solid fa-ban"></i><span id="btnRejectText">Reject</span></button>
             <button type="button" class="lb-btn lb-btn-primary" id="btnPanggil" hidden><i class="fa-solid fa-phone-volume"></i><span id="btnPanggilText">Panggil Karyawan</span></button>
         </div>
 
@@ -238,6 +246,8 @@
          halaman ini di modules/employees/ (sama seperti directory.html).
          ============================================================ -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/id.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../js/supabase.js"></script>
     <script src="../../js/module/employees/lamaran_borongan.js"></script>
