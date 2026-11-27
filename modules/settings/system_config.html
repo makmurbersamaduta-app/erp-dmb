@@ -7,10 +7,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <link rel="stylesheet" href="../../css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../css/theme-simple-pro.css">
     <style>
-        body { 
-            background-color: #f8fafc; 
-        }
 
         #full-container { 
             max-width: 1400px; 
@@ -23,38 +22,11 @@
             position: sticky;
             top: 0;
             z-index: 1030;
-            background-color: #f8fafc; /* Menyamakan warna latar agar konten di bawahnya tertutup sempurna saat di-scroll */
-            padding-top: 15px;
+                        padding-top: 15px;
             padding-bottom: 15px;
         }
 
         /* STYLING CARD & TAB SUB-PAGE */
-        .config-card { 
-            background: #ffffff; 
-            border-radius: 10px; 
-            border: 1px solid #e2e8f0; 
-        }
-
-        .config-card-header { 
-            padding: 14px 20px; 
-            border-bottom: 1px solid #e2e8f0; 
-            font-weight: 700; 
-            font-size: 0.95rem; 
-        }
-
-        .nav-pills .nav-link {
-            font-weight: 600;
-            color: #64748b;
-            border-radius: 8px;
-            padding: 8px 16px;
-            transition: all 0.2s ease;
-        }
-
-        .nav-pills .nav-link.active {
-            background-color: #0d6efd;
-            color: #ffffff;
-            box-shadow: 0 4px 6px -1px rgba(13, 110, 253, 0.2);
-        }
 
         /* 2. FREEZE / STICKY TABEL HEADER */
         .table-responsive-scroll {
@@ -66,9 +38,7 @@
         .table-responsive-scroll table thead th {
             position: sticky;
             top: 0;
-            background-color: #f8fafc !important; /* Mencegah sel data terlihat transparan di bawah header */
             z-index: 10;
-            box-shadow: inset 0 -1px 0 #dee2e6; /* Menjaga garis border bawah header tetap konsisten saat di-scroll */
         }
 
         /* 3. LAYOUT SIDEBAR (menggantikan tab bar di atas) */
@@ -143,16 +113,6 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="tab-permissions-btn" data-bs-toggle="pill" data-bs-target="#subpage-permissions" type="button" role="tab">
                     <i class="fa-solid fa-shield-halved me-2"></i>3. Matriks Hak Akses
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-zona-btn" data-bs-toggle="pill" data-bs-target="#subpage-zona" type="button" role="tab">
-                    <i class="fa-solid fa-map me-2"></i>4. Daftar Zona
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="tab-zonacov-btn" data-bs-toggle="pill" data-bs-target="#subpage-zonacov" type="button" role="tab">
-                    <i class="fa-solid fa-diagram-project me-2"></i>5. Zona Coverage
                 </button>
             </li>
         </ul>
@@ -247,61 +207,6 @@
                 </div>
                 <div class="card-footer text-end bg-white border-top p-3">
                     <button class="btn btn-success fw-semibold px-4" id="btnSavePermissions" disabled onclick="savePermissionsBulk()"><i class="fa-solid fa-floppy-disk me-2"></i>Simpan Perubahan Hak Akses</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- SUB-PAGE 4: DAFTAR ZONA (referensi saja, tanpa CRUD) -->
-        <div class="tab-pane fade" id="subpage-zona" role="tabpanel">
-            <div class="config-card shadow-sm">
-                <div class="config-card-header bg-light">
-                    <span><i class="fa-solid fa-map text-primary me-2"></i>Daftar Zona (Referensi)</span>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive-scroll">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="text-center">
-                                <tr>
-                                    <th style="width: 60px;">No</th>
-                                    <th>Nama Zona</th>
-                                    <th style="width: 150px;">Kode Zona</th>
-                                    <th style="width: 120px;">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody id="zonasTableBody"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- SUB-PAGE 5: ZONA COVERAGE (zona_coverage) -->
-        <div class="tab-pane fade" id="subpage-zonacov" role="tabpanel">
-            <div class="config-card shadow-sm">
-                <div class="config-card-header d-flex justify-content-between align-items-center bg-light">
-                    <span><i class="fa-solid fa-diagram-project text-primary me-2"></i>Zona Coverage (Departemen + Area &rarr; Zona)</span>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-danger btn-sm py-1 px-3 fw-semibold" onclick="openZonaCoverageInactiveModal()"><i class="fa-solid fa-ban me-1"></i>Zona non Aktif <span class="badge bg-light text-danger ms-1" id="zcInactiveCount">0</span></button>
-                        <button class="btn btn-primary btn-sm py-1 px-3 fw-semibold" onclick="openZonaCoverageModal()"><i class="fa-solid fa-plus me-1"></i>Tambah Zona Coverage</button>
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive-scroll">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="text-center">
-                                <tr>
-                                    <th style="width: 60px;">No</th>
-                                    <th>Zona</th>
-                                    <th>Departemen</th>
-                                    <th>Area</th>
-                                    <th>Keterangan</th>
-                                    <th style="width: 100px;">Status</th>
-                                    <th style="width: 100px;">Aksi</th>
-                                </tr>
-                            </thead>
-                            <tbody id="zonaCoverageTableBody"></tbody>
-                        </table>
-                    </div>
                 </div>
             </div>
         </div>
@@ -484,94 +389,6 @@
             <div class="modal-footer border-top py-2">
                 <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
                 <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnSaveMenuAccess" onclick="handleSaveMenuAccess()">Simpan Akses</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL CAKUPAN ZONA -->
-<div class="modal fade" id="modalZonaCoverage" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header border-bottom py-2">
-                <h6 class="modal-title fw-bold" id="modalZonaCoverageTitle">Tambah Zona Coverage</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="formZonaCoverage">
-                <div class="modal-body">
-                    <input type="hidden" id="zc_edit_id" value="">
-                    <div class="row g-2">
-                        <div class="col-12 mb-2" id="zc_zona_wrapper">
-                            <label class="small fw-bold">Zona <span class="text-danger">*</span></label>
-                            <select id="zc_zona_id" class="form-select form-select-sm" onchange="checkZonaCoverageDuplicate()"></select>
-                        </div>
-                        <div class="col-6 mb-2" id="zc_dept_wrapper">
-                            <label class="small fw-bold">Departemen <span class="text-danger">*</span></label>
-                            <select id="zc_departemen_id" class="form-select form-select-sm" onchange="checkZonaCoverageDuplicate()"></select>
-                        </div>
-                        <div class="col-6 mb-2" id="zc_area_wrapper">
-                            <label class="small fw-bold">Area <span class="text-danger">*</span></label>
-                            <select id="zc_area_id" class="form-select form-select-sm" onchange="checkZonaCoverageDuplicate()"></select>
-                        </div>
-                        <!-- Info kombinasi terkunci (hanya mode Edit) -->
-                        <div class="col-12 mb-2 d-none" id="zc_locked_info"></div>
-                        <!-- HARDLOCK: pesan duplikasi, tombol Simpan dikunci selama pesan ini tampil -->
-                        <div class="col-12 d-none" id="zc_duplicate_alert">
-                            <div class="alert alert-danger py-2 small mb-2 d-flex gap-2 align-items-start">
-                                <i class="fa-solid fa-ban mt-1"></i>
-                                <div><strong>Tidak bisa disimpan.</strong> <span id="zc_duplicate_message"></span></div>
-                            </div>
-                        </div>
-                        <div class="col-12 mb-2">
-                            <label class="small fw-bold">Keterangan</label>
-                            <input type="text" id="zc_keterangan" class="form-control form-control-sm" placeholder="Opsional">
-                        </div>
-                        <div class="col-12">
-                            <label class="small fw-bold">Status</label>
-                            <select id="zc_is_active" class="form-select form-select-sm">
-                                <option value="true">Aktif</option>
-                                <option value="false">Non-Aktif</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer border-top py-2">
-                    <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
-                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSaveZonaCoverage">Simpan</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL ZONA COVERAGE NON-AKTIF (untuk pengaktifan ulang) -->
-<div class="modal fade" id="modalZonaCoverageInactive" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-centered">
-        <div class="modal-content border-0 shadow">
-            <div class="modal-header border-bottom py-2">
-                <h6 class="modal-title fw-bold text-danger"><i class="fa-solid fa-ban me-2"></i>Zona Coverage Non-Aktif</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div class="table-responsive-scroll" style="max-height: 60vh; min-height: 0;">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="text-center">
-                            <tr>
-                                <th style="width: 60px;">No</th>
-                                <th>Cabang</th>
-                                <th>Zona</th>
-                                <th>Departemen</th>
-                                <th>Area</th>
-                                <th>Keterangan</th>
-                                <th style="width: 200px;">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody id="zonaCoverageInactiveTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer border-top py-2">
-                <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Tutup</button>
             </div>
         </div>
     </div>
