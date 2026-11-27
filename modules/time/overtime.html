@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lembur - DMB ERP</title>
+
+    <!-- Bootstrap & Icon -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS Global Project (sesuaikan path jika berbeda) -->
+    <link href="../../css/base.css" rel="stylesheet">
+    <link href="../../css/components.css" rel="stylesheet">
+    <link href="../../css/layout.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+
+    <!-- CSS halaman: users.css dipakai ulang agar tampilan sama, overtime.css berisi tambahan -->
+    <link href="../../css/pages/settings/users.css" rel="stylesheet">
+    <link href="../../css/pages/time/overtime.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- HEADER -->
+    <header class="users-header">
+        <button type="button" class="btn-back" id="btnBack" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <h1 class="users-header-title">Lembur</h1>
+    </header>
+
+    <main class="users-main">
+
+        <!-- Toolbar: Search + Filter + tombol Lembur -->
+        <div class="users-toolbar">
+            <div class="users-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="inputSearch" placeholder="Cari NIK atau Nama Karyawan...">
+            </div>
+
+            <div class="users-filter-wrapper">
+                <button type="button" class="btn-filter" id="btnFilterToggle">
+                    <i class="fa-solid fa-filter"></i>
+                    <span>Filter</span>
+                    <span class="filter-count-badge d-none" id="filterCountBadge">0</span>
+                </button>
+
+                <div class="users-filter-panel d-none" id="filterPanel">
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterBranch"><span>Cabang</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterBranch"></div>
+                    </div>
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterCostCenter"><span>Cost Center</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterCostCenter"></div>
+                    </div>
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterArea"><span>Area</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterArea"></div>
+                    </div>
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterDepartemen"><span>Departemen</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterDepartemen"></div>
+                    </div>
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterStatus"><span>Status</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterStatus"></div>
+                    </div>
+                    <div class="filter-group">
+                        <button type="button" class="filter-group-header" data-target="filterTanggal"><span>Tanggal</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="filter-group-body" id="filterTanggal"></div>
+                    </div>
+
+                    <div class="filter-panel-footer">
+                        <button type="button" class="btn-filter-reset" id="btnFilterReset">Reset</button>
+                        <button type="button" class="btn-filter-apply" id="btnFilterApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hanya tampil untuk Maintenance / Superadmin (diatur di overtime.js) -->
+            <button type="button" class="btn-lembur d-none" id="btnLembur">
+                <i class="fa-regular fa-clock"></i> Lembur
+            </button>
+        </div>
+
+        <!-- Tabel -->
+        <div class="users-table-wrapper">
+            <table class="users-table ot-table">
+                <thead>
+                    <tr>
+                        <th class="sticky-left">Nama<span class="ot-sub">NIK | Jabatan</span></th>
+                        <th>Tanggal</th>
+                        <th>Departemen</th>
+                        <th>Area</th>
+                        <th class="ot-num">Lembur Sebelum Shift</th>
+                        <th class="ot-num">Lembur Setelah Shift</th>
+                        <th class="ot-num">Total Jam Lembur</th>
+                        <th>Status</th>
+                        <th class="sticky-right">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="otTableBody">
+                    <tr class="row-loading"><td colspan="9"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="users-pagination" id="otPagination"></div>
+    </main>
+
+    <!-- =============== MODAL FORM LEMBUR =============== -->
+    <div class="modal fade ot-modal" id="modalLembur" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Pengajuan Lembur</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="formBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-primary" id="btnSimpanLembur">Simpan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============== MODAL DETAIL (read-only) =============== -->
+    <div class="modal fade ot-modal" id="modalDetail" tabindex="-1">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Detail Lembur</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="detailBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Tutup</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- =============== MODAL ALASAN REJECT =============== -->
+    <div class="modal fade ot-modal" id="modalReject" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Tolak Lembur</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label" for="rejectNote">Alasan penolakan <span class="req">*</span></label>
+                    <textarea class="form-control" id="rejectNote" rows="3" maxlength="200"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-danger" id="btnKonfirmasiReject">Tolak</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/time/overtime.js"></script>
+</body>
+</html>

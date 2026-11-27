@@ -6,6 +6,10 @@
  * ==============================================================================
  */
 
+// ID pola jadwal default (pola pertama) untuk semua karyawan baru / rehire.
+// Admin bisa mengubahnya nanti lewat halaman Jadwal Kerja.
+const DEFAULT_POLA_JADWAL_ID = "210876e4-e8fd-46a3-ad6e-10456661b556";
+
 // Global State
 let currentEmpId = null;
 
@@ -15,6 +19,7 @@ let masterAreas = [];
 let masterDepartments = [];
 let masterBagians = [];
 let masterJabatans = [];
+let masterStructures = [];   // public.cost_center_structures: cost_center_id, area_id, dept_id, jabatan_id
 
 // ==============================================================================
 // HELPER: Hitung kode PTKP
@@ -51,7 +56,45 @@ function updatePtkpDisplay() {
     }
 }
 
+// Ambil SEMUA baris struktur cost center (Supabase membatasi 1 request = 1000 baris)
+async function fetchAllStructures() {
+    const all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient.from("cost_center_structures")
+            .select("*").order("id", { ascending: true }).range(from, from + 999);
+        if (error) { console.error("Gagal mengambil cost_center_structures:", error); break; }
+        all.push(...(data || []));
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return all;
+}
+
+// Susun ulang kolom isian agar mengikuti urutan alur filter tanpa menggeser field lain:
+// kolom-kolom itu hanya bertukar tempat satu sama lain. Dilewati (dengan peringatan di console)
+// jika struktur HTML tidak sesuai, sehingga tampilan tidak pernah rusak.
+function reorderFieldsInPlace(ids) {
+    const isCol = el => Array.from(el.classList).some(c => /^col(-(sm|md|lg|xl|xxl))?(-\d+|-auto)?$/.test(c));
+    const colOf = id => {
+        let n = document.getElementById(id);
+        while (n && n !== document.body && !isCol(n)) n = n.parentElement;
+        return n && n !== document.body ? n : null;
+    };
+    const cols = ids.map(colOf);
+    const single = cols.every((c, i) => c && ids.filter(id => c.contains(document.getElementById(id))).length === 1);
+    if (!single || new Set(cols).size !== cols.length) {
+        console.warn("[Urutan penempatan] struktur kolom tidak sesuai, urutan tampilan tidak diubah:", ids);
+        return;
+    }
+    const slots = cols.map(c => { const m = document.createComment(""); c.parentNode.insertBefore(m, c); return m; });
+    cols.forEach(c => c.remove());
+    slots.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+    cols.forEach((c, i) => slots[i].replaceWith(c));
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+    reorderFieldsInPlace(["branch_id", "costcenter_id", "area_id", "departemen_id", "jabatan_id"]);   // urutan tampilan = urutan alur filter
     // 1. Auth Guard
     if (typeof checkAuthGuard === "function") {
         checkAuthGuard();
@@ -144,12 +187,16 @@ async function loadMasterData() {
         [masterBranches, masterCostCenters, masterAreas, masterDepartments, masterBagians, masterJabatans].map(list => list.filter(m => m.is_active !== false));
 
     // Populate dropdown
+    // Struktur Cost Center -> Area -> Departemen -> Jabatan (acuan semua filter penempatan)
+    masterStructures = await fetchAllStructures();
+
+    // Hanya Cabang yang terisi di awal. Sisanya terisi berantai (lihat refreshPlacementCascade)
     populateSelect("branch_id", masterBranches, "id", "branch_name", "-- Pilih Cabang --");
-    populateSelect("departemen_id", masterDepartments, "id", "department_name", "-- Pilih Departemen --");
-    populateSelect("jabatan_id", masterJabatans, "id", "jabatan_name", "-- Pilih Jabatan --");
 
     resetSelect("costcenter_id", "-- Pilih Cost Center --");
     resetSelect("area_id", "-- Pilih Area --");
+    resetSelect("departemen_id", "-- Pilih Departemen --");
+    resetSelect("jabatan_id", "-- Pilih Jabatan --");
     resetSelect("bagian_id", "-- Pilih Bagian --");
 }
 
@@ -254,47 +301,67 @@ function setInputValue(id, val) {
 // ==============================================================================
 // 4. LOGIKA FILTERING PENEMPATAN & GENERATE NIK BARU
 // ==============================================================================
-function handleAreaFiltering() {
-    const branchVal = document.getElementById("branch_id")?.value || "";
+// Id yang tersedia di cost_center_structures untuk satu kolom (area_id / dept_id / jabatan_id),
+// dibatasi oleh Cost Center (wajib) serta Area dan Departemen (jika sudah dipilih).
+function structureIds(ccId, areaId, deptId, field) {
+    const ids = new Set();
+    masterStructures.forEach(st => {
+        if (String(st.cost_center_id) !== String(ccId)) return;
+        if (areaId && String(st.area_id) !== String(areaId)) return;
+        if (deptId && String(st.dept_id) !== String(deptId)) return;
+        ids.add(String(st[field]));
+    });
+    return ids;
+}
 
-    if (!branchVal) {
-        resetSelect("area_id", "-- Pilih Area --");
-        return;
+// Alur filter berantai: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Induk kosong = semua anaknya dikosongkan. Pilihan anak dipertahankan hanya jika masih valid.
+function refreshPlacementCascade() {
+    const val = id => document.getElementById(id)?.value || "";
+
+    // 1. Cost Center <- Cabang (cost_centers.branch_id)
+    if (!val("branch_id")) {
+        resetSelect("costcenter_id", "-- Pilih Cost Center --");
+    } else {
+        const ccList = masterCostCenters.filter(cc => String(cc.branch_id) === val("branch_id"));
+        populateSelect("costcenter_id", ccList, "id", "costcenter_name", "-- Pilih Cost Center --");
     }
 
-    const filteredAreas = masterAreas.filter(a =>
-        String(a.branch_id) === String(branchVal)
-    );
-    populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
+    // 2. Area <- Cost Center (cost_center_structures)
+    if (!val("costcenter_id")) {
+        resetSelect("area_id", "-- Pilih Area --");
+    } else {
+        const ids = structureIds(val("costcenter_id"), "", "", "area_id");
+        populateSelect("area_id", masterAreas.filter(a => ids.has(String(a.id))), "id", "area_name", "-- Pilih Area --");
+    }
+
+    // 3. Departemen <- Cost Center + Area
+    if (!val("area_id")) {
+        resetSelect("departemen_id", "-- Pilih Departemen --");
+    } else {
+        const ids = structureIds(val("costcenter_id"), val("area_id"), "", "dept_id");
+        populateSelect("departemen_id", masterDepartments.filter(d => ids.has(String(d.id))), "id", "department_name", "-- Pilih Departemen --");
+    }
+
+    // 4. Jabatan <- Cost Center + Area + Departemen
+    if (!val("departemen_id")) {
+        resetSelect("jabatan_id", "-- Pilih Jabatan --");
+    } else {
+        const ids = structureIds(val("costcenter_id"), val("area_id"), val("departemen_id"), "jabatan_id");
+        populateSelect("jabatan_id", masterJabatans.filter(j => ids.has(String(j.id))), "id", "jabatan_name", "-- Pilih Jabatan --");
+    }
 }
 
 async function handlePlacementAndFiltering() {
     const branchVal = document.getElementById("branch_id")?.value || "";
-    const ccSelect = document.getElementById("costcenter_id");
-    const ccVal = ccSelect?.value || "";
-    const deptVal = document.getElementById("departemen_id")?.value || "";
     const statusVal = document.getElementById("status_karyawan")?.value || "";
     const startDateVal = document.getElementById("start_date")?.value || "";
 
     toggleNoAbsenStgVisibility();
 
-    // Filter Cost Center berdasarkan Branch
-    if (!branchVal) {
-        resetSelect("costcenter_id", "-- Pilih Cost Center --");
-        resetSelect("area_id", "-- Pilih Area --");
-    } else {
-        const filteredCC = masterCostCenters.filter(cc => String(cc.branch_id) === String(branchVal));
-        populateSelect("costcenter_id", filteredCC, "id", "costcenter_name", "-- Pilih Cost Center --");
-
-        if (filteredCC.some(cc => String(cc.id) === String(ccVal))) {
-            ccSelect.value = ccVal;
-        } else {
-            resetSelect("area_id", "-- Pilih Area --");
-        }
-    }
-
-    // Filter Area
-    handleAreaFiltering();
+    // Filter berantai Cabang -> Cost Center -> Area -> Departemen -> Jabatan
+    refreshPlacementCascade();
+    const deptVal = document.getElementById("departemen_id")?.value || "";
 
     // Filter Bagian khusus Status "Borongan"
     if (statusVal === "Borongan") {
@@ -465,7 +532,7 @@ function setupEventListeners() {
     }
 
     // Listener Perubahan Penempatan untuk Update Cascading & Auto-Generate NIK
-    const placementFields = ["branch_id", "costcenter_id", "departemen_id", "status_karyawan", "start_date"];
+    const placementFields = ["branch_id", "costcenter_id", "area_id", "departemen_id", "status_karyawan", "start_date"];
     placementFields.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -607,6 +674,42 @@ async function handleFormSubmit(e) {
 
         if (assignError) throw assignError;
 
+        // ---------------------------------------------------------------
+        // JADWAL POLA KARYAWAN OTOMATIS (REHIRE)
+        // 1) Nonaktifkan sisa pola aktif milik karyawan ini (mis. data lama dari
+        //    sebelum fitur ini ada) supaya tidak bentrok dengan aturan
+        //    "tidak boleh ada 2 pola aktif yang periodenya tumpang tindih".
+        // 2) Buat pola default baru, mulai berlaku pada tanggal masuk (rehire).
+        // Kalau gagal, rehire tetap berhasil dan admin diberi peringatan.
+        // ---------------------------------------------------------------
+        let jadwalWarning = "";
+        try {
+            const tglMasuk = document.getElementById("start_date").value || null;
+            if (!tglMasuk) throw new Error("Tanggal masuk kosong");
+
+            const { error: offErr } = await supabaseClient
+                .schema("hrd").from("jadwal_pola_karyawan")
+                .update({ is_active: false })
+                .eq("employee_id", currentEmpId)
+                .eq("is_active", true);
+            if (offErr) throw offErr;
+
+            const { error: polaErr } = await supabaseClient
+                .schema("hrd").from("jadwal_pola_karyawan")
+                .insert({
+                    employee_id: currentEmpId,
+                    pola_id: DEFAULT_POLA_JADWAL_ID,
+                    berlaku_mulai: tglMasuk,
+                    berlaku_sampai: null,
+                    posisi_awal: 1,
+                    is_active: true
+                });
+            if (polaErr) throw polaErr;
+        } catch (e) {
+            console.error("Gagal membuat jadwal pola karyawan (rehire):", e);
+            jadwalWarning = "\n\nPERINGATAN: jadwal pola karyawan GAGAL dibuat otomatis (" + (e.message || e) + "). Atur manual lewat halaman Jadwal Kerja.";
+        }
+
         // Akun login di-ban saat resign -> aktifkan kembali. Jika gagal, rehire tetap berhasil
         // (data kepegawaian sudah tersimpan); admin diberi peringatan dan bisa memakai
         // tombol "Aktifkan Semua" di halaman Users Account.
@@ -630,7 +733,7 @@ async function handleFormSubmit(e) {
             authWarning = "\n\nPERINGATAN: akun login karyawan ini GAGAL diaktifkan kembali otomatis -- aktifkan lewat halaman Users Account.";
         }
 
-        alert("Proses Rehire Berhasil! Status karyawan kembali Aktif dengan NIK dan Penempatan Baru." + authWarning);
+        alert("Proses Rehire Berhasil! Status karyawan kembali Aktif dengan NIK dan Penempatan Baru." + authWarning + jadwalWarning);
         window.location.href = "directory.html";
 
     } catch (err) {

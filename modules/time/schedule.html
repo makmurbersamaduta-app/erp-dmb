@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jadwal Kerja - DMB ERP</title>
+
+    <!-- Bootstrap & Icon (sama dengan users.html) -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- CSS Global Project (sesuaikan path jika berbeda) -->
+    <link href="../../css/base.css" rel="stylesheet">
+    <link href="../../css/components.css" rel="stylesheet">
+    <link href="../../css/layout.css" rel="stylesheet">
+    <link href="../../css/style.css" rel="stylesheet">
+
+    <!-- Dipakai ulang agar header, tombol kembali, toolbar, dan pagination
+         tampil sama dengan halaman Users. Hapus baris ini jika gayanya
+         sudah ada di CSS global. -->
+    <link href="../../css/pages/settings/users.css" rel="stylesheet">
+
+    <!-- CSS Khusus Halaman Ini -->
+    <link href="../../css/pages/settings/schedule.css" rel="stylesheet">
+</head>
+<body>
+
+    <!-- HEADER: tombol Kembali di pojok kiri atas -> index.html -->
+    <header class="users-header">
+        <button type="button" class="btn-back" id="btnBack" title="Kembali">
+            <i class="fa-solid fa-arrow-left"></i>
+        </button>
+        <h1 class="users-header-title">Jadwal Kerja</h1>
+        <button type="button" class="btn btn-primary btn-sm ms-auto" id="btnImport">
+            <i class="fa-solid fa-file-import"></i> Import Jadwal
+        </button>
+    </header>
+
+    <main class="users-main">
+
+        <!-- Banner error (muncul jika script gagal / data gagal dimuat) -->
+        <div class="alert alert-danger d-none" id="errorBanner"></div>
+
+        <!-- Toolbar: periode, filter, pencarian -->
+        <div class="users-toolbar sch-toolbar">
+            <div class="sch-field">
+                <label>Periode</label>
+                <button type="button" class="form-select form-select-sm sch-datebox" id="dateBox">
+                    <span id="dateText">-</span>
+                    <i class="fa-regular fa-calendar"></i>
+                </button>
+            </div>
+            <!-- 1 tombol Filter berisi dropdown: Branch, Cost Center, Area, Departemen, Jabatan.
+                 Isinya dibuat oleh createFilterPanel() di schedule.js -->
+            <div class="sch-field"><label>Filter</label><div id="filterWrap"></div></div>
+            <div class="users-search-box ms-auto">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="fSearch" placeholder="Cari NIK atau Nama Karyawan...">
+            </div>
+        </div>
+
+        <div class="sch-legend">
+            <span class="sch-late">Merah</span> = terlambat / pulang cepat &nbsp;|&nbsp;
+            <span class="sch-miss">Oranye</span> = belum ada absen pada tanggal yang sudah lewat &nbsp;|&nbsp;
+            "-" biasa = belum absen hari ini
+        </div>
+
+        <!-- Tabel jadwal -->
+        <div class="sch-table-wrapper">
+            <table class="sch-table">
+                <thead id="thead"></thead>
+                <tbody id="tbody">
+                    <tr><td class="sch-empty"><i class="fa-solid fa-spinner fa-spin"></i> Memuat data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="users-pagination" id="pager"></div>
+    </main>
+
+    <!-- ===== MODAL IMPORT JADWAL ===== -->
+    <div class="sch-backdrop" id="mImport" hidden>
+        <div class="sch-modal">
+            <div class="sch-mh">Import Jadwal
+                <button class="sch-x" data-close="mImport" type="button">&times;</button></div>
+            <div class="sch-mb">
+                <div class="alert alert-warning py-2 small mb-3" id="impRule"></div>
+
+                <div class="sch-step"><h4>1. Karyawan</h4>
+                    <button class="btn btn-outline-primary btn-sm" id="btnSelEmp" type="button">Select Employee</button>
+                    <div id="empSummary" class="sch-info">Belum ada karyawan dipilih.</div></div>
+
+                <div class="sch-step"><h4>2. Tanggal</h4>
+                    <button class="btn btn-outline-primary btn-sm" id="btnSelDate" type="button">Select Date</button>
+                    <div id="impDate" class="sch-info">Belum ada periode dipilih (maksimal 1 bulan).</div></div>
+
+                <div id="impQuota" class="sch-quota"></div>
+
+                <div class="sch-step"><h4>3. Template</h4>
+                    <button class="btn btn-outline-primary btn-sm" id="btnTpl" type="button" disabled>
+                        <i class="fa-solid fa-download"></i> Download Template</button>
+                    <div class="sch-info">Kolom Employee ID berisi NIK. Semua sel jadwal wajib terisi.</div></div>
+
+                <div class="sch-step"><h4>4. Upload file</h4>
+                    <input type="file" class="form-control form-control-sm" id="impFile" accept=".xlsx,.xls" disabled>
+                    <div id="impResult"></div></div>
+            </div>
+            <div class="sch-mf"><span class="sch-info" id="impProg"></span>
+                <span><button class="btn btn-light btn-sm" data-close="mImport" type="button">Batal</button>
+                <button class="btn btn-primary btn-sm" id="btnSubmit" type="button" disabled>Submit</button></span></div>
+        </div>
+    </div>
+
+    <!-- ===== SUB MODAL PILIH KARYAWAN ===== -->
+    <div class="sch-backdrop sch-top" id="mPick" hidden>
+        <div class="sch-modal sch-wide">
+            <div class="sch-mh">Pilih Karyawan
+                <button class="sch-x" data-close="mPick" type="button">&times;</button></div>
+            <div class="sch-mb">
+                <div id="pickFilterWrap" class="sch-inline mb-2"></div>
+                <input class="form-control form-control-sm mb-2" id="pkSearch" placeholder="Cari NIK / nama">
+                <div class="sch-pk-wrap"><table class="sch-pk">
+                    <thead><tr><th style="width:36px"><input type="checkbox" id="pkAll" title="Pilih semua hasil filter"></th>
+                    <th>Nama</th><th>NIK</th><th>Departemen</th><th>Area</th><th>Jabatan</th></tr></thead>
+                    <tbody id="pkBody"></tbody></table></div>
+            </div>
+            <div class="sch-mf"><span id="pkCount" class="sch-info"></span>
+                <span><button class="btn btn-light btn-sm" data-close="mPick" type="button">Batal</button>
+                <button class="btn btn-primary btn-sm" id="pkOk" type="button">Pilih</button></span></div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL KALENDER RENTANG ===== -->
+    <div class="sch-backdrop sch-top" id="mCal" hidden>
+        <div class="sch-modal">
+            <div class="sch-mh">Pilih Periode
+                <button class="sch-x" data-close="mCal" type="button">&times;</button></div>
+            <div class="sch-mb">
+                <div class="sch-calnav">
+                    <button class="btn btn-outline-secondary btn-sm" id="calPrev" type="button"><i class="fa-solid fa-chevron-left"></i></button>
+                    <button class="btn btn-outline-secondary btn-sm" id="calNext" type="button"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="sch-cal" id="calBody"></div>
+                <div class="sch-info text-center mt-3" id="calInfo"></div>
+            </div>
+            <div class="sch-mf"><span class="sch-info">Tarik, atau klik tanggal awal lalu tanggal akhir. Maksimal 31 hari.</span>
+                <span><button class="btn btn-light btn-sm" data-close="mCal" type="button">Batal</button>
+                <button class="btn btn-primary btn-sm" id="calApply" type="button" disabled>Terapkan</button></span></div>
+        </div>
+    </div>
+
+    <!-- Toast notifikasi -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer"></div>
+
+    <!-- Scripts (non-module, sama seperti users.html). URUTAN PENTING. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../js/supabase.js"></script>
+    <script src="../../js/module/time/schedule.js"></script>
+    <script src="../../js/module/time/schedule-import.js"></script>
+</body>
+</html>

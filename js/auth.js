@@ -198,22 +198,32 @@ async function handleLogin(username, password, isRememberMe = false) {
         let managedZoneIds = [];
 
         if (!isSuperAdmin && employeeData) {
-            const { data: supervisorZones } = await supabaseClient
+            // G1. Slot supervisor milik karyawan ini (zona + departemen), hanya yang AKTIF
+            const { data: supervisorZones, error: szError } = await supabaseClient
                 .from("supervisor_zones")
-                .select("zona_id")
-                .eq("employee_id", employeeData.id);
+                .select("zona_id, departemen_id")
+                .eq("employee_id", employeeData.id)
+                .eq("is_active", true);
+            if (szError) console.warn("Gagal membaca supervisor_zones:", szError);
 
             if (supervisorZones && supervisorZones.length > 0) {
-                managedZoneIds = supervisorZones.map(z => z.zona_id);
+                managedZoneIds = [...new Set(supervisorZones.map(z => z.zona_id))];
 
-                const { data: areasInZones } = await supabaseClient
-                    .from("areas")
-                    .select("id")
+                // G2. Area yang dicakup = zona_coverage aktif dengan zona DAN departemen yang cocok
+                //     (sumber yang sama dengan routing approval; bukan lagi areas.zona_id)
+                const { data: coverage, error: covError } = await supabaseClient
+                    .from("zona_coverage")
+                    .select("area_id, zona_id, departemen_id")
+                    .eq("is_active", true)
                     .in("zona_id", managedZoneIds);
+                if (covError) console.warn("Gagal membaca zona_coverage:", covError);
 
-                if (areasInZones) {
-                    allowedAreaIds = areasInZones.map(a => a.id);
-                }
+                const slotKeys = new Set(supervisorZones.map(z => `${z.zona_id}-${z.departemen_id}`));
+                allowedAreaIds = [...new Set(
+                    (coverage || [])
+                        .filter(c => slotKeys.has(`${c.zona_id}-${c.departemen_id}`))
+                        .map(c => c.area_id)
+                )];
             }
         }
 

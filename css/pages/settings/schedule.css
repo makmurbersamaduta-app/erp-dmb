@@ -1,0 +1,98 @@
+/* =====================================================
+   css/pages/settings/schedule.css  |  Halaman Jadwal Kerja
+   Semua class diawali "sch-" agar tidak bentrok dengan
+   Bootstrap atau CSS global. Khusus tampilan desktop.
+   ===================================================== */
+
+/* 1. Warna halaman ini. Ubah di sini jika brand color berbeda. */
+:root {
+    --sch-primary: #0d6efd;
+    --sch-primary-soft: #e7f0ff;
+    --sch-line: #dee2e6;
+    --sch-muted: #6c757d;
+    --sch-kerja-bg: #e7f0ff;  --sch-kerja-tx: #0a4cb5;
+    --sch-libur-bg: #fde8e8;  --sch-libur-tx: #b42318;
+}
+body { min-width: 1100px; }
+[hidden] { display: none !important; }
+
+/* 2. Toolbar */
+.sch-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.sch-field { display: flex; flex-direction: column; gap: 3px; min-width: 150px; }
+.sch-field label { font-size: 12px; color: var(--sch-muted); }
+.sch-datebox { display: flex; justify-content: space-between; align-items: center; text-align: left; min-width: 230px; cursor: pointer; }
+
+/* 3. Tabel jadwal: kolom kiri (nama) menempel saat scroll ke kanan */
+.sch-table-wrapper { overflow: auto; max-height: calc(100vh - 250px); border: 1px solid var(--sch-line); border-radius: 6px; background: #fff; }
+.sch-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 13px; }
+.sch-table th, .sch-table td { padding: 6px 8px; white-space: nowrap; background: #fff; border-bottom: 1px solid #eef1f5; border-right: 1px solid #f1f3f6; }
+.sch-table thead th { position: sticky; top: 0; z-index: 2; background: #f3f5f8; text-align: center; font-weight: 600; }
+.sch-table .sch-stk { position: sticky; left: 0; z-index: 1; text-align: left; min-width: 280px; max-width: 280px; border-right: 2px solid var(--sch-line); }
+.sch-table thead .sch-stk { z-index: 3; background: #f3f5f8; }
+.sch-table td.sch-day { text-align: center; min-width: 184px; }
+.sch-nm { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.sch-sub { font-size: 12px; color: var(--sch-muted); overflow: hidden; text-overflow: ellipsis; }
+.sch-chip { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #eceff3; color: #4a5563; }
+.sch-chip.kerja { background: var(--sch-kerja-bg); color: var(--sch-kerja-tx); }
+.sch-chip.libur { background: var(--sch-libur-bg); color: var(--sch-libur-tx); }
+.sch-dash { color: #a3acb8; }
+.sch-empty { padding: 28px; text-align: center; color: var(--sch-muted); }
+.sch-pginfo { margin-right: auto; color: var(--sch-muted); font-size: 13px; }
+
+/* 4. Modal */
+.sch-backdrop { position: fixed; inset: 0; background: rgba(20, 30, 45, .45); display: flex; align-items: center; justify-content: center; z-index: 1050; }
+.sch-backdrop.sch-top { z-index: 1060; }
+.sch-modal { background: #fff; border-radius: 8px; width: min(660px, 94vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); }
+.sch-modal.sch-wide { width: min(980px, 96vw); }
+.sch-mh { padding: 14px 18px; border-bottom: 1px solid var(--sch-line); display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 16px; }
+.sch-mb { padding: 16px 18px; overflow: auto; }
+.sch-mf { padding: 12px 18px; border-top: 1px solid var(--sch-line); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.sch-x { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; color: var(--sch-muted); }
+.sch-step { border: 1px solid var(--sch-line); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+.sch-step h4 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.sch-info { color: var(--sch-muted); font-size: 13px; margin-top: 6px; }
+.sch-quota { font-size: 13px; margin: -4px 0 12px; padding: 8px 12px; border-radius: 6px; background: #f3f5f8; }
+.sch-quota.over { background: #fde8e8; color: var(--sch-libur-tx); font-weight: 600; }
+.sch-emp-list { max-height: 150px; overflow: auto; border: 1px solid var(--sch-line); border-radius: 4px; margin-top: 8px; font-size: 13px; }
+.sch-emp-list div { padding: 4px 10px; border-bottom: 1px solid #f0f2f5; }
+.sch-box { margin-top: 10px; padding: 10px 12px; border-radius: 6px; font-size: 13px; }
+.sch-box.err { background: #fde8e8; color: var(--sch-libur-tx); }
+.sch-box.ok { background: #e6f4ea; color: #1e7b3a; }
+.sch-box ul { margin: 6px 0 0; padding-left: 18px; }
+.sch-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+.sch-filters > * { width: auto; min-width: 150px; }
+.sch-pk-wrap { max-height: 46vh; overflow: auto; border: 1px solid var(--sch-line); border-radius: 4px; }
+.sch-pk { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sch-pk th { position: sticky; top: 0; background: #f3f5f8; text-align: left; padding: 7px 8px; }
+.sch-pk td { padding: 6px 8px; border-top: 1px solid #eef1f5; }
+
+/* 5. Kalender rentang (garis warna dari tanggal awal sampai akhir) */
+.sch-calnav { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.sch-cal { display: flex; gap: 28px; justify-content: center; user-select: none; }
+.sch-month { width: 266px; }
+.sch-mtitle { text-align: center; font-weight: 600; margin-bottom: 8px; }
+.sch-grid { display: grid; grid-template-columns: repeat(7, 38px); row-gap: 2px; }
+.sch-dow { text-align: center; font-size: 12px; color: var(--sch-muted); padding: 4px 0; }
+.sch-d { height: 34px; border: 0; background: none; cursor: pointer; font-size: 13px; border-radius: 0; }
+.sch-d:hover { background: #f0f3f7; }
+.sch-d.in { background: var(--sch-primary-soft); color: #0a4cb5; }
+.sch-d.s, .sch-d.e { background: var(--sch-primary); color: #fff; font-weight: 600; }
+.sch-d.s { border-radius: 17px 0 0 17px; }
+.sch-d.e { border-radius: 0 17px 17px 0; }
+.sch-d.s.e { border-radius: 17px; }
+
+/* 6. Baris pengelompokan: Status Karyawan > Cost Center.
+      Teks ikut menempel di kiri saat tabel di-scroll ke kanan. */
+.sch-table tr.sch-g1 td { background: #e4ebf5; font-weight: 700; padding: 8px 8px; }
+.sch-table tr.sch-g2 td { background: #f6f8fb; font-weight: 600; }
+.sch-gt { position: sticky; left: 0; display: inline-block; padding-left: 4px; }
+.sch-gt small { font-weight: 400; color: var(--sch-muted); margin-left: 6px; }
+
+/* 7. Panel filter di dalam modal (tidak melayang, supaya tidak terpotong) */
+.sch-inline .users-filter-panel { position: static; width: 100%; margin-top: 8px; box-shadow: none; max-height: 38vh; overflow: auto; }
+
+/* 8. Clock in / out di bawah kode jadwal */
+.sch-abs { margin-top: 3px; font-size: 11.5px; color: #495057; white-space: nowrap; }
+.sch-late { color: #c62828; font-weight: 700; }   /* terlambat / pulang cepat */
+.sch-miss { color: #ef6c00; font-weight: 700; }   /* belum ada absen, tanggal sudah lewat */
+.sch-legend { font-size: 12px; color: var(--sch-muted); margin: -4px 2px 8px; }

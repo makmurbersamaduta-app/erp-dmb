@@ -2,7 +2,7 @@
 // barang_keluar.js
 // Halaman "Data Barang Keluar"
 // Baca : ga.stock_out_detail_view, ga.stock_out_opsi_filter, ga.stock_view,
-//        ga.v_request_open, ga.v_request_sisa, ga.v_pemohon_gudang, ga.data_barang
+//        ga.v_request_open, ga.v_request_sisa, ga.v_pemohon_stock_out, ga.data_barang
 // Tulis: lewat fungsi database ga.simpan_stock_out / ga.ubah_stock_out
 //        (satu transaksi: semua tersimpan atau tidak sama sekali)
 // WAJIB: jalankan barang_keluar.sql di Supabase terlebih dulu.
@@ -26,7 +26,7 @@ const VIEW_OPSI = "stock_out_opsi_filter";
 const VIEW_STOCK = "stock_view";
 const VIEW_REQUEST_OPEN = "v_request_open";
 const VIEW_REQUEST_SISA = "v_request_sisa";
-const VIEW_PEMOHON = "v_pemohon_gudang";
+const VIEW_PEMOHON = "v_pemohon_stock_out";   // karyawan PKWT/PKWTT aktif per cabang (untuk dropdown Pemohon)
 const RPC_SIMPAN = "simpan_stock_out";
 const RPC_UBAH = "ubah_stock_out";
 const RPC_NEXT_KODE = "next_kode_batch";
@@ -175,6 +175,11 @@ function getSessionBranchId(session) {
 function getCurrentUsername() {
     const nik = getSession()?.nik;
     return nik ? String(nik).trim() : null;
+}
+// ID karyawan (uuid hrd.employees.id) dari erp_session; dipakai sebagai "petugas" saat simpan
+function getCurrentEmployeeId() {
+    const id = getSession()?.employeeId;
+    return id ? String(id).trim() : null;
 }
 function blockPage(message) {
     $("branchTitle").textContent = "-";
@@ -501,7 +506,7 @@ function setupModal() {
         updatePeriode();
     });
     $("fKodeRequest").addEventListener("change", onRequestChange);
-    $("fPemohonSel").addEventListener("change", onPemohonChange);
+    setupPemohonCombo();
     $("btnTambahItem").addEventListener("click", showMissingMenu);
 
     // Kotak saran / menu "Tambah" (dipasang di dalam elemen modal agar tampil di atas modal)
@@ -595,6 +600,8 @@ function resetHeaderFields() {
     ["fKodeRequestTxt", "fPemohonTxt", "fDepartemen", "fArea", "fPeriode"].forEach(id => { $(id).value = ""; });
     $("fKodeRequest").value = "";
     $("fPemohonSel").value = "";
+    $("fPemohonSearch").value = "";
+    hidePemohonList();
     M.request = null;
 }
 
@@ -614,7 +621,7 @@ function applyModeUi() {
 
     // Pemohon: dropdown hanya saat input Non-Request, selain itu teks
     const pemohonSelect = add && !req;
-    $("fPemohonSel").classList.toggle("d-none", !pemohonSelect);
+    $("pemohonCombo").classList.toggle("d-none", !pemohonSelect);
     $("fPemohonTxt").classList.toggle("d-none", pemohonSelect);
 
     $("thQtyInput").textContent = req ? "Permintaan" : "Keluar";
@@ -676,8 +683,8 @@ function updatePeriode() {
 // ===================================================
 // KELOMPOK 11: MODAL - DATA PERMINTAAN & PEMOHON
 // Fungsi: mengisi dropdown "Kode Request" (permintaan aktif cabang ini yang
-// masih punya barang belum terkirim) dan dropdown Pemohon (karyawan bukan
-// role employee). Memilih permintaan memuat barang yang BELUM terkirim lengkap.
+// masih punya barang belum terkirim) dan dropdown Pemohon (karyawan PKWT/PKWTT
+// aktif di cabang tab yang sedang dibuka, bisa dicari). Memilih permintaan memuat barang yang BELUM terkirim lengkap.
 // ===================================================
 async function ensureRequestOpts() {
     if (M.requestOpts) return;
@@ -695,28 +702,116 @@ function populateRequestSelect() {
     const sel = $("fKodeRequest");
     sel.innerHTML = `<option value="">Pilih Kode Request</option>` +
         (M.requestOpts || []).map(o =>
-            `<option value="${esc(o.id)}">${esc(o.kode_batch)}, ${esc(o.nama_pemohon || o.pemohon || "-")}</option>`).join("");
+            `<option value="${esc(o.id)}">${esc(o.kode_batch)}, ${esc(o.nama_pemohon || "-")}</option>`).join("");
     if ((M.requestOpts || []).length === 0) showMsg(`Tidak ada permintaan berstatus "${REQUEST_STATUS_SIAP_KIRIM}" yang masih menunggu pengiriman di cabang ini.`, "info");
 }
 
 async function ensurePemohonOpts() {
     if (M.pemohonOpts) return;
     const { data, error } = await ga().from(VIEW_PEMOHON)
-        .select("nik, nama, department_id, department_name, area_id, area_name")
+        .select("id, nik, nama, branch_id, department_id, department_name, area_id, area_name")
+        .eq("branch_id", state.branchId)
         .order("nama", { ascending: true });
     if (error) throw error;
     M.pemohonOpts = data || [];
 }
 
+// ---------------------------------------------------
+// DROPDOWN PEMOHON DENGAN KOLOM PENCARIAN
+// - fPemohonSearch : kotak ketik untuk mencari (nama / NIK / area / departemen)
+// - fPemohonSel    : input tersembunyi berisi ID karyawan (uuid) yang dipilih
+// - pemohonList    : daftar pilihan; tiap baris menampilkan nama + NIK + area
+// ---------------------------------------------------
+const pemohonUi = { items: [], active: -1 };
+
+// Dipanggil setelah daftar pemohon termuat: kosongkan pilihan lalu isi daftar
 function populatePemohonSelect() {
-    $("fPemohonSel").innerHTML = `<option value="">Pilih Pemohon</option>` +
-        (M.pemohonOpts || []).map(o => `<option value="${esc(o.nik)}">${esc(o.nama)}</option>`).join("");
+    $("fPemohonSel").value = "";
+    $("fPemohonSearch").value = "";
+    renderPemohonList("");
+    hidePemohonList();
+    if ((M.pemohonOpts || []).length === 0) showMsg(`Tidak ada karyawan PKWT/PKWTT aktif di ${branchName()}.`, "info");
+}
+
+// Menggambar daftar sesuai kata kunci
+function renderPemohonList(keyword) {
+    const q = String(keyword || "").trim().toLowerCase();
+    const items = (M.pemohonOpts || []).filter(o => !q ||
+        [o.nama, o.nik, o.area_name, o.department_name].some(v => String(v ?? "").toLowerCase().includes(q)));
+    pemohonUi.items = items;
+    pemohonUi.active = items.length ? 0 : -1;
+    $("pemohonList").innerHTML = items.length
+        ? items.map((o, i) => `<div class="pm-item${i === 0 ? " active" : ""}" data-id="${esc(o.id)}">
+                <div class="pm-name">${esc(o.nama)}</div>
+                <div class="pm-sub">${esc(o.nik)} | Area: ${esc(o.area_name || "-")}</div>
+            </div>`).join("")
+        : `<div class="pm-empty">Pemohon tidak ditemukan.</div>`;
+}
+
+function showPemohonList() { $("pemohonList").hidden = false; }
+function hidePemohonList() { $("pemohonList").hidden = true; }
+
+// Menandai baris yang disorot (navigasi panah atas/bawah)
+function setPemohonActive(i) {
+    const rows = $("pemohonList").querySelectorAll(".pm-item");
+    if (!rows.length) return;
+    pemohonUi.active = Math.max(0, Math.min(rows.length - 1, i));
+    rows.forEach((el, idx) => el.classList.toggle("active", idx === pemohonUi.active));
+    rows[pemohonUi.active].scrollIntoView({ block: "nearest" });
+}
+
+// Memilih pemohon: simpan ID, tampilkan "Nama - Area", isi Departemen & Area
+function pickPemohon(id) {
+    const o = (M.pemohonOpts || []).find(x => x.id === id);
+    $("fPemohonSel").value = o ? o.id : "";
+    $("fPemohonSearch").value = o ? (o.area_name ? `${o.nama} - ${o.area_name}` : o.nama) : "";
+    hidePemohonList();
+    onPemohonChange();
 }
 
 function onPemohonChange() {
-    const opt = (M.pemohonOpts || []).find(o => o.nik === $("fPemohonSel").value);
+    const opt = (M.pemohonOpts || []).find(o => o.id === $("fPemohonSel").value);
     $("fDepartemen").value = opt?.department_name || "";
     $("fArea").value = opt?.area_name || "";
+}
+
+// Memasang semua pendengar kejadian dropdown pemohon (dipanggil sekali saat halaman dibuka)
+function setupPemohonCombo() {
+    const input = $("fPemohonSearch");
+    input.addEventListener("focus", () => {
+        const sudahPilih = !!$("fPemohonSel").value;
+        if (sudahPilih) input.select();
+        renderPemohonList(sudahPilih ? "" : input.value);
+        showPemohonList();
+    });
+    input.addEventListener("input", () => {
+        $("fPemohonSel").value = "";       // mengetik = membatalkan pilihan sebelumnya
+        onPemohonChange();
+        renderPemohonList(input.value);
+        showPemohonList();
+    });
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowDown") { e.preventDefault(); showPemohonList(); setPemohonActive(pemohonUi.active + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); setPemohonActive(pemohonUi.active - 1); }
+        else if (e.key === "Enter") {
+            e.preventDefault();
+            const o = pemohonUi.items[pemohonUi.active];
+            if (o) pickPemohon(o.id);
+        } else if (e.key === "Escape") { hidePemohonList(); }
+    });
+    // mousedown (bukan click) agar terbaca sebelum kotak ketik kehilangan fokus
+    $("pemohonList").addEventListener("mousedown", (e) => {
+        const row = e.target.closest(".pm-item");
+        if (!row) return;
+        e.preventDefault();
+        pickPemohon(row.dataset.id);
+    });
+    // klik di luar: tutup daftar; kalau belum ada yang dipilih, kosongkan teks pencarian
+    document.addEventListener("mousedown", (e) => {
+        if ($("pemohonCombo").contains(e.target) || $("pemohonList").hidden) return;
+        hidePemohonList();
+        if (!$("fPemohonSel").value) input.value = "";
+    });
 }
 
 async function fetchBarangInfo(kodes) {
@@ -739,7 +834,7 @@ async function onRequestChange() {
     M.request = (M.requestOpts || []).find(o => String(o.id) === id) || null;
     M.rows = [];
     M.sisaItems = [];
-    $("fPemohonTxt").value = M.request ? (M.request.nama_pemohon || M.request.pemohon || "") : "";
+    $("fPemohonTxt").value = M.request ? (M.request.nama_pemohon || "-") : "";
     $("fDepartemen").value = M.request?.department_name || "";
     $("fArea").value = M.request?.area_name || "";
     $("fPeriode").value = M.request?.periode_permintaan || "";
@@ -1143,8 +1238,8 @@ async function saveAdd() {
     if (errs.length === 0) errs.push(...checkGroups(used));
     if (errs.length) { showErrors(errs); return; }
 
-    const username = getCurrentUsername();
-    if (!username) { showMsg("Username (NIK) tidak ditemukan di sesi login. Silakan login ulang, lalu coba lagi.", "danger"); return; }
+    const petugasId = getCurrentEmployeeId();
+    if (!petugasId) { showMsg("ID karyawan (employeeId) tidak ditemukan di sesi login. Silakan login ulang, lalu coba lagi.", "danger"); return; }
 
     const payload = {
         tanggal,
@@ -1152,7 +1247,7 @@ async function saveAdd() {
         is_request: M.isRequest,
         kode_request: M.isRequest ? M.request.kode_batch : null,
         pemohon: M.isRequest ? null : pemohon,
-        petugas: username,
+        petugas: petugasId,
         items: used.map(({ r }) => ({ kode_barang: r.item.kode_barang, qty: r.qty, is_new: r.isNew }))
     };
 
@@ -1244,7 +1339,7 @@ async function openEditModal(batchId) {
     $("fKodeBatch").value = head.kode_batch || "";
     $("fTanggal").value = String(head.tanggal || "").slice(0, 10);
     $("fKodeRequestTxt").value = head.kode_request || "";
-    $("fPemohonTxt").value = head.nama_pemohon || head.pemohon || "";
+    $("fPemohonTxt").value = head.nama_pemohon || "-";
     $("fDepartemen").value = head.department_name || "";
     $("fArea").value = head.area_name || "";
     $("fPeriode").value = head.periode_request || "";

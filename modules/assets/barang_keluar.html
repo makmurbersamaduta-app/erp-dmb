@@ -171,6 +171,20 @@
         }
         .md-input:focus { border-color: var(--ct-primary); }
         .md-input[readonly], .md-input:disabled { background: #f4f7fb; }
+        /* --- Dropdown Pemohon (dengan pencarian) --- */
+        .pm-combo { position: relative; }
+        .pm-list {
+            position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px; max-height: 250px; overflow-y: auto;
+            background: #fff; border: 1px solid var(--ct-border); border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12); z-index: 20;
+        }
+        .pm-list[hidden] { display: none; }
+        .pm-item { padding: 7px 10px; cursor: pointer; border-bottom: 1px solid #f0f3f8; }
+        .pm-item:last-child { border-bottom: 0; }
+        .pm-item.active, .pm-item:hover { background: var(--ct-bg-soft); }
+        .pm-name { font-size: 13.5px; font-weight: 600; color: var(--ct-text-main); }
+        .pm-sub { font-size: 11.5px; color: var(--ct-text-muted); }
+        .pm-empty { padding: 10px; font-size: 13px; color: var(--ct-text-muted); }
         .md-hint { font-size: 11.5px; color: var(--ct-text-muted); margin-top: 3px; }
         .mi-table-wrapper { overflow-x: auto; }
         .mi-table { width: 100%; min-width: 1120px; border-collapse: separate; border-spacing: 0; font-size: 13.5px; }
@@ -347,8 +361,12 @@
                     <!-- Baris 2: Pemohon, Departemen, Area, Periode -->
                     <div class="row g-3 mb-3">
                         <div class="col-lg-4 col-md-6">
-                            <label class="md-label" for="fPemohonSel">Pemohon</label>
-                            <select class="md-input d-none" id="fPemohonSel"><option value="">Pilih Pemohon</option></select>
+                            <label class="md-label" for="fPemohonSearch">Pemohon</label>
+                            <div class="pm-combo d-none" id="pemohonCombo">
+                                <input type="text" class="md-input" id="fPemohonSearch" placeholder="Cari nama / NIK / area..." autocomplete="off">
+                                <input type="hidden" id="fPemohonSel">
+                                <div class="pm-list" id="pemohonList" hidden></div>
+                            </div>
                             <input type="text" class="md-input" id="fPemohonTxt" readonly>
                         </div>
                         <div class="col-lg-3 col-md-6">

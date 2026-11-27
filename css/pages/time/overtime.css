@@ -1,0 +1,92 @@
+/* ===================================================
+   OVERTIME PAGE - overtime.css
+   Dipakai BERSAMA users.css (header, toolbar, tabel, pagination, filter sudah ada di sana).
+   File ini hanya berisi tambahan khusus halaman Lembur.
+   =================================================== */
+
+/* Tombol "Lembur" di toolbar (didorong ke kanan) */
+.btn-lembur {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--users-primary); color: #fff; border: none;
+    border-radius: var(--users-radius); padding: 9px 20px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-lembur:hover { background: var(--users-primary-dark); }
+
+/* Panel filter dilebarkan supaya kalender muat */
+.users-filter-panel { width: 320px; }
+
+/* Kolom sticky: NAMA di kiri, Aksi di kanan */
+.ot-table th.sticky-left, .ot-table td.sticky-left {
+    position: sticky; left: 0; background: #fff; z-index: 5;
+    min-width: 200px; box-shadow: 2px 0 0 var(--users-border);
+}
+.ot-table thead th.sticky-left { background: var(--users-bg-soft); z-index: 12; }
+.ot-table th.sticky-right, .ot-table td.sticky-right {
+    position: sticky; right: 0; background: #fff; z-index: 5;
+    min-width: 150px; box-shadow: -2px 0 0 var(--users-border); text-align: center;
+}
+.ot-table thead th.sticky-right { background: var(--users-bg-soft); z-index: 12; }
+.ot-table tbody tr:hover td.sticky-left, .ot-table tbody tr:hover td.sticky-right { background: #f7fafc; }
+.ot-table td, .ot-table th { white-space: nowrap; }
+.ot-sub { display: block; font-size: 12px; color: var(--users-text-muted); }
+.ot-num { text-align: center; }
+
+/* Badge status */
+.badge-status { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.badge-Diajukan  { background: #fff3cd; color: #8a6d0b; }
+.badge-Koreksi   { background: #ffe5d0; color: #a14a05; }
+.badge-Disetujui { background: #d9f2e0; color: #1e7a37; }
+.badge-Ditolak   { background: #fbdcdc; color: #b02a2a; }
+
+/* Tombol aksi di tabel */
+.btn-aksi { border: 1px solid var(--users-border); background: #fff; border-radius: 6px;
+            padding: 4px 9px; font-size: 12px; cursor: pointer; margin: 0 1px; }
+.btn-aksi:hover { border-color: var(--users-primary); }
+.btn-aksi.approve { color: var(--users-success); }
+.btn-aksi.reject  { color: var(--users-danger); }
+
+/* Kalender filter tanggal (rentang) */
+.cal { user-select: none; }
+.cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
+.cal-nav { border: none; background: none; cursor: pointer; color: var(--users-text-muted); padding: 2px 8px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; }
+.cal-dow { text-align: center; font-size: 11px; color: var(--users-text-muted); padding: 2px 0; }
+.cal-day { text-align: center; font-size: 12.5px; height: 30px; line-height: 30px; cursor: pointer; position: relative; }
+.cal-day.empty { cursor: default; }
+/* garis/pita rentang tanggal */
+.cal-day.in-range { background: #cfe0f3; }
+.cal-day.range-start, .cal-day.range-end { background: var(--users-primary); color: #fff; font-weight: 600; }
+.cal-day.range-start { border-radius: 15px 0 0 15px; }
+.cal-day.range-end   { border-radius: 0 15px 15px 0; }
+.cal-day.range-start.range-end { border-radius: 15px; }
+.cal-day:not(.empty):not(.range-start):not(.range-end):hover { background: var(--users-bg-soft); }
+.cal-info { font-size: 12px; color: var(--users-text-muted); margin-top: 6px; }
+
+/* Modal: kolom karyawan dengan pencarian */
+.combo { position: relative; }
+.combo-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 2000; background: #fff;
+              border: 1px solid var(--users-border); border-radius: 6px; max-height: 220px; overflow-y: auto;
+              box-shadow: 0 8px 24px rgba(31,45,61,.12); }
+.combo-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eef2f6; }
+.combo-item:last-child { border-bottom: none; }
+.combo-item:hover { background: var(--users-bg-soft); }
+.combo-item .nm { font-weight: 600; font-size: 13.5px; }
+.combo-item .sb { font-size: 12px; color: var(--users-text-muted); }
+.combo-empty { padding: 10px 12px; font-size: 13px; color: var(--users-text-muted); }
+
+.ot-modal .form-label { font-size: 13px; font-weight: 600; color: var(--users-text-main); margin-bottom: 4px; }
+.ot-modal .req { color: var(--users-danger); }
+.ot-modal .ot-subhead { font-size: 13px; font-weight: 700; color: var(--users-primary-dark);
+                        margin: 14px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--users-border); }
+.ot-hint { font-size: 12px; color: var(--users-text-muted); margin-top: 4px; }
+.ot-msg { background: #fbdcdc; color: #b02a2a; border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+
+/* Modal detail (read-only) */
+.dt-row { display: flex; padding: 7px 0; border-bottom: 1px solid #eef2f6; font-size: 13.5px; }
+.dt-row .k { width: 190px; flex-shrink: 0; color: var(--users-text-muted); }
+.dt-row .v { flex: 1; color: var(--users-text-main); word-break: break-word; }
+
+/* Footer halaman ini hanya berisi info jumlah data (tidak ada tombol simpan) */
+.users-main { padding-bottom: 20px; }

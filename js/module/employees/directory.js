@@ -17,7 +17,8 @@ let masterCache = {
     departments: [],
     areas: [],
     bagians: [],
-    jabatans: []
+    jabatans: [],
+    structures: []   // public.cost_center_structures: cost_center_id, area_id, dept_id, jabatan_id
 };
 
 // User Profile & Role Global
@@ -407,6 +408,43 @@ function renderTableHeader() {
 // ============================================================================
 // 3. LOAD DATA MASTER & DATA KARYAWAN
 // ============================================================================
+// Ambil SEMUA baris struktur cost center (Supabase membatasi 1 request = 1000 baris)
+async function fetchAllStructures() {
+    const all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient.from("cost_center_structures")
+            .select("*").order("id", { ascending: true }).range(from, from + 999);
+        if (error) { console.error("Gagal mengambil cost_center_structures:", error); break; }
+        all.push(...(data || []));
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return all;
+}
+
+// Susun ulang kolom isian agar mengikuti urutan alur filter tanpa menggeser field lain:
+// kolom-kolom itu hanya bertukar tempat satu sama lain. Dilewati (dengan peringatan di console)
+// jika struktur HTML tidak sesuai, sehingga tampilan tidak pernah rusak.
+function reorderFieldsInPlace(ids) {
+    const isCol = el => Array.from(el.classList).some(c => /^col(-(sm|md|lg|xl|xxl))?(-\d+|-auto)?$/.test(c));
+    const colOf = id => {
+        let n = document.getElementById(id);
+        while (n && n !== document.body && !isCol(n)) n = n.parentElement;
+        return n && n !== document.body ? n : null;
+    };
+    const cols = ids.map(colOf);
+    const single = cols.every((c, i) => c && ids.filter(id => c.contains(document.getElementById(id))).length === 1);
+    if (!single || new Set(cols).size !== cols.length) {
+        console.warn("[Urutan filter] struktur kolom tidak sesuai, urutan tampilan tidak diubah:", ids);
+        return;
+    }
+    const slots = cols.map(c => { const m = document.createComment(""); c.parentNode.insertBefore(m, c); return m; });
+    cols.forEach(c => c.remove());
+    slots.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+    cols.forEach((c, i) => slots[i].replaceWith(c));
+}
+
 async function loadMasterData() {
     try {
         const [b, cc, d, a, bg, j] = await Promise.all([
@@ -424,6 +462,7 @@ async function loadMasterData() {
         masterCache.areas = a.data || [];
         masterCache.bagians = bg.data || [];
         masterCache.jabatans = j.data || [];
+        masterCache.structures = await fetchAllStructures();
 
         populateFilterDropdowns();
     } catch (err) {
@@ -569,6 +608,7 @@ function resetAllFilters() {
         Array.from(el.options).forEach(o => { o.selected = (id === "filterStatusData" && o.value === "active"); });
         refreshMultiFilter(id);
     });
+    refreshFilterCascade();   // daftar Cost Center/Area/Departemen/Jabatan kembali lengkap
     renderDirectoryTable();
 }
 
@@ -585,6 +625,50 @@ function updateFilterBadge() {
     });
     badge.textContent = n;
     badge.classList.toggle("d-none", n === 0);
+}
+
+// Isi ulang opsi satu filter checklist, pilihan yang masih ada di daftar baru tetap tercentang
+function setFilterOptions(id, list, valKey, textKey, defaultText) {
+    const prev = getMultiValues(id) || [];
+    fillSelectOptions(id, list, valKey, textKey, defaultText);
+    const el = document.getElementById(id);
+    if (!el) return;
+    Array.from(el.options).forEach(o => { o.selected = o.value !== "" && prev.includes(o.value); });
+    refreshMultiFilter(id);
+}
+
+// Alur filter berantai: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Tanpa centang di induk = daftar anak tidak dibatasi oleh induk itu. Beberapa induk dicentang = gabungan.
+function refreshFilterCascade() {
+    const sel = id => getMultiValues(id) || [];
+    const idsOf = (rows, f) => new Set(rows.map(r => String(r[f])));
+
+    // 1. Cost Center <- Cabang (cost_centers.branch_id)
+    const brSel = sel("filterBranch");
+    const ccList = brSel.length ? masterCache.cost_centers.filter(c => brSel.includes(String(c.branch_id))) : masterCache.cost_centers;
+    setFilterOptions("filterCostCenter", ccList, "id", "costcenter_name", "-- Semua Cost Center --");
+    const ccNow = sel("filterCostCenter");
+    const ccSet = ccNow.length ? ccNow : (brSel.length ? ccList.map(c => String(c.id)) : null);
+
+    // 2. Area <- Cost Center (cost_center_structures)
+    let rows = masterCache.structures;
+    if (ccSet) rows = rows.filter(r => ccSet.includes(String(r.cost_center_id)));
+    const areaIds = idsOf(rows, "area_id");
+    setFilterOptions("filterArea", ccSet ? masterCache.areas.filter(a => areaIds.has(String(a.id))) : masterCache.areas, "id", "area_name", "-- Semua Area --");
+    const areaNow = sel("filterArea");
+    if (areaNow.length) rows = rows.filter(r => areaNow.includes(String(r.area_id)));
+
+    // 3. Departemen <- Cost Center + Area
+    const deptLimited = !!ccSet || areaNow.length > 0;
+    const deptIds = idsOf(rows, "dept_id");
+    setFilterOptions("filterDept", deptLimited ? masterCache.departments.filter(d => deptIds.has(String(d.id))) : masterCache.departments, "id", "department_name", "-- Semua Departemen --");
+    const deptNow = sel("filterDept");
+    if (deptNow.length) rows = rows.filter(r => deptNow.includes(String(r.dept_id)));
+
+    // 4. Jabatan <- Cost Center + Area + Departemen
+    const jabLimited = deptLimited || deptNow.length > 0;
+    const jabIds = idsOf(rows, "jabatan_id");
+    setFilterOptions("filterJabatan", jabLimited ? masterCache.jabatans.filter(j => jabIds.has(String(j.id))) : masterCache.jabatans, "id", "jabatan_name", "-- Semua Jabatan --");
 }
 
 function populateFilterDropdowns() {
@@ -996,6 +1080,15 @@ function setupEventListeners() {
         document.querySelectorAll(".mf-panel").forEach(p => { p.style.display = "none"; });
     });
 
+    // Urutan tampilan filter mengikuti alur: Cabang, Cost Center, Area, Departemen, Jabatan
+    reorderFieldsInPlace(["filterBranch", "filterCostCenter", "filterArea", "filterDept", "filterJabatan"]);
+
+    // Perubahan Cabang/Cost Center/Area/Departemen memperbarui daftar di bawahnya
+    // (didaftarkan SEBELUM listener render, supaya tabel memakai pilihan yang sudah dirapikan)
+    ["filterBranch", "filterCostCenter", "filterArea", "filterDept"].forEach(id => {
+        document.getElementById(id)?.addEventListener("change", refreshFilterCascade);
+    });
+
     document.querySelectorAll(".filter-dropdown-menu select").forEach(s => {
         s.addEventListener("change", renderDirectoryTable);
     });
@@ -1032,6 +1125,60 @@ function navigateToRehire(empId) {
 // ============================================================================
 // 8. LOGIKA DAN FORM MODAL MUTASI (NIK DIGENERATE MANUAL VIA TOMBOL)
 // ============================================================================
+// Penempatan tersimpan karyawan yang sedang dimutasi: nilai lamanya tetap tampil
+// ("(tidak terdaftar)") selama induknya belum diganti.
+let mutUsed = {};
+
+function mutStructList(list, ids, usedId, nameKey, keepUsed) {
+    return optListActive(list, usedId, nameKey)
+        .filter(m => ids.has(String(m.id)) || (keepUsed && usedId != null && String(m.id) === String(usedId)))
+        .map(m => ids.has(String(m.id)) ? m : { ...m, [nameKey]: `${m[nameKey]} (tidak terdaftar)` });
+}
+
+function setMutOptions(id, list, valKey, textKey, placeholder, selected) {
+    fillSelectOptions(id, list, valKey, textKey, placeholder);
+    const el = document.getElementById(id);
+    const sel = selected === null || selected === undefined ? "" : String(selected);
+    el.value = Array.from(el.options).some(o => o.value === sel) ? sel : "";
+}
+
+// Alur berantai di modal mutasi: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Argumen (opsional) = nilai yang ingin dipilih; jika kosong dipakai pilihan saat ini (dipertahankan jika masih valid).
+function refreshMutasiCascade(selCc, selArea, selDept, selJab) {
+    const u = mutUsed || {};
+    const val = id => document.getElementById(id).value;
+    const pick = (arg, id) => (arg !== undefined ? arg : val(id));
+    const same = (a, b) => String(a) === String(b);
+    const ids = (cc, area, dept, field) => {
+        const set = new Set();
+        masterCache.structures.forEach(st => {
+            if (!same(st.cost_center_id, cc)) return;
+            if (area && !same(st.area_id, area)) return;
+            if (dept && !same(st.dept_id, dept)) return;
+            set.add(String(st[field]));
+        });
+        return set;
+    };
+    const b = val("mut_branch");
+
+    setMutOptions("mut_cc", optListActive(masterCache.cost_centers, u.costcenter_id, "costcenter_name").filter(c => b && same(c.branch_id, b)), "id", "costcenter_name", "-- Pilih Cost Center --", pick(selCc, "mut_cc"));
+    const cc = val("mut_cc");
+
+    setMutOptions("mut_area", mutStructList(masterCache.areas, cc ? ids(cc, "", "", "area_id") : new Set(), u.area_id, "area_name", cc && same(cc, u.costcenter_id)), "id", "area_name", "-- Pilih Area --", pick(selArea, "mut_area"));
+    const area = val("mut_area");
+
+    setMutOptions("mut_dept", mutStructList(masterCache.departments, area ? ids(cc, area, "", "dept_id") : new Set(), u.departemen_id, "department_name", area && same(cc, u.costcenter_id) && same(area, u.area_id)), "id", "department_name", "-- Pilih Departemen --", pick(selDept, "mut_dept"));
+    const dept = val("mut_dept");
+
+    setMutOptions("mut_jabatan", mutStructList(masterCache.jabatans, dept ? ids(cc, area, dept, "jabatan_id") : new Set(), u.jabatan_id, "jabatan_name", dept && same(cc, u.costcenter_id) && same(area, u.area_id) && same(dept, u.departemen_id)), "id", "jabatan_name", "-- Pilih Jabatan --", pick(selJab, "mut_jabatan"));
+}
+
+// Dipanggil saat Cabang / Cost Center / Area / Departemen di modal mutasi berubah
+function onMutasiPlacementChange() {
+    refreshMutasiCascade();
+    onMutasiStatusOrBranchChange();
+}
+
 function openMutasiModal(empId) {
     const emp = directoryEmployees.find(e => String(e.id) === String(empId));
     if (!emp) return;
@@ -1048,23 +1195,19 @@ function openMutasiModal(empId) {
     document.getElementById("mut_emp_name").value = `${emp.nama} (${emp.nik_karyawan})`;
     document.getElementById("mut_prev_status").value = assign?.status_karyawan || "";
 
+    mutUsed = assign || {};
     fillSelectOptions("mut_branch", optListActive(masterCache.branches, assign?.branch_id, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
-    fillSelectOptions("mut_cc", optListActive(masterCache.cost_centers, assign?.costcenter_id, "costcenter_name"), "id", "costcenter_name", "-- Pilih Cost Center --");
-    fillSelectOptions("mut_dept", optListActive(masterCache.departments, assign?.departemen_id, "department_name"), "id", "department_name", "-- Pilih Departemen --");
-    fillSelectOptions("mut_area", optListActive(masterCache.areas, assign?.area_id, "area_name"), "id", "area_name", "-- Pilih Area --");
     fillSelectOptions("mut_bagian", optListActive(masterCache.bagians, assign?.bagian_id, "bagian_name"), "id", "bagian_name", "-- Pilih Bagian --");
-    fillSelectOptions("mut_jabatan", optListActive(masterCache.jabatans, assign?.jabatan_id, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
 
     if (assign) {
         if (document.getElementById("mut_branch")) document.getElementById("mut_branch").value = assign.branch_id || "";
-        if (document.getElementById("mut_cc")) document.getElementById("mut_cc").value = assign.costcenter_id || "";
-        if (document.getElementById("mut_dept")) document.getElementById("mut_dept").value = assign.departemen_id || "";
-        if (document.getElementById("mut_area")) document.getElementById("mut_area").value = assign.area_id || "";
         if (document.getElementById("mut_bagian")) document.getElementById("mut_bagian").value = assign.bagian_id || "";
-        if (document.getElementById("mut_jabatan")) document.getElementById("mut_jabatan").value = assign.jabatan_id || "";
         if (document.getElementById("mut_status_karyawan")) document.getElementById("mut_status_karyawan").value = assign.status_karyawan || "PKWT";
         if (document.getElementById("mut_no_absen_stg")) document.getElementById("mut_no_absen_stg").value = emp.no_absen_stg || "";
     }
+
+    // Cost Center -> Area -> Departemen -> Jabatan terisi berantai dari penempatan saat ini
+    refreshMutasiCascade(assign?.costcenter_id || "", assign?.area_id || "", assign?.departemen_id || "", assign?.jabatan_id || "");
 
     document.getElementById("mut_start_date").value = new Date().toISOString().split('T')[0];
 
@@ -1340,6 +1483,35 @@ async function handleSaveResign(e) {
         if (errAssign) throw errAssign;
 
         // ===================================================
+        // JADWAL POLA KARYAWAN: tutup semua pola yang masih aktif.
+        //  1) Pola yang sudah mulai berlaku pada/sebelum tanggal keluar:
+        //     is_active = false dan berlaku_sampai = tanggal keluar.
+        //  2) Pola yang baru mulai SETELAH tanggal keluar: cukup dinonaktifkan
+        //     (berlaku_sampai tidak boleh lebih kecil dari berlaku_mulai).
+        // Kalau gagal, resign tetap berhasil dan admin diberi peringatan.
+        // ===================================================
+        let jadwalWarning = "";
+        try {
+            if (endDate) {
+                const { error: pola1Err } = await supabaseClient.schema('hrd').from('jadwal_pola_karyawan')
+                    .update({ is_active: false, berlaku_sampai: endDate })
+                    .eq('employee_id', empId)
+                    .eq('is_active', true)
+                    .lte('berlaku_mulai', endDate);
+                if (pola1Err) throw pola1Err;
+
+                const { error: pola2Err } = await supabaseClient.schema('hrd').from('jadwal_pola_karyawan')
+                    .update({ is_active: false })
+                    .eq('employee_id', empId)
+                    .eq('is_active', true);
+                if (pola2Err) throw pola2Err;
+            }
+        } catch (e) {
+            console.error("Gagal menutup jadwal pola karyawan:", e);
+            jadwalWarning = "\n\nPERINGATAN: jadwal pola karyawan GAGAL dinonaktifkan otomatis (" + (e.message || e) + "). Periksa manual lewat halaman Jadwal Kerja.";
+        }
+
+        // ===================================================
         // PERBAIKAN BUG: sebelumnya resign HANYA menonaktifkan data
         // kepegawaian (employees.is_active, employee_assignments),
         // tidak pernah menyentuh akun login (public.users.auth_uid).
@@ -1375,7 +1547,7 @@ async function handleSaveResign(e) {
         }
 
         bootstrap.Modal.getInstance(document.getElementById("modalResignKaryawan")).hide();
-        alert("Karyawan berhasil di-set Resign / Non-Aktif." + authDeactivateWarning);
+        alert("Karyawan berhasil di-set Resign / Non-Aktif." + authDeactivateWarning + jadwalWarning);
         await loadDirectoryData();
 
     } catch (err) {
@@ -1432,27 +1604,27 @@ function injectActionModals() {
                             <div class="row g-2">
                                 <div class="col-md-6 mb-2">
                                     <label class="form-label small fw-bold">Cabang Baru <span class="text-danger">*</span></label>
-                                    <select id="mut_branch" class="form-select form-select-sm" onchange="onMutasiStatusOrBranchChange()" required></select>
+                                    <select id="mut_branch" class="form-select form-select-sm" onchange="onMutasiPlacementChange()" required></select>
                                 </div>
                                 <div class="col-md-6 mb-2">
                                     <label class="form-label small fw-bold">Cost Center Baru <span class="text-danger">*</span></label>
-                                    <select id="mut_cc" class="form-select form-select-sm" required></select>
-                                </div>
-                                <div class="col-md-6 mb-2">
-                                    <label class="form-label small fw-bold">Departemen Baru <span class="text-danger">*</span></label>
-                                    <select id="mut_dept" class="form-select form-select-sm" onchange="onMutasiStatusOrBranchChange()" required></select>
+                                    <select id="mut_cc" class="form-select form-select-sm" onchange="onMutasiPlacementChange()" required></select>
                                 </div>
                                 <div class="col-md-6 mb-2">
                                     <label class="form-label small fw-bold">Area Baru <span class="text-danger">*</span></label>
-                                    <select id="mut_area" class="form-select form-select-sm" required></select>
+                                    <select id="mut_area" class="form-select form-select-sm" onchange="onMutasiPlacementChange()" required></select>
                                 </div>
-                                <div class="col-md-6 mb-2" id="mut_bagian_container" style="display: none;">
-                                    <label class="form-label small fw-bold">Bagian Baru</label>
-                                    <select id="mut_bagian" class="form-select form-select-sm"></select>
+                                <div class="col-md-6 mb-2">
+                                    <label class="form-label small fw-bold">Departemen Baru <span class="text-danger">*</span></label>
+                                    <select id="mut_dept" class="form-select form-select-sm" onchange="onMutasiPlacementChange()" required></select>
                                 </div>
                                 <div class="col-md-6 mb-2">
                                     <label class="form-label small fw-bold">Jabatan Baru <span class="text-danger">*</span></label>
                                     <select id="mut_jabatan" class="form-select form-select-sm" required></select>
+                                </div>
+                                <div class="col-md-6 mb-2" id="mut_bagian_container" style="display: none;">
+                                    <label class="form-label small fw-bold">Bagian Baru</label>
+                                    <select id="mut_bagian" class="form-select form-select-sm"></select>
                                 </div>
                                 <div class="col-md-6 mb-2" id="mut_stg_container" style="display: none;">
                                     <label class="form-label small fw-bold">No Absen STG</label>

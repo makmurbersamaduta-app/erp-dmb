@@ -21,7 +21,8 @@ let referenceData = {
     departments: [],
     jabatans: [],
     areas: [],
-    bagians: []
+    bagians: [],
+    structures: []   // cost_center_structures: cost_center_id, area_id, dept_id, jabatan_id (acuan filter berantai)
 };
 
 let activeFilters = {
@@ -55,6 +56,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setupBackButton();
     setupSearchInput();
     setupFilterToggle();
+    setupFilterCascade();
     setupSaveButton();
     setupCreateAuthButton();
 
@@ -145,7 +147,7 @@ async function loadReferenceData() {
     const [rolesRes, branchesRes, ccRes, deptRes, jabatanRes, areaRes, bagianRes] = await Promise.all([
         supabaseClient.from("roles").select("id, role_name").order("id"),
         supabaseClient.from("branches").select("id, branch_name").eq("is_active", true).order("branch_name"),
-        supabaseClient.from("cost_centers").select("id, costcenter_name").eq("is_active", true).order("costcenter_name"),
+        supabaseClient.from("cost_centers").select("id, costcenter_name, branch_id").eq("is_active", true).order("costcenter_name"),
         supabaseClient.from("departments").select("id, department_name").eq("is_active", true).order("department_name"),
         supabaseClient.from("jabatans").select("id, jabatan_name").eq("is_active", true).order("jabatan_name"),
         supabaseClient.from("areas").select("id, area_name").eq("is_active", true).order("area_name"),
@@ -159,6 +161,23 @@ async function loadReferenceData() {
     referenceData.jabatans = jabatanRes.data || [];
     referenceData.areas = areaRes.data || [];
     referenceData.bagians = bagianRes.data || [];
+    referenceData.structures = await fetchAllStructures();
+}
+
+// Ambil SEMUA baris struktur cost center (Supabase membatasi 1 request = 1000 baris)
+async function fetchAllStructures() {
+    const all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient.from("cost_center_structures")
+            .select("cost_center_id, area_id, dept_id, jabatan_id")
+            .order("id", { ascending: true }).range(from, from + 999);
+        if (error) { console.error("Gagal mengambil cost_center_structures:", error); break; }
+        all.push(...(data || []));
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return all;
 }
 
 // ===================================================
@@ -405,15 +424,73 @@ function updateFilterBadge() {
 
 function renderFilterPanel() {
     renderFilterGroup("filterBranch", referenceData.branches, "id", "branch_name");
-    renderFilterGroup("filterCostCenter", referenceData.costCenters, "id", "costcenter_name");
-    renderFilterGroup("filterDepartemen", referenceData.departments, "id", "department_name");
-    renderFilterGroup("filterJabatan", referenceData.jabatans, "id", "jabatan_name");
-    renderFilterGroup("filterArea", referenceData.areas, "id", "area_name");
     renderFilterGroup("filterBagian", referenceData.bagians, "id", "bagian_name");
     renderFilterGroup("filterRole", referenceData.roles, "id", "role_name");
+
+    // Kelompok berantai dikosongkan dulu supaya centang lama tidak ikut terbawa (mis. saat Reset)
+    CASCADE_GROUPS.slice(1).forEach(g => { const el = document.getElementById(g.id); if (el) el.innerHTML = ""; });
+    refreshFilterCascade(0);
 }
 
-function renderFilterGroup(containerId, list, idField, nameField) {
+// Alur filter berantai: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Tanpa centang di induk = daftar anak tidak dibatasi oleh induk itu. Beberapa induk dicentang = gabungan.
+const CASCADE_GROUPS = [
+    { id: "filterBranch" },
+    { id: "filterCostCenter", list: () => referenceData.costCenters, idField: "id", nameField: "costcenter_name" },
+    { id: "filterArea", list: () => referenceData.areas, idField: "id", nameField: "area_name" },
+    { id: "filterDepartemen", list: () => referenceData.departments, idField: "id", nameField: "department_name" },
+    { id: "filterJabatan", list: () => referenceData.jabatans, idField: "id", nameField: "jabatan_name" }
+];
+
+// changedLevel = indeks kelompok yang baru diubah user; hanya kelompok DI BAWAHNYA yang digambar ulang.
+// Centang anak yang masih valid dipertahankan, yang tidak valid hilang.
+function refreshFilterCascade(changedLevel) {
+    const checked = id => getCheckedValues(id);
+    const idsOf = (rows, f) => new Set(rows.map(r => String(r[f])));
+    const prev = CASCADE_GROUPS.map(g => checked(g.id));   // dibaca SEBELUM ada yang digambar ulang
+    const draw = (level, list) => {
+        if (level <= changedLevel) return;
+        const g = CASCADE_GROUPS[level];
+        renderFilterGroup(g.id, list, g.idField, g.nameField, prev[level]);
+    };
+    const now = level => (level <= changedLevel ? prev[level] : (checked(CASCADE_GROUPS[level].id)));
+
+    // 1. Cost Center <- Cabang (cost_centers.branch_id)
+    const brSel = prev[0];
+    const ccList = brSel.length ? referenceData.costCenters.filter(c => brSel.includes(String(c.branch_id))) : referenceData.costCenters;
+    draw(1, ccList);
+    const ccNow = now(1);
+    const ccSet = ccNow.length ? ccNow : (brSel.length ? ccList.map(c => String(c.id)) : null);
+
+    // 2. Area <- Cost Center (cost_center_structures; satu area tampil sekali)
+    let rows = referenceData.structures;
+    if (ccSet) rows = rows.filter(r => ccSet.includes(String(r.cost_center_id)));
+    const areaIds = idsOf(rows, "area_id");
+    draw(2, ccSet ? referenceData.areas.filter(a => areaIds.has(String(a.id))) : referenceData.areas);
+    const areaNow = now(2);
+    if (areaNow.length) rows = rows.filter(r => areaNow.includes(String(r.area_id)));
+
+    // 3. Departemen <- Cost Center + Area
+    const deptLimited = !!ccSet || areaNow.length > 0;
+    const deptIds = idsOf(rows, "dept_id");
+    draw(3, deptLimited ? referenceData.departments.filter(d => deptIds.has(String(d.id))) : referenceData.departments);
+    const deptNow = now(3);
+    if (deptNow.length) rows = rows.filter(r => deptNow.includes(String(r.dept_id)));
+
+    // 4. Jabatan <- Cost Center + Area + Departemen
+    const jabLimited = deptLimited || deptNow.length > 0;
+    const jabIds = idsOf(rows, "jabatan_id");
+    draw(4, jabLimited ? referenceData.jabatans.filter(j => jabIds.has(String(j.id))) : referenceData.jabatans);
+}
+
+// Setiap centang di Cabang/Cost Center/Area/Departemen memperbarui daftar di bawahnya
+function setupFilterCascade() {
+    CASCADE_GROUPS.slice(0, 4).forEach((g, level) => {
+        document.getElementById(g.id)?.addEventListener("change", () => refreshFilterCascade(level));
+    });
+}
+
+function renderFilterGroup(containerId, list, idField, nameField, checkedIds = []) {
     const container = document.getElementById(containerId);
     if (!container) return; // jaga-jaga kalau HTML belum ditambah grup Area/Bagian
     if (list.length === 0) {
@@ -422,7 +499,7 @@ function renderFilterGroup(containerId, list, idField, nameField) {
     }
     container.innerHTML = list.map(item => `
         <label class="filter-checkbox-item">
-            <input type="checkbox" value="${item[idField]}">
+            <input type="checkbox" value="${item[idField]}" ${checkedIds.includes(String(item[idField])) ? "checked" : ""}>
             <span>${item[nameField]}</span>
         </label>
     `).join("");

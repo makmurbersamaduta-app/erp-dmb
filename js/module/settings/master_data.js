@@ -46,11 +46,95 @@ async function fetchTableData(tableName, schema = 'public') {
 }
 
 async function ensureMasterCacheLoaded() {
-    if (currentEntity === "areas") {
+    if (currentEntity === "branches") {
+        // Jumlah cost center per cabang dihitung dari cost_centers.branch_id
         masterCache.cost_centers = await fetchTableData("cost_centers");
-        masterCache.zonas = await fetchTableData("zonas");
     } else if (currentEntity === "cost_centers") {
-        masterCache.branches = await fetchTableData("branches");
+        // Data pendukung form Cost Center: master, struktur (cost_center_structures),
+        // dan hak edit (fungsi database is_master_data_editor, sama dengan aturan RLS)
+        const [branches, depts, areas, jabs, structs, ed] = await Promise.all([
+            fetchTableData("branches"),
+            fetchTableData("departments"),
+            fetchTableData("areas"),
+            fetchTableData("jabatans"),
+            fetchTableData("cost_center_structures"),
+            supabaseClient.rpc("is_master_data_editor")
+        ]);
+        masterCache.branches = branches;
+        masterCache.departments = depts;
+        masterCache.areas = areas;
+        masterCache.jabatans = jabs;
+        masterCache.cc_structures = structs;
+        masterCache.isEditor = !ed.error && ed.data === true;   // gagal cek = dianggap tidak boleh
+    }
+}
+
+// ---------- Helper checklist & hitungan (Cabang / Cost Center) ----------
+// Hitung jumlah item unik yang terhubung ke satu pemilik (cabang / cost center)
+function countLinks(links, ownerCol, ownerId, itemCol) {
+    const set = new Set();
+    (links || []).forEach(l => { if (l[ownerCol] == ownerId && l[itemCol] != null) set.add(l[itemCol]); });
+    return set.size;
+}
+
+function countBadge(n) {
+    const cls = n > 0 ? "bg-primary-subtle text-primary" : "bg-secondary-subtle text-secondary";
+    return `<span class="badge ${cls}">${n}</span>`;
+}
+
+// Id item yang sudah terhubung ke satu pemilik (utk mencentang checklist saat Edit)
+function selectedLinkIds(links, ownerCol, ownerId, itemCol) {
+    if (ownerId === undefined || ownerId === null) return [];
+    return (links || []).filter(l => l[ownerCol] == ownerId).map(l => l[itemCol]);
+}
+
+// Kotak checklist. items = [{id, label, active}]. Item non-aktif hanya
+// ditampilkan jika sebelumnya sudah tercentang (supaya tidak hilang diam-diam).
+function buildChecklistHtml(group, title, items, selectedIds) {
+    const sel = new Set((selectedIds || []).map(Number));
+    const rows = items
+        .filter(it => it.active || sel.has(Number(it.id)))
+        .map(it => `
+            <div class="form-check">
+                <input class="form-check-input chk-${group}" type="checkbox" id="chk_${group}_${it.id}" value="${it.id}" ${sel.has(Number(it.id)) ? "checked" : ""}>
+                <label class="form-check-label small" for="chk_${group}_${it.id}">${it.label}${it.active ? "" : ' <span class="text-muted">(Non-Aktif)</span>'}</label>
+            </div>`)
+        .join("") || `<div class="small text-muted">Belum ada data.</div>`;
+    return `<div class="mb-3">
+                <label class="small fw-bold d-block mb-1">${title}</label>
+                <div class="border rounded p-2 bg-light" style="max-height: 160px; overflow-y: auto;">${rows}</div>
+            </div>`;
+}
+
+// Ambil id yang tercentang dari satu kelompok checklist
+function getCheckedIds(group) {
+    return [...document.querySelectorAll(`.chk-${group}:checked`)].map(el => parseInt(el.value));
+}
+
+// Samakan isi tabel penghubung dgn centangan terbaru:
+// tambah yg baru dicentang, hapus yg dicopot (dan baris dobel jika ada).
+// Insert dikerjakan DULU baru delete, supaya kalau insert gagal data lama tetap utuh.
+async function syncCategoryLinks(table, ownerCol, ownerId, itemCol, newIds) {
+    const { data: existing, error: errRead } = await supabaseClient
+        .from(table).select(`id, ${itemCol}`).eq(ownerCol, ownerId);
+    if (errRead) throw errRead;
+
+    const wanted = new Set(newIds);
+    const have = new Set();
+    const deleteIds = [];
+    (existing || []).forEach(r => {
+        if (!wanted.has(r[itemCol]) || have.has(r[itemCol])) deleteIds.push(r.id);
+        else have.add(r[itemCol]);
+    });
+    const toInsert = newIds.filter(id => !have.has(id)).map(id => ({ [ownerCol]: ownerId, [itemCol]: id }));
+
+    if (toInsert.length > 0) {
+        const { error } = await supabaseClient.from(table).insert(toInsert);
+        if (error) throw error;
+    }
+    if (deleteIds.length > 0) {
+        const { error } = await supabaseClient.from(table).delete().in("id", deleteIds);
+        if (error) throw error;
     }
 }
 
@@ -100,12 +184,12 @@ function renderMasterTable() {
     if (titleEl) titleEl.innerHTML = titles[currentEntity] || "Master Data";
 
     let headerHtml = `<th style="width: 50px;" class="text-center">No</th>`;
-    if (currentEntity === "branches") headerHtml += `<th>Nama Cabang</th>`;
+    if (currentEntity === "branches") headerHtml += `<th>Nama Cabang</th><th class="text-center">Jumlah Cost Center</th>`;
     else if (currentEntity === "departments") headerHtml += `<th>Nama Departemen</th>`;
-    else if (currentEntity === "cost_centers") headerHtml += `<th>Nama Cost Center</th><th>Cabang</th>`;
+    else if (currentEntity === "cost_centers") headerHtml += `<th>Nama Cost Center</th><th>Cabang</th><th class="text-center">Dept</th><th class="text-center">Area</th><th class="text-center">Jabatan</th>`;
     else if (currentEntity === "jabatans") headerHtml += `<th>Nama Jabatan</th>`;
     else if (currentEntity === "bagians") headerHtml += `<th>Nama Bagian</th>`;
-    else if (currentEntity === "areas") headerHtml += `<th>Nama Area</th><th>Cost Center</th><th>Zona</th>`;
+    else if (currentEntity === "areas") headerHtml += `<th>Nama Area</th>`;
     else if (currentEntity === "zonas") headerHtml += `<th>Nama Zona</th>`;
     
     headerHtml += `<th class="text-center">Status</th><th style="width: 100px;" class="text-center">Aksi</th>`;
@@ -150,18 +234,25 @@ function renderMasterTable() {
         const toggleTitle = isActive ? `Non-aktifkan Data` : `Aktifkan Data`;
 
         bodyHtml += `<tr><td class="text-center">${idx + 1}</td>`;
-        if (currentEntity === "branches") bodyHtml += `<td>${row.branch_name||'-'}</td>`;
+        if (currentEntity === "branches") {
+            const nCc = (masterCache.cost_centers||[]).filter(c => c.branch_id == row.id).length;
+            bodyHtml += `<td>${row.branch_name||'-'}</td><td class="text-center">${countBadge(nCc)}</td>`;
+        }
         else if (currentEntity === "departments") bodyHtml += `<td>${row.department_name||'-'}</td>`;
         else if (currentEntity === "cost_centers") {
             const br = (masterCache.branches||[]).find(b => b.id == row.branch_id);
-            bodyHtml += `<td>${row.costcenter_name||'-'}</td><td>${br?.branch_name||'-'}</td>`;
+            const nDept = countLinks(masterCache.cc_structures, "cost_center_id", row.id, "dept_id");
+            const nArea = countLinks(masterCache.cc_structures, "cost_center_id", row.id, "area_id");
+            const nJab = countLinks(masterCache.cc_structures, "cost_center_id", row.id, "jabatan_id");
+            bodyHtml += `<td>${row.costcenter_name||'-'}</td><td>${br?.branch_name||'-'}</td>
+                <td class="text-center">${countBadge(nDept)}</td>
+                <td class="text-center">${countBadge(nArea)}</td>
+                <td class="text-center">${countBadge(nJab)}</td>`;
         }
         else if (currentEntity === "jabatans") bodyHtml += `<td>${row.jabatan_name||'-'}</td>`;
         else if (currentEntity === "bagians") bodyHtml += `<td>${row.bagian_name||'-'}</td>`;
         else if (currentEntity === "areas") {
-            const cc = (masterCache.cost_centers||[]).find(c => c.id == row.cost_center_id);
-            const zn = (masterCache.zonas||[]).find(z => z.id == row.zona_id);
-            bodyHtml += `<td>${row.area_name||'-'}</td><td>${cc?.costcenter_name||'-'}</td><td>${zn?.zona_name||'-'}</td>`;
+            bodyHtml += `<td>${row.area_name||'-'}</td>`;
         }
         else if (currentEntity === "zonas") bodyHtml += `<td>${row.zona_name||'-'}</td>`;
 
@@ -224,7 +315,8 @@ function renderModalFields(row) {
     let html = "";
     if (currentEntity === "branches") {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.branch_code||''}" required></div>
-                <div class="mb-3"><label class="small fw-bold">Nama Cabang <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.branch_name||''}" required></div>`;
+                <div class="mb-3"><label class="small fw-bold">Nama Cabang <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.branch_name||''}" required></div>`
+            + "";
     } else if (currentEntity === "departments") {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.department_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Departemen <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.department_name||''}" required></div>`;
@@ -232,7 +324,8 @@ function renderModalFields(row) {
         const branchOpts = (masterCache.branches||[]).filter(b => b.is_active !== false).map(b => `<option value="${b.id}" ${row.branch_id == b.id ? 'selected' : ''}>${b.branch_name}</option>`).join('');
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.costcenter_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Cost Center <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.costcenter_name||''}" required></div>
-                <div class="mb-3"><label class="small fw-bold">Cabang <span class="text-danger">*</span></label><select id="f_branch" class="form-select" required><option value="">-- Pilih Cabang --</option>${branchOpts}</select></div>`;
+                <div class="mb-3"><label class="small fw-bold">Cabang <span class="text-danger">*</span></label><select id="f_branch" class="form-select" required><option value="">-- Pilih Cabang --</option>${branchOpts}</select></div>`
+            + `<label class="small fw-bold d-block mb-2">Struktur Area, Departemen dan Jabatan</label><div id="ccStructWrap"></div>`;
     } else if (currentEntity === "jabatans") {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.jabatan_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Jabatan <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.jabatan_name||''}" required></div>`;
@@ -240,17 +333,19 @@ function renderModalFields(row) {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.bagian_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Bagian <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.bagian_name||''}" required></div>`;
     } else if (currentEntity === "areas") {
-        const ccOpts = (masterCache.cost_centers||[]).filter(c => c.is_active !== false).map(c => `<option value="${c.id}" ${row.cost_center_id == c.id ? 'selected' : ''}>${c.costcenter_name}</option>`).join('');
-        const znOpts = (masterCache.zonas||[]).filter(z => z.is_active !== false).map(z => `<option value="${z.id}" ${row.zona_id == z.id ? 'selected' : ''}>${z.zona_name}</option>`).join('');
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.area_code||''}" required></div>
-                <div class="mb-3"><label class="small fw-bold">Nama Area <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.area_name||''}" required></div>
-                <div class="mb-3"><label class="small fw-bold">Cost Center <span class="text-danger">*</span></label><select id="f_cc" class="form-select" required><option value="">-- Pilih --</option>${ccOpts}</select></div>
-                <div class="mb-3"><label class="small fw-bold">Zona <span class="text-danger">*</span></label><select id="f_zn" class="form-select" required><option value="">-- Pilih --</option>${znOpts}</select></div>`;
+                <div class="mb-3"><label class="small fw-bold">Nama Area <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.area_name||''}" required></div>`;
     } else if (currentEntity === "zonas") {
         html = `<div class="mb-3"><label class="small fw-bold">Kode <span class="text-danger">*</span></label><input type="text" id="f_code" class="form-control" value="${row.zona_code||''}" required></div>
                 <div class="mb-3"><label class="small fw-bold">Nama Zona <span class="text-danger">*</span></label><input type="text" id="f_name" class="form-control" value="${row.zona_name||''}" required></div>`;
     }
+    const dlg = document.querySelector("#modalMasterForm .modal-dialog");
+    if (dlg) {
+        dlg.classList.toggle("modal-lg", currentEntity === "cost_centers");
+        dlg.classList.toggle("modal-fullscreen-sm-down", currentEntity === "cost_centers"); // layar penuh di HP
+    }
     document.getElementById("modalMasterFields").innerHTML = html;
+    if (currentEntity === "cost_centers") initCcStructure((masterCache.cc_structures||[]).filter(s => s.cost_center_id == row.id));
 }
 
 function setupFormSubmit() {
@@ -288,32 +383,39 @@ function setupFormSubmit() {
             } else if (currentEntity === "bagians") {
                 payload = { bagian_code: codeVal, bagian_name: nameVal };
             } else if (currentEntity === "areas") {
-                const ccVal = document.getElementById("f_cc")?.value;
-                const znVal = document.getElementById("f_zn")?.value;
-                payload = { 
-                    area_code: codeVal, 
-                    area_name: nameVal, 
-                    cost_center_id: ccVal ? parseInt(ccVal) : null, 
-                    zona_id: znVal ? parseInt(znVal) : null 
-                };
+                payload = { area_code: codeVal, area_name: nameVal };
             } else if (currentEntity === "zonas") {
                 payload = { zona_code: codeVal, zona_name: nameVal };
             }
 
+            // Validasi struktur DULU, sebelum cost center disimpan (jika tidak lengkap, tidak ada yang tersimpan)
+            let structRows = [];
+            if (currentEntity === "cost_centers" && masterCache.isEditor) structRows = structToRows();
+
             let resultError = null;
+            let ownerId = id ? parseInt(id) : null;
 
             if (id) {
                 // Update
                 const { error } = await supabaseClient.from(currentEntity).update(payload).eq("id", parseInt(id));
                 resultError = error;
             } else {
-                // Insert Baru
+                // Insert Baru (minta id baru kembali, dibutuhkan utk menyimpan checklist)
                 payload.is_active = true;
-                const { error } = await supabaseClient.from(currentEntity).insert([payload]);
+                const { data: inserted, error } = await supabaseClient.from(currentEntity).insert([payload]).select("id").single();
                 resultError = error;
+                ownerId = inserted ? inserted.id : null;
+                // Jika langkah checklist di bawah gagal & user klik Simpan lagi,
+                // proses berikutnya jadi Update (bukan Insert dobel).
+                if (ownerId) document.getElementById("master_id").value = ownerId;
             }
 
             if (resultError) throw resultError;
+
+            // Simpan struktur Area-Departemen-Jabatan (satu panggilan, atomik)
+            if (currentEntity === "cost_centers" && masterCache.isEditor) {
+                await saveCcStructure(ownerId, structRows);
+            }
 
             // Tutup Modal & Refresh Data
             const modalEl = document.getElementById("modalMasterForm");
@@ -496,8 +598,8 @@ function renderSupervisorZonesTable() {
             <tr class="text-center">
                 <td>${idx + 1}</td>
                 <td class="text-start fw-semibold">${empLabel}</td>
-                <td>${zona ? zona.zona_name : '-'}</td>
-                <td>${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
+                <td class="text-start">${zona ? zona.zona_name : '-'}</td>
+                <td class="text-start">${dept ? dept.department_name : '<span class="text-danger small">Belum diisi</span>'}</td>
                 <td><span class="badge ${SV_JALUR_BADGE[sz.jalur] || ''}">${SV_JALUR_LABEL[sz.jalur] || sz.jalur}</span></td>
                 <td><span class="badge ${SV_PERAN_BADGE[sz.peran] || ''}">${SV_PERAN_LABEL[sz.peran] || sz.peran}</span></td>
                 <td>${sz.is_active ? '<span class="badge bg-success-subtle text-success">Aktif</span>' : '<span class="badge bg-danger-subtle text-danger">Non-Aktif</span>'}</td>

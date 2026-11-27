@@ -31,6 +31,7 @@ function optList(list, usedId, nameKey) {
 
 let currentAssignmentStartDate = null;   // start_date asli baris penempatan yang sedang diedit
 let currentAssignmentIsMutation = false; // true jika baris itu bertipe MUTATION
+let originalTanggalMasuk = null;        // tanggal masuk saat halaman dibuka (pembanding untuk deteksi perubahan)
 let riwayatAssignments = [];   // semua assignment karyawan, terbaru di atas
 let koreksiMode = null;        // 'cancel_mutation' | 'update_resign_date' | 'cancel_resign'
 
@@ -40,6 +41,7 @@ let masterAreas = [];
 let masterDepartments = [];
 let masterBagians = [];
 let masterJabatans = [];
+let masterStructures = [];   // public.cost_center_structures: cost_center_id, area_id, dept_id, jabatan_id
 
 // ==============================================================================
 // HELPER: Hitung kode PTKP -- konsisten dengan logika di employee_bulk.js
@@ -76,7 +78,45 @@ function updatePtkpDisplay() {
     }
 }
 
+// Ambil SEMUA baris struktur cost center (Supabase membatasi 1 request = 1000 baris)
+async function fetchAllStructures() {
+    const all = [];
+    let from = 0;
+    while (true) {
+        const { data, error } = await supabaseClient.from("cost_center_structures")
+            .select("*").order("id", { ascending: true }).range(from, from + 999);
+        if (error) { console.error("Gagal mengambil cost_center_structures:", error); break; }
+        all.push(...(data || []));
+        if (!data || data.length < 1000) break;
+        from += 1000;
+    }
+    return all;
+}
+
+// Susun ulang kolom isian agar mengikuti urutan alur filter tanpa menggeser field lain:
+// kolom-kolom itu hanya bertukar tempat satu sama lain. Dilewati (dengan peringatan di console)
+// jika struktur HTML tidak sesuai, sehingga tampilan tidak pernah rusak.
+function reorderFieldsInPlace(ids) {
+    const isCol = el => Array.from(el.classList).some(c => /^col(-(sm|md|lg|xl|xxl))?(-\d+|-auto)?$/.test(c));
+    const colOf = id => {
+        let n = document.getElementById(id);
+        while (n && n !== document.body && !isCol(n)) n = n.parentElement;
+        return n && n !== document.body ? n : null;
+    };
+    const cols = ids.map(colOf);
+    const single = cols.every((c, i) => c && ids.filter(id => c.contains(document.getElementById(id))).length === 1);
+    if (!single || new Set(cols).size !== cols.length) {
+        console.warn("[Urutan penempatan] struktur kolom tidak sesuai, urutan tampilan tidak diubah:", ids);
+        return;
+    }
+    const slots = cols.map(c => { const m = document.createComment(""); c.parentNode.insertBefore(m, c); return m; });
+    cols.forEach(c => c.remove());
+    slots.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+    cols.forEach((c, i) => slots[i].replaceWith(c));
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
+    reorderFieldsInPlace(["branch_id", "costcenter_id", "area_id", "departemen_id", "jabatan_id"]);   // urutan tampilan = urutan alur filter
     // 1. Auth Guard
     if (typeof checkAuthGuard === "function") {
         checkAuthGuard();
@@ -169,13 +209,16 @@ async function loadMasterData() {
         fetchMaster("jabatans")
     ]);
 
-    // Populate dropdown statis
+    // Struktur Cost Center -> Area -> Departemen -> Jabatan (acuan semua filter penempatan)
+    masterStructures = await fetchAllStructures();
+
+    // Hanya Cabang yang terisi di awal. Sisanya terisi berantai (lihat refreshPlacementCascade)
     populateSelect("branch_id", optList(masterBranches, usedMaster.branch, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
-    populateSelect("departemen_id", optList(masterDepartments, usedMaster.dept, "department_name"), "id", "department_name", "-- Pilih Departemen --");
-    populateSelect("jabatan_id", optList(masterJabatans, usedMaster.jabatan, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
 
     resetSelect("costcenter_id", "-- Pilih Cost Center --");
     resetSelect("area_id", "-- Pilih Area --");
+    resetSelect("departemen_id", "-- Pilih Departemen --");
+    resetSelect("jabatan_id", "-- Pilih Jabatan --");
     resetSelect("bagian_id", "-- Pilih Bagian --");
 }
 
@@ -306,8 +349,6 @@ async function loadEmployeeData(empId) {
             dept: activeAssign.departemen_id, bagian: activeAssign.bagian_id, jabatan: activeAssign.jabatan_id
         };
         populateSelect("branch_id", optList(masterBranches, usedMaster.branch, "branch_name"), "id", "branch_name", "-- Pilih Cabang --");
-        populateSelect("departemen_id", optList(masterDepartments, usedMaster.dept, "department_name"), "id", "department_name", "-- Pilih Departemen --");
-        populateSelect("jabatan_id", optList(masterJabatans, usedMaster.jabatan, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --");
 
         setInputValue("status_karyawan", activeAssign.status_karyawan);
         setInputValue("branch_id", activeAssign.branch_id);
@@ -318,13 +359,13 @@ async function loadEmployeeData(empId) {
         // Jalankan filter penempatan & bagian secara berjenjang
         handlePlacementAndFiltering();
 
+        // Isi nilai penempatan berurutan sesuai alur filter; tiap langkah membangun ulang daftar anaknya
         setInputValue("costcenter_id", activeAssign.costcenter_id);
-
-        // Re-filter area berdasarkan cost center yang telah terpilih
-        handleAreaFiltering();
+        refreshPlacementCascade();
         setInputValue("area_id", activeAssign.area_id);
-
+        refreshPlacementCascade();
         setInputValue("departemen_id", activeAssign.departemen_id);
+        refreshPlacementCascade();   // mengisi daftar Jabatan (nilai jabatan diisi di bawah)
         setInputValue("bagian_id", activeAssign.bagian_id);
         if (activeAssign.bagian_id && !document.getElementById("bagian_id")?.value) {
             console.warn("[Edit] bagian_id", activeAssign.bagian_id, "tidak ditemukan di master public.bagians");
@@ -334,6 +375,7 @@ async function loadEmployeeData(empId) {
         // bukan tanggal mutasi terakhir.
         const masukRow = findTanggalMasukRow(sortedAssign);
         setInputValue("start_date", (masukRow || activeAssign).start_date);
+        originalTanggalMasuk = (masukRow || activeAssign).start_date || null;
 
         currentAssignmentStartDate = activeAssign.start_date;
         currentAssignmentIsMutation = String(activeAssign.action_type || "").toUpperCase() === "MUTATION";
@@ -415,48 +457,81 @@ function setInputValue(id, val) {
 // ==============================================================================
 // 4. LOGIKA PENEMPATAN, FILTERING DROPDOWN & GENERATE NIK
 // ==============================================================================
-function handleAreaFiltering() {
-    const branchVal = document.getElementById("branch_id")?.value || "";
-    const ccVal = document.getElementById("costcenter_id")?.value || "";
+// Id yang tersedia di cost_center_structures untuk satu kolom (area_id / dept_id / jabatan_id),
+// dibatasi oleh Cost Center (wajib) serta Area dan Departemen (jika sudah dipilih).
+function structureIds(ccId, areaId, deptId, field) {
+    const ids = new Set();
+    masterStructures.forEach(st => {
+        if (String(st.cost_center_id) !== String(ccId)) return;
+        if (areaId && String(st.area_id) !== String(areaId)) return;
+        if (deptId && String(st.dept_id) !== String(deptId)) return;
+        ids.add(String(st[field]));
+    });
+    return ids;
+}
 
-    if (!branchVal) {
-        resetSelect("area_id", "-- Pilih Area --");
-        return;
+// Daftar opsi hasil filter struktur. Nilai yang SAAT INI dipakai karyawan tetap tampil dengan
+// tanda "(tidak terdaftar)" jika tidak ada di struktur, tetapi HANYA selama induknya masih sama
+// dengan penempatan tersimpan (keepUsed). Jika induk diganti, nilai lama itu ikut hilang.
+function structOptList(master, ids, usedId, nameKey, keepUsed) {
+    return optList(master, usedId, nameKey)
+        .filter(m => ids.has(String(m.id)) || (keepUsed && usedId !== null && usedId !== undefined && String(m.id) === String(usedId)))
+        .map(m => ids.has(String(m.id)) ? m : { ...m, [nameKey]: `${m[nameKey]} (tidak terdaftar)` });
+}
+
+// Alur filter berantai: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Induk kosong = semua anaknya dikosongkan. Pilihan anak dipertahankan hanya jika masih valid.
+function refreshPlacementCascade() {
+    const val = id => document.getElementById(id)?.value || "";
+    const same = (a, b) => String(a) === String(b);
+
+    // 1. Cost Center <- Cabang (cost_centers.branch_id)
+    if (!val("branch_id")) {
+        resetSelect("costcenter_id", "-- Pilih Cost Center --");
+    } else {
+        const ccList = optList(masterCostCenters, usedMaster.cc, "costcenter_name").filter(cc => same(cc.branch_id, val("branch_id")));
+        populateSelect("costcenter_id", ccList, "id", "costcenter_name", "-- Pilih Cost Center --");
     }
+    const cc = val("costcenter_id");
 
-    const filteredAreas = optList(masterAreas, usedMaster.area, "area_name").filter(a =>
-        String(a.branch_id) === String(branchVal)
-    );
-    populateSelect("area_id", filteredAreas, "id", "area_name", "-- Pilih Area --");
+    // 2. Area <- Cost Center (cost_center_structures)
+    if (!cc) {
+        resetSelect("area_id", "-- Pilih Area --");
+    } else {
+        const ids = structureIds(cc, "", "", "area_id");
+        populateSelect("area_id", structOptList(masterAreas, ids, usedMaster.area, "area_name", same(cc, usedMaster.cc)), "id", "area_name", "-- Pilih Area --");
+    }
+    const area = val("area_id");
+
+    // 3. Departemen <- Cost Center + Area
+    if (!area) {
+        resetSelect("departemen_id", "-- Pilih Departemen --");
+    } else {
+        const ids = structureIds(cc, area, "", "dept_id");
+        const keep = same(cc, usedMaster.cc) && same(area, usedMaster.area);
+        populateSelect("departemen_id", structOptList(masterDepartments, ids, usedMaster.dept, "department_name", keep), "id", "department_name", "-- Pilih Departemen --");
+    }
+    const dept = val("departemen_id");
+
+    // 4. Jabatan <- Cost Center + Area + Departemen
+    if (!dept) {
+        resetSelect("jabatan_id", "-- Pilih Jabatan --");
+    } else {
+        const ids = structureIds(cc, area, dept, "jabatan_id");
+        const keep = same(cc, usedMaster.cc) && same(area, usedMaster.area) && same(dept, usedMaster.dept);
+        populateSelect("jabatan_id", structOptList(masterJabatans, ids, usedMaster.jabatan, "jabatan_name", keep), "id", "jabatan_name", "-- Pilih Jabatan --");
+    }
 }
 
 async function handlePlacementAndFiltering() {
     const branchVal = document.getElementById("branch_id")?.value || "";
-    const ccSelect = document.getElementById("costcenter_id");
-    const ccVal = ccSelect?.value || "";
-    const deptVal = document.getElementById("departemen_id")?.value || "";
     const statusVal = document.getElementById("status_karyawan")?.value || "";
     const startDateVal = document.getElementById("start_date")?.value || "";
 
     // Jalankan pengecekan tampilan No Absen STG
     toggleNoAbsenStgVisibility();
-    // 1. Filter Cost Center berdasarkan Branch
-    if (!branchVal) {
-        resetSelect("costcenter_id", "-- Pilih Cost Center --");
-        resetSelect("area_id", "-- Pilih Area --");
-    } else {
-        const filteredCC = optList(masterCostCenters, usedMaster.cc, "costcenter_name").filter(cc => String(cc.branch_id) === String(branchVal));
-        populateSelect("costcenter_id", filteredCC, "id", "costcenter_name", "-- Pilih Cost Center --");
-
-        if (filteredCC.some(cc => String(cc.id) === String(ccVal))) {
-            ccSelect.value = ccVal;
-        } else {
-            resetSelect("area_id", "-- Pilih Area --");
-        }
-    }
-
-    // 2. Filter Area berdasarkan Branch & Cost Center
-    handleAreaFiltering();
+    // 1. Filter berantai Cabang -> Cost Center -> Area -> Departemen -> Jabatan
+    refreshPlacementCascade();
 
     // 3. Bagian: daftar SELALU diisi (tidak lagi hanya untuk "Borongan"),
     //    agar data bagian karyawan non-Borongan tetap ter-load dan tidak hilang.
@@ -480,7 +555,7 @@ function setupEventListeners() {
     }
 
     // Listener Perubahan Penempatan & Status untuk Update Cascading (NIK TIDAK lagi diubah otomatis)
-    const placementFields = ["branch_id", "costcenter_id", "departemen_id", "status_karyawan", "start_date"];
+    const placementFields = ["branch_id", "costcenter_id", "area_id", "departemen_id", "status_karyawan", "start_date"];
     placementFields.forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -625,15 +700,34 @@ async function handleFormSubmit(e) {
 
         if (rpcError) throw rpcError;
 
+        // ---------------------------------------------------------------
+        // SINKRON JADWAL POLA: jika tanggal masuk berubah, berlaku_mulai pola
+        // jadwal karyawan (yang dimulai di tanggal masuk lama) ikut diubah.
+        // Tidak dijalankan untuk baris MUTASI (tanggalnya terkunci).
+        // ---------------------------------------------------------------
+        let jadwalWarning = "";
+        const tglMasukBaru = document.getElementById("start_date").value || null;
+        if (!currentAssignmentIsMutation && tglMasukBaru && originalTanggalMasuk && tglMasukBaru !== originalTanggalMasuk) {
+            const { error: polaErr } = await supabaseClient
+                .schema("hrd").from("jadwal_pola_karyawan")
+                .update({ berlaku_mulai: tglMasukBaru })
+                .eq("employee_id", currentEmpId)
+                .eq("berlaku_mulai", originalTanggalMasuk);
+            if (polaErr) {
+                console.error("Gagal menyesuaikan jadwal pola karyawan:", polaErr);
+                jadwalWarning = "\n\nPERINGATAN: tanggal mulai jadwal pola karyawan GAGAL disesuaikan (" + polaErr.message + "). Sesuaikan manual lewat halaman Jadwal Kerja.";
+            }
+        }
+
         if (nikBerubah) {
             alert(
                 "Data Karyawan Berhasil Diperbarui!\n\n" +
                 "PERHATIAN: NIK karyawan ini diubah dari '" + originalNikKaryawan + "' menjadi '" + nikVal + "'.\n" +
                 "Akun login (username & auth) karyawan ini BELUM otomatis mengikuti perubahan ini " +
-                "dan perlu disesuaikan manual oleh Administrator, atau karyawan akan gagal login."
+                "dan perlu disesuaikan manual oleh Administrator, atau karyawan akan gagal login." + jadwalWarning
             );
         } else {
-            alert("Data Karyawan Berhasil Diperbarui!");
+            alert("Data Karyawan Berhasil Diperbarui!" + jadwalWarning);
         }
 
         window.location.href = "directory.html";
@@ -857,6 +951,8 @@ async function submitKoreksi() {
         const actor = `${a.name} (role ${a.roleId})`;
         const last = riwayatAssignments[0];
         let fn, params;
+        const oldResignDate = last?.end_date || null;   // tanggal keluar sebelum dikoreksi (pencocok baris jadwal pola)
+        let newResignDate = null;
 
         if (koreksiMode === "cancel_mutation") {
             fn = "cancel_last_mutation";
@@ -864,6 +960,7 @@ async function submitKoreksi() {
         } else if (koreksiMode === "update_resign_date") {
             const newDate = document.getElementById("korDate").value;
             if (!newDate) throw new Error("Tanggal keluar baru wajib diisi.");
+            newResignDate = newDate;
             fn = "update_resign_date";
             params = { p_employee_id: currentEmpId, p_end_date: newDate, p_actor: actor, p_reason: reason };
         } else if (koreksiMode === "cancel_resign") {
@@ -876,6 +973,30 @@ async function submitKoreksi() {
         const { data, error } = await supabaseClient.schema("hrd").rpc(fn, params);
         if (error) throw error;
         if (data && data.success === false) throw new Error(data.message || "Gagal");
+
+        // ---------------------------------------------------------------
+        // SINKRON JADWAL POLA setelah koreksi resign.
+        // Baris yang dituju = baris pola yang ditutup saat resign
+        // (nonaktif dan berlaku_sampai = tanggal keluar lama).
+        //  - Ubah Tanggal Keluar : berlaku_sampai diganti tanggal keluar baru
+        //  - Batalkan Resign     : pola diaktifkan lagi, berlaku_sampai = null (berlaku seterusnya)
+        // ---------------------------------------------------------------
+        let jadwalWarn = "";
+        if (oldResignDate && (koreksiMode === "update_resign_date" || koreksiMode === "cancel_resign")) {
+            const perubahan = koreksiMode === "update_resign_date"
+                ? { berlaku_sampai: newResignDate }
+                : { is_active: true, berlaku_sampai: null };
+            const { error: polaErr } = await supabaseClient
+                .schema("hrd").from("jadwal_pola_karyawan")
+                .update(perubahan)
+                .eq("employee_id", currentEmpId)
+                .eq("is_active", false)
+                .eq("berlaku_sampai", oldResignDate);
+            if (polaErr) {
+                console.error("Gagal menyesuaikan jadwal pola karyawan:", polaErr);
+                jadwalWarn = "\n\nPERINGATAN: jadwal pola karyawan GAGAL disesuaikan (" + polaErr.message + "). Sesuaikan manual lewat halaman Jadwal Kerja.";
+            }
+        }
 
         // Batal resign: aktifkan kembali akun login (kebalikan dari proses resign)
         let warn = "";
@@ -896,7 +1017,7 @@ async function submitKoreksi() {
             }
         }
 
-        alert("Koreksi berhasil disimpan." + warn);
+        alert("Koreksi berhasil disimpan." + warn + jadwalWarn);
         window.location.reload();
     } catch (err) {
         console.error("Gagal koreksi riwayat:", err);
@@ -927,13 +1048,13 @@ function injectEditMutasiModal() {
                         <div class="col-md-6"><label class="form-label small fw-bold">Status Karyawan <span class="text-danger">*</span></label>
                             <select id="em_status" class="form-select form-select-sm"></select></div>
                         <div class="col-md-6"><label class="form-label small fw-bold">Cabang</label>
-                            <select id="em_branch" class="form-select form-select-sm" onchange="onEmBranchChange()"></select></div>
+                            <select id="em_branch" class="form-select form-select-sm" onchange="refreshEmCascade()"></select></div>
                         <div class="col-md-6"><label class="form-label small fw-bold">Cost Center</label>
-                            <select id="em_cc" class="form-select form-select-sm"></select></div>
-                        <div class="col-md-6"><label class="form-label small fw-bold">Departemen</label>
-                            <select id="em_dept" class="form-select form-select-sm"></select></div>
+                            <select id="em_cc" class="form-select form-select-sm" onchange="refreshEmCascade()"></select></div>
                         <div class="col-md-6"><label class="form-label small fw-bold">Area</label>
-                            <select id="em_area" class="form-select form-select-sm"></select></div>
+                            <select id="em_area" class="form-select form-select-sm" onchange="refreshEmCascade()"></select></div>
+                        <div class="col-md-6"><label class="form-label small fw-bold">Departemen</label>
+                            <select id="em_dept" class="form-select form-select-sm" onchange="refreshEmCascade()"></select></div>
                         <div class="col-md-6"><label class="form-label small fw-bold">Jabatan</label>
                             <select id="em_jabatan" class="form-select form-select-sm"></select></div>
                         <div class="col-md-6"><label class="form-label small fw-bold">Bagian</label>
@@ -962,15 +1083,28 @@ function fillEmSelect(id, items, valKey, textKey, placeholder, selected) {
     el.value = Array.from(el.options).some(o => o.value === sel) ? sel : "";
 }
 
-function refreshEmCascade(selCc, selArea) {
-    const b = document.getElementById("em_branch").value;
-    fillEmSelect("em_cc", optList(masterCostCenters, riwayatAssignments[0]?.costcenter_id, "costcenter_name").filter(c => b && String(c.branch_id) === b), "id", "costcenter_name", "-- Pilih Cost Center --", selCc);
-    fillEmSelect("em_area", optList(masterAreas, riwayatAssignments[0]?.area_id, "area_name").filter(a => b && String(a.branch_id) === b), "id", "area_name", "-- Pilih Area --", selArea);
-}
+// Alur berantai yang sama di modal: Cabang -> Cost Center -> Area -> Departemen -> Jabatan.
+// Argumen (opsional) = nilai yang ingin dipilih; jika kosong dipakai pilihan saat ini (dipertahankan jika masih valid).
+function refreshEmCascade(selCc, selArea, selDept, selJab) {
+    const last = riwayatAssignments[0] || {};
+    const val = id => document.getElementById(id).value;
+    const pick = (arg, id) => (arg !== undefined ? arg : val(id));
+    const same = (a, b) => String(a) === String(b);
+    const b = val("em_branch");
 
-function onEmBranchChange() {
-    // Ganti cabang: cost center & area milik cabang lama otomatis kosong
-    refreshEmCascade("", "");
+    fillEmSelect("em_cc", optList(masterCostCenters, last.costcenter_id, "costcenter_name").filter(c => b && same(c.branch_id, b)), "id", "costcenter_name", "-- Pilih Cost Center --", pick(selCc, "em_cc"));
+    const cc = val("em_cc");
+
+    const areaIds = cc ? structureIds(cc, "", "", "area_id") : new Set();
+    fillEmSelect("em_area", structOptList(masterAreas, areaIds, last.area_id, "area_name", cc && same(cc, last.costcenter_id)), "id", "area_name", "-- Pilih Area --", pick(selArea, "em_area"));
+    const area = val("em_area");
+
+    const deptIds = area ? structureIds(cc, area, "", "dept_id") : new Set();
+    fillEmSelect("em_dept", structOptList(masterDepartments, deptIds, last.departemen_id, "department_name", area && same(cc, last.costcenter_id) && same(area, last.area_id)), "id", "department_name", "-- Pilih Departemen --", pick(selDept, "em_dept"));
+    const dept = val("em_dept");
+
+    const jabIds = dept ? structureIds(cc, area, dept, "jabatan_id") : new Set();
+    fillEmSelect("em_jabatan", structOptList(masterJabatans, jabIds, last.jabatan_id, "jabatan_name", dept && same(cc, last.costcenter_id) && same(area, last.area_id) && same(dept, last.departemen_id)), "id", "jabatan_name", "-- Pilih Jabatan --", pick(selJab, "em_jabatan"));
 }
 
 function openEditMutasi() {
@@ -980,6 +1114,7 @@ function openEditMutasi() {
     // Cost Center & Area di modal ini juga berupa dropdown pencarian
     enhanceSearchableSelect("em_cc");
     enhanceSearchableSelect("em_area");
+    enhanceSearchableSelect("em_dept");
     enhanceSearchableSelect("em_jabatan");
     enhanceSearchableSelect("em_bagian");
 
@@ -988,9 +1123,7 @@ function openEditMutasi() {
     fillEmSelect("em_status", statuses.map(x => ({ v: x, t: x })), "v", "t", "-- Pilih Status --", last.status_karyawan);
 
     fillEmSelect("em_branch", optList(masterBranches, last.branch_id, "branch_name"), "id", "branch_name", "-- Pilih Cabang --", last.branch_id);
-    refreshEmCascade(last.costcenter_id, last.area_id);
-    fillEmSelect("em_dept", optList(masterDepartments, last.departemen_id, "department_name"), "id", "department_name", "-- Pilih Departemen --", last.departemen_id);
-    fillEmSelect("em_jabatan", optList(masterJabatans, last.jabatan_id, "jabatan_name"), "id", "jabatan_name", "-- Pilih Jabatan --", last.jabatan_id);
+    refreshEmCascade(last.costcenter_id, last.area_id, last.departemen_id, last.jabatan_id);
     fillEmSelect("em_bagian", optList(masterBagians, last.bagian_id, "bagian_name"), "id", "bagian_name", "-- Pilih Bagian --", last.bagian_id);
 
     document.getElementById("em_start").value = last.start_date || "";

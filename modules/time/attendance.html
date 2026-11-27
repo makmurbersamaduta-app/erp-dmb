@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Absensi - DMB ERP</title>
+    <!-- Letak file ini: modules/time/attendance.html. JS: js/module/time/attendance.js.
+         Sesuaikan path ../../ bila folder Anda berbeda. Peta (Leaflet) dan pustaka Excel
+         (SheetJS) TIDAK dimuat di sini: keduanya diunduh hanya saat dibutuhkan. -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../css/style.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #1e293b; }
+        .att-header { position: sticky; top: 0; z-index: 30; background: #fff; border-bottom: 1px solid #e2e8f0;
+                      display: flex; align-items: center; gap: 12px; padding: 10px 20px; }
+        .att-header h5 { margin: 0; font-weight: 700; font-size: 1.05rem; }
+        .att-main { padding: 16px 20px 30px; }
+        .att-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+        .att-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid #e2e8f0; }
+        .att-tanggal-box { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #ced4da; border-radius: 6px;
+                           background: #fff; padding: 4px 10px; font-size: .84rem; font-weight: 600; cursor: pointer; min-width: 190px; }
+        .att-tanggal-box:hover { border-color: #0d6efd; }
+        .ts-label { font-size: .78rem; font-weight: 700; margin-bottom: 3px; }
+
+        /* Tabel: kolom nama menempel kiri, kolom Aksi menempel kanan, judul kolom menempel atas */
+        .att-scroll { overflow: auto; max-height: calc(100vh - 235px); }
+        table.att-tabel { border-collapse: separate; border-spacing: 0; min-width: 100%; font-size: .8rem; }
+        .att-tabel th { position: sticky; top: 0; z-index: 3; background: #f8fafc; white-space: nowrap; font-weight: 700;
+                        padding: 9px 12px; border-bottom: 1px solid #e2e8f0; }
+        .att-tabel td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; white-space: nowrap; background: #fff;
+                        color: var(--att-warna, inherit); font-weight: var(--att-bobot, inherit); }
+        .att-tabel tbody tr { cursor: pointer; }
+        .att-tabel tbody tr:hover td { background: #f8fafc; }
+        .att-kiri { position: sticky; left: 0; min-width: 230px; max-width: 280px; z-index: 2; box-shadow: 1px 0 0 #e2e8f0; }
+        th.att-kiri { z-index: 5; }
+        .att-kanan { position: sticky; right: 0; z-index: 2; box-shadow: -1px 0 0 #e2e8f0; text-align: center; }
+        th.att-kanan { z-index: 5; }
+        .att-nik { color: var(--att-warna, #64748b); font-size: .72rem; font-weight: 500; }
+        td.att-aksi { color: initial; font-weight: 500; }
+        /* Penanda baris (satu kelas per baris) */
+        tr.att-row-invalid { --att-warna: #ea580c; --att-bobot: 700; }   /* lokasi absen tidak valid: oranye tebal */
+        tr.att-row-device  { --att-warna: #0d6efd; }                     /* device berbeda: biru */
+        tr.att-row-invalid.att-row-device { --att-warna: #ea580c; }      /* oranye menang atas biru */
+        /* Terlambat / pulang cepat: jam masuk / jam pulang merah tebal */
+        .att-tabel td.att-merah { color: #dc2626; font-weight: 700; }
+
+        /* Kalender pilih rentang tanggal */
+        .att-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .att-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+        .att-cal-judul { text-align: center; font-size: .72rem; font-weight: 700; color: #64748b; padding: 6px 0; }
+        .att-cal-hari { height: 40px; display: flex; align-items: center; justify-content: center; font-size: .84rem; cursor: pointer;
+                        user-select: none; position: relative; }
+        .att-cal-hari.luar { color: #cbd5e1; }
+        .att-cal-hari.hari-ini span { border-bottom: 2px solid #0d6efd; }
+        .att-cal-hari.dalam { background: #dbeafe; }                       /* garis warna dari tanggal awal sampai akhir */
+        .att-cal-hari.awal, .att-cal-hari.akhir { background: #0d6efd; color: #fff; font-weight: 700; }
+        .att-cal-hari.awal { border-radius: 20px 0 0 20px; }
+        .att-cal-hari.akhir { border-radius: 0 20px 20px 0; }
+        .att-cal-hari.awal.akhir { border-radius: 20px; }
+        .att-cal-hari:not(.awal):not(.akhir):not(.dalam):hover { background: #f1f5f9; border-radius: 20px; }
+
+        .att-langkah { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 14px; display: flex; align-items: center;
+                       justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+        .att-langkah .no { width: 26px; height: 26px; border-radius: 50%; background: #e0ecff; color: #0d6efd; font-weight: 700;
+                           display: inline-flex; align-items: center; justify-content: center; font-size: .8rem; margin-right: 8px; }
+        .ts-box { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; max-height: 260px; overflow-y: auto; }
+        .ts-check { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: .84rem; cursor: pointer; margin: 0; }
+        .ts-check:hover { background: #f8fafc; }
+        #detPeta { height: 340px; border-radius: 8px; border: 1px solid #e2e8f0; background: #e2e8f0; }
+        .det-tabel td { padding: 4px 8px; font-size: .82rem; vertical-align: top; }
+        .det-tabel td:first-child { color: #64748b; width: 42%; }
+        .pin-lokasi { font-size: 26px; line-height: 26px; text-align: center; color: #16a34a; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
+        .pin-masuk  { font-size: 22px; line-height: 22px; text-align: center; color: #0d6efd; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
+        .pin-keluar { font-size: 22px; line-height: 22px; text-align: center; color: #dc2626; text-shadow: 0 1px 3px rgba(0,0,0,.35); }
+
+        /* <form> membungkus isi dan tombol modal: harus ikut menjadi kolom flex agar isi modal bisa di-scroll */
+        .modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+        .modal-content > form > .modal-body { overflow-y: auto; flex: 1 1 auto; min-height: 0; }
+        .modal-content > form > .modal-footer { flex-shrink: 0; }
+
+        /* Filter 1 panel (Cabang, Cost Center, Area, Departemen) - pola sama dengan halaman Lembur */
+        .att-filter-wrap { position: relative; }
+        .att-btn-filter { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; background: #fff;
+                          border: 1px solid #ced4da; border-radius: 6px; font-size: .84rem; font-weight: 600; cursor: pointer; }
+        .att-btn-filter:hover { border-color: #0d6efd; }
+        .att-filter-badge { background: #0d6efd; color: #fff; border-radius: 999px; font-size: .7rem; padding: 1px 7px; }
+        .att-filter-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: 300px; max-height: 70vh; overflow-y: auto;
+                            background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; box-shadow: 0 8px 24px rgba(15,23,42,.15); }
+        .att-fg-head { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #fff;
+                       border: none; border-bottom: 1px solid #f1f5f9; font-size: .84rem; font-weight: 700; cursor: pointer; }
+        .att-fg-head i { transition: transform .15s; color: #64748b; }
+        .att-fg-head.expanded i { transform: rotate(180deg); }
+        .att-fg-body { display: none; max-height: 190px; overflow-y: auto; padding: 4px 8px; border-bottom: 1px solid #f1f5f9; }
+        .att-fg-body.expanded { display: block; }
+        .att-fcek { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: .82rem; cursor: pointer; margin: 0; }
+        .att-fcek:hover { background: #f8fafc; }
+        .att-fkosong { font-size: .8rem; color: #94a3b8; padding: 6px; }
+        .att-filter-inline { border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; max-height: 280px; overflow-y: auto; }
+        .att-filter-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e2e8f0; }
+    </style>
+</head>
+<body>
+
+<header class="att-header">
+    <button type="button" class="btn btn-light btn-sm" id="btnKembali" title="Kembali"><i class="fa-solid fa-arrow-left"></i></button>
+    <h5>Laporan Absensi</h5>
+    <div class="ms-auto">
+        <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnExport"><i class="fa-solid fa-file-export me-2"></i>Export Attendance</button>
+    </div>
+</header>
+
+<main class="att-main">
+    <div id="attReadOnlyNote" class="alert alert-secondary py-2 small d-none"><i class="fa-solid fa-lock me-1"></i> Role Anda hanya dapat melihat laporan; tombol Edit tidak tersedia.</div>
+
+    <div class="att-card shadow-sm">
+        <!-- ===================================================
+             TOOLBAR: kotak tanggal (filter), filter Branch/Cost Center/Departemen/Area,
+             pencarian NIK/nama, Atur Kolom
+             =================================================== -->
+        <div class="att-toolbar">
+            <div class="att-tanggal-box" id="attTanggalBox" title="Pilih tanggal">
+                <i class="fa-regular fa-calendar text-primary"></i><span id="attTanggalTeks"></span>
+            </div>
+
+            <!-- SATU tombol Filter berisi Cabang, Cost Center, Area, Departemen (berantai) -->
+            <div class="att-filter-wrap">
+                <button type="button" class="att-btn-filter" id="attFilterBtn">
+                    <i class="fa-solid fa-filter"></i><span>Filter</span>
+                    <span class="att-filter-badge d-none" id="attFilterBadge">0</span>
+                </button>
+                <div class="att-filter-panel d-none" id="attFilterPanel">
+                    <div><button type="button" class="att-fg-head" data-target="attFBranch"><span>Cabang</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="attFBranch"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="attFCc"><span>Cost Center</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="attFCc"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="attFArea"><span>Area</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="attFArea"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="attFDept"><span>Departemen</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="attFDept"></div></div>
+                    <div class="att-filter-foot">
+                        <button type="button" class="btn btn-light btn-sm" id="attFReset">Reset</button>
+                        <button type="button" class="btn btn-primary btn-sm fw-semibold" id="attFApply">Terapkan</button>
+                    </div>
+                </div>
+            </div>
+
+            <input type="text" id="attCari" class="form-control form-control-sm" style="width: 210px;" placeholder="Cari NIK atau nama..." autocomplete="off">
+            <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="btnAturKolom"><i class="fa-solid fa-table-columns me-1"></i>Atur Kolom</button>
+        </div>
+
+        <div class="att-scroll">
+            <table class="att-tabel">
+                <thead id="attHead"></thead>
+                <tbody id="attBody"></tbody>
+            </table>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center p-2 border-top">
+            <span class="small text-muted" id="attInfo"></span>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" id="attPrev"><i class="fa-solid fa-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" id="attNext"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+    <div class="small text-muted mt-2">
+        Klik baris untuk melihat detail dan peta lokasi absen.
+        <span style="color:#ea580c;font-weight:700;">Oranye tebal</span> = lokasi absen tidak valid,
+        <span style="color:#0d6efd;">biru</span> = device berbeda dari absen sebelumnya (device_berbeda = true),
+        <span style="color:#dc2626;font-weight:700;">merah tebal</span> pada jam = terlambat / pulang cepat.
+    </div>
+</main>
+
+
+<!-- ============================================================
+     MODAL KALENDER (dipakai kotak tanggal dan langkah "Select Date" pada export)
+     Pilih tanggal awal lalu tanggal akhir; maksimal 31 hari.
+     ============================================================ -->
+<div class="modal fade" id="modalKalender" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 400px;">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="kalJudul">Pilih Tanggal</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="att-cal-nav">
+                    <button type="button" class="btn btn-light btn-sm" id="kalPrev"><i class="fa-solid fa-chevron-left"></i></button>
+                    <span class="fw-semibold" id="kalBulanTeks"></span>
+                    <button type="button" class="btn btn-light btn-sm" id="kalNext"><i class="fa-solid fa-chevron-right"></i></button>
+                </div>
+                <div class="att-cal-grid" id="kalGrid"></div>
+                <div class="small mt-3 fw-semibold" id="kalRingkas"></div>
+                <div class="small text-danger" id="kalPesan"></div>
+                <div class="small text-muted mt-1">Klik tanggal awal, lalu tanggal akhir. Klik satu tanggal saja untuk satu hari. Maksimal 31 hari.</div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm me-auto" id="btnKalHariIni">Hari Ini</button>
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnKalTerapkan">Terapkan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL EXPORT ATTENDANCE (3 langkah): Select Employee, Select Date, Download
+     ============================================================ -->
+<div class="modal fade" id="modalExport" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Export Attendance</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="att-langkah">
+                    <div><span class="no">1</span><span class="fw-semibold">Karyawan</span>
+                        <div class="small text-muted ms-4 ps-2" id="expRingkasKaryawan">Belum dipilih</div></div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnExpKaryawan"><i class="fa-solid fa-users me-1"></i>Select Employee</button>
+                </div>
+                <div class="att-langkah">
+                    <div><span class="no">2</span><span class="fw-semibold">Tanggal</span>
+                        <div class="small text-muted ms-4 ps-2" id="expRingkasTanggal">Belum dipilih</div></div>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnExpTanggal"><i class="fa-regular fa-calendar me-1"></i>Select Date</button>
+                </div>
+                <div class="att-langkah mb-2">
+                    <div><span class="no">3</span><span class="fw-semibold">Unduh file</span>
+                        <div class="small text-muted ms-4 ps-2">Format Excel (.xlsx); bila gagal dimuat, CSV.</div></div>
+                    <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnExpUnduh" disabled><i class="fa-solid fa-download me-1"></i>Download</button>
+                </div>
+                <div id="expProgres" class="d-none">
+                    <div class="progress" style="height: 8px;"><div class="progress-bar" id="expProgresBar" style="width:0%"></div></div>
+                </div>
+                <div class="small mt-2" id="expPesan"></div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     SUB MODAL PILIH KARYAWAN (filter branch, cost center, departemen, area)
+     ============================================================ -->
+<div class="modal fade" id="modalPilihKaryawan" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Pilih Karyawan</h6>
+                <button type="button" class="btn-close" id="btnEpTutupX"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+                    <button type="button" class="att-btn-filter" id="epFilterBtn">
+                        <i class="fa-solid fa-filter"></i><span>Filter</span>
+                        <span class="att-filter-badge d-none" id="epFilterBadge">0</span>
+                    </button>
+                    <input type="text" id="epCari" class="form-control form-control-sm" style="flex: 1; min-width: 160px;" placeholder="Cari NIK atau nama..." autocomplete="off">
+                </div>
+                <!-- Panel filter (struktur sama dengan filter tabel): Cabang -> Cost Center -> Area -> Departemen -->
+                <div class="att-filter-inline d-none" id="epFilterPanel">
+                    <div><button type="button" class="att-fg-head" data-target="epFBranch"><span>Cabang</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="epFBranch"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="epFCc"><span>Cost Center</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="epFCc"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="epFArea"><span>Area</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="epFArea"></div></div>
+                    <div><button type="button" class="att-fg-head" data-target="epFDept"><span>Departemen</span><i class="fa-solid fa-chevron-down"></i></button>
+                        <div class="att-fg-body" id="epFDept"></div></div>
+                    <div class="att-filter-foot">
+                        <button type="button" class="btn btn-light btn-sm" id="epFReset">Reset</button>
+                        <button type="button" class="btn btn-primary btn-sm fw-semibold" id="epFApply">Terapkan</button>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <span class="small"><b id="epJumlah">0</b> karyawan dipilih</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnEpSemua">Pilih semua hasil filter</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnEpKosong">Kosongkan pilihan</button>
+                    </div>
+                </div>
+                <div class="border rounded" style="max-height: 340px; overflow-y: auto;">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size:.82rem;">
+                        <thead class="table-light"><tr>
+                            <th style="width:40px;" class="text-center"><input type="checkbox" class="form-check-input" id="epCekHalaman" title="Pilih semua di halaman ini"></th>
+                            <th>NIK</th><th>Nama</th><th>Cost Center</th><th>Area</th>
+                        </tr></thead>
+                        <tbody id="epBody"></tbody>
+                    </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="small text-muted" id="epInfo"></span>
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-secondary" id="epPrev"><i class="fa-solid fa-chevron-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" id="epNext"><i class="fa-solid fa-chevron-right"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnEpSelesai">Selesai</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL ATUR KOLOM (kolom nama/NIK dan tombol Aksi selalu tampil)
+     ============================================================ -->
+<div class="modal fade" id="modalKolom" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 420px;">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Atur Kolom</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2">Pilih kolom yang ditampilkan di tabel. Nama/NIK dan tombol Aksi selalu tampil.</div>
+                <div class="ts-box" id="kolDaftar" style="max-height: 340px;"></div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm me-auto" id="btnKolReset">Tampilkan Semua</button>
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary btn-sm fw-semibold" id="btnKolTerapkan">Terapkan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL EDIT ABSENSI (koreksi oleh admin; absen asli tetap tersimpan)
+     ============================================================ -->
+<div class="modal fade" id="modalEdit" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 460px;">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold">Edit Absensi</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="formEdit" novalidate>
+                <div class="modal-body">
+                    <div id="editMsg" class="alert alert-danger py-2 small d-none"></div>
+                    <div class="mb-3">
+                        <div class="fw-semibold" id="editKaryawan"></div>
+                        <div class="small text-muted" id="editTanggal"></div>
+                        <div class="small text-muted" id="editJadwal"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="ts-label" for="fEditMasuk">Check In</label>
+                        <input type="datetime-local" id="fEditMasuk" class="form-control form-control-sm">
+                    </div>
+                    <div class="mb-3">
+                        <label class="ts-label" for="fEditPulang">Check Out</label>
+                        <input type="datetime-local" id="fEditPulang" class="form-control form-control-sm">
+                        <div class="form-text">Kosongkan bila memang tidak ada absen. Jam memakai zona waktu cabang karyawan.</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="ts-label" for="fEditAlasan">Alasan koreksi <span class="text-danger">*</span></label>
+                        <textarea id="fEditAlasan" class="form-control form-control-sm" rows="3" maxlength="300" placeholder="Wajib diisi"></textarea>
+                    </div>
+                    <div class="alert alert-secondary py-2 small mb-0">Absen asli tidak dihapus: koreksi dicatat sebagai absen admin berikut nama Anda dan alasannya, dan terlihat di View History Log.</div>
+                </div>
+                <div class="modal-footer border-top py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
+                    <button type="submit" class="btn btn-primary btn-sm fw-semibold" id="btnSimpanEdit">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL VIEW HISTORY LOG
+     ============================================================ -->
+<div class="modal fade" id="modalLog" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="logJudul">History Log</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" style="font-size:.8rem;">
+                        <thead class="table-light"><tr>
+                            <th>#</th><th>Waktu Absen</th><th>Jenis</th><th>Sumber</th><th>Status</th><th>Berlaku</th>
+                            <th>Keterangan</th><th>Petugas</th><th>Disetujui</th><th>Lokasi</th><th>Dicatat</th>
+                        </tr></thead>
+                        <tbody id="logBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer border-top py-2 justify-content-between">
+                <span class="small text-muted" id="logInfo"></span>
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- ============================================================
+     MODAL DETAIL BARIS + PETA LOKASI ABSEN
+     Peta (Leaflet) baru diunduh saat modal ini dibuka pertama kali.
+     ============================================================ -->
+<div class="modal fade" id="modalDetail" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold" id="detJudul">Detail Absensi</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-3">
+                    <div class="col-lg-6"><table class="det-tabel w-100"><tbody id="detTabel"></tbody></table></div>
+                    <div class="col-lg-6">
+                        <div id="detPeta"></div>
+                        <div class="small text-muted mt-2" id="detPetaPesan"></div>
+                        <div class="small mt-1 d-flex flex-wrap gap-3" id="detLegenda">
+                            <span><i class="fa-solid fa-location-dot" style="color:#0d6efd;"></i> Check In</span>
+                            <span><i class="fa-solid fa-location-dot" style="color:#dc2626;"></i> Check Out</span>
+                            <span><i class="fa-solid fa-location-dot" style="color:#16a34a;"></i> Titik lokasi absen (lingkaran = range)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Tutup</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="attToastWadah"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../js/supabase.js"></script>
+<script src="../../js/auth.js"></script>
+<script src="../../js/module/time/attendance.js"></script>
+</body>
+</html>

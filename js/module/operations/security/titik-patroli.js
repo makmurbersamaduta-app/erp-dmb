@@ -17,6 +17,8 @@ const SCHEMA_HRD = "hrd";
 const TABLE_TITIK = "titik_patroli";
 const TABLE_AREA = "areas";             // schema public: kolom id, area_name
 const TABLE_BRANCH = "branches";        // schema public: kolom id, branch_name
+const TABLE_COST_CENTER = "cost_centers";                   // schema public: kolom id, branch_id, is_active
+const TABLE_CC_STRUCTURE = "cost_center_structures";        // schema public: kolom cost_center_id, area_id, dept_id, jabatan_id
 const TABLE_EMPLOYEES = "employees";    // hrd.employees: nik_karyawan -> nama
 
 // Filter "titik aktif". Baris lama yang is_active-nya masih NULL dianggap aktif,
@@ -66,6 +68,8 @@ const state = {
     areas: [],                 // semua baris tabel areas
     areaMap: new Map(),        // id area -> area_name
     branches: new Map(),       // id cabang -> branch_name
+    costCenters: [],           // cost center (id, branch_id, is_active) -> menentukan cabang sebuah cost center
+    structures: [],            // cost_center_structures (cost_center_id, area_id) -> area milik cost center
     refLoaded: false,
     nameCache: new Map(),      // nik_karyawan -> nama
     reqId: 0,
@@ -240,6 +244,20 @@ async function ensureRefData() {
     state.areas = areas;
     state.areaMap = new Map(areas.map(a => [String(a.id), a.area_name]));
     state.branches = new Map(branches.map(b => [String(b.id), b.branch_name]));
+
+    // Acuan dropdown Area: cabang -> cost center -> area (dari struktur cost center).
+    // Jika gagal dimuat, halaman tetap jalan tetapi dropdown Area kosong dan muncul pesan.
+    try {
+        const [ccs, structs] = await Promise.all([
+            fetchAll((from, to) => supabaseClient.from(TABLE_COST_CENTER).select("id, branch_id, is_active").range(from, to)),
+            fetchAll((from, to) => supabaseClient.from(TABLE_CC_STRUCTURE).select("cost_center_id, area_id").range(from, to))
+        ]);
+        state.costCenters = ccs;
+        state.structures = structs;
+    } catch (err) {
+        console.error("Gagal memuat struktur cost center:", err);
+        showToast("Struktur cost center gagal dimuat, pilihan Area kosong.");
+    }
     state.refLoaded = true;
 }
 
@@ -371,8 +389,8 @@ function setupTableActions() {
 // KELOMPOK 8: MODAL TAMBAH / EDIT
 // Fungsi: form Kode, Nama, Cabang, Area.
 //  - Tambah: semua terisi. Cabang dikunci ke cabang user jika bukan
-//    Maintenance/Superadmin. Pilihan Area menyempit mengikuti Cabang jika
-//    tabel areas punya kolom branch_id.
+//    Maintenance/Superadmin. Pilihan Area menyempit mengikuti Cabang lewat
+//    cost center -> cost_center_structures (tanpa duplikasi).
 //  - Edit: hanya Kode dan Nama yang bisa diubah; Cabang dan Area terkunci.
 // Di belakang layar: created_by = username (nik) dari sesi login,
 // is_active = true (saat tambah). Saat edit, created_by diganti user yang mengedit.
@@ -411,13 +429,20 @@ function branchChoices() {
 // Daftar area untuk dropdown. Area yang is_active-nya false tidak ditampilkan. Daftar lengkap
 // (state.areas / areaMap) tetap menyimpan semua area, supaya titik lama yang berada di area
 // nonaktif masih menampilkan nama areanya di tabel.
-// Daftar area untuk sebuah cabang. Jika tabel areas punya kolom branch_id, area
-// disaring sesuai cabang (area tanpa branch_id tetap ditampilkan); jika tidak, semua area.
+// Daftar area untuk sebuah cabang, dengan alur: Cabang -> Cost Center (cost_centers.branch_id)
+// -> Area (cost_center_structures). Satu area bisa muncul di banyak baris struktur (beda departemen,
+// jabatan, atau cost center), jadi id area dikumpulkan dalam Set sehingga tiap area hanya tampil SEKALI.
 function areaChoices(branchId) {
-    const hasBranchCol = state.areas.some(a => Object.prototype.hasOwnProperty.call(a, "branch_id"));
+    const ccIds = new Set(state.costCenters
+        .filter(c => c.is_active !== false && String(c.branch_id) === String(branchId))
+        .map(c => String(c.id)));
+    const areaIds = new Set(state.structures
+        .filter(st => ccIds.has(String(st.cost_center_id)))
+        .map(st => String(st.area_id)));
+    const seen = new Set();
     return state.areas
-        .filter(a => a.is_active !== false)    // area nonaktif (is_active = false) tidak ditawarkan; NULL dianggap aktif
-        .filter(a => !hasBranchCol || a.branch_id === null || a.branch_id === undefined || String(a.branch_id) === String(branchId))
+        .filter(a => a.is_active !== false && areaIds.has(String(a.id)))   // area nonaktif tidak ditawarkan
+        .filter(a => !seen.has(String(a.id)) && seen.add(String(a.id)))    // jaga-jaga: satu id satu kali
         .map(a => ({ id: a.id, name: a.area_name }))
         .sort((a, b) => String(a.name).localeCompare(String(b.name), "id", { numeric: true }));
 }
