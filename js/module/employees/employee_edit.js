@@ -31,6 +31,15 @@ function optList(list, usedId, nameKey) {
 
 let currentAssignmentStartDate = null;   // start_date asli baris penempatan yang sedang diedit
 let currentAssignmentIsMutation = false; // true jika baris itu bertipe MUTATION
+// Posisi urutan pola berdasarkan hari dari sebuah tanggal (format "YYYY-MM-DD"):
+// Senin = 1, Selasa = 2, Rabu = 3, Kamis = 4, Jumat = 5, Sabtu = 6, Minggu = 7.
+// Dipakai sebagai posisi_awal agar urutan pola sejajar dengan hari kerja pada tanggal mulai.
+function posisiPolaDariTanggal(isoDate) {
+    const [y, m, d] = String(isoDate).slice(0, 10).split("-").map(Number);
+    const hari = new Date(y, m - 1, d).getDay();   // bawaan JS: 0 = Minggu ... 6 = Sabtu
+    return hari === 0 ? 7 : hari;
+}
+
 let originalTanggalMasuk = null;        // tanggal masuk saat halaman dibuka (pembanding untuk deteksi perubahan)
 let riwayatAssignments = [];   // semua assignment karyawan, terbaru di atas
 let koreksiMode = null;        // 'cancel_mutation' | 'update_resign_date' | 'cancel_resign'
@@ -710,7 +719,7 @@ async function handleFormSubmit(e) {
         if (!currentAssignmentIsMutation && tglMasukBaru && originalTanggalMasuk && tglMasukBaru !== originalTanggalMasuk) {
             const { error: polaErr } = await supabaseClient
                 .schema("hrd").from("jadwal_pola_karyawan")
-                .update({ berlaku_mulai: tglMasukBaru })
+                .update({ berlaku_mulai: tglMasukBaru, posisi_awal: posisiPolaDariTanggal(tglMasukBaru) })
                 .eq("employee_id", currentEmpId)
                 .eq("berlaku_mulai", originalTanggalMasuk);
             if (polaErr) {

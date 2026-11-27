@@ -10,6 +10,15 @@
 // Admin bisa mengubahnya nanti lewat halaman Jadwal Kerja.
 const DEFAULT_POLA_JADWAL_ID = "210876e4-e8fd-46a3-ad6e-10456661b556";
 
+// Posisi urutan pola berdasarkan hari dari sebuah tanggal (format "YYYY-MM-DD"):
+// Senin = 1, Selasa = 2, Rabu = 3, Kamis = 4, Jumat = 5, Sabtu = 6, Minggu = 7.
+// Dipakai sebagai posisi_awal agar urutan pola sejajar dengan hari kerja pada tanggal mulai.
+function posisiPolaDariTanggal(isoDate) {
+    const [y, m, d] = String(isoDate).slice(0, 10).split("-").map(Number);
+    const hari = new Date(y, m - 1, d).getDay();   // bawaan JS: 0 = Minggu ... 6 = Sabtu
+    return hari === 0 ? 7 : hari;
+}
+
 // Global State
 let currentEmpId = null;
 
@@ -701,7 +710,7 @@ async function handleFormSubmit(e) {
                     pola_id: DEFAULT_POLA_JADWAL_ID,
                     berlaku_mulai: tglMasuk,
                     berlaku_sampai: null,
-                    posisi_awal: 1,
+                    posisi_awal: posisiPolaDariTanggal(tglMasuk),   // sesuai hari tanggal masuk (Senin=1 ... Minggu=7)
                     is_active: true
                 });
             if (polaErr) throw polaErr;
