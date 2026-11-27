@@ -99,6 +99,30 @@
         .att-fkosong { font-size: .8rem; color: #94a3b8; padding: 6px; }
         .att-filter-inline { border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 10px; max-height: 280px; overflow-y: auto; }
         .att-filter-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e2e8f0; }
+
+        /* Panel informasi (juga berfungsi sebagai filter) */
+        .att-info-grid { display: grid; grid-template-columns: repeat(6, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+        .att-info-box { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #fff; border: 1px solid #e2e8f0;
+                        border-radius: 10px; cursor: pointer; text-align: left; transition: border-color .15s, box-shadow .15s; }
+        .att-info-box:hover { border-color: #94a3b8; }
+        .att-info-box.aktif { border-color: #0d6efd; box-shadow: 0 0 0 2px rgba(13,110,253,.18); }
+        .att-info-ikon { width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: .95rem; flex-shrink: 0; }
+        .att-info-angka { font-size: 1.25rem; font-weight: 700; line-height: 1.1; color: #0f172a; }
+        .att-info-label { font-size: .72rem; color: #64748b; line-height: 1.2; }
+        @media (max-width: 1100px) { .att-info-grid { grid-template-columns: repeat(3, 1fr); } }
+        /* Baris judul kelompok: Cabang > Cost Center */
+        tr.att-grup td { background: #f1f5f9; font-weight: 700; font-size: .8rem; color: #334155; padding: 6px 12px; border-top: 1px solid #e2e8f0; }
+        tr.att-grup td span { position: sticky; left: 12px; }
+
+        /* Modal Edit / Koreksi */
+        .ed-sec { border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+        .ed-head { font-size: .8rem; font-weight: 700; color: #0d6efd; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .02em; }
+        .att-combo { position: relative; }
+        .att-combo-list { position: absolute; left: 0; right: 0; top: 100%; z-index: 2000; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+                          max-height: 200px; overflow-y: auto; box-shadow: 0 8px 24px rgba(15,23,42,.15); }
+        .att-combo-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: .82rem; }
+        .att-combo-item:hover { background: #f8fafc; }
+        .att-combo-kosong { padding: 8px 10px; font-size: .8rem; color: #94a3b8; }
     </style>
 </head>
 <body>
@@ -149,6 +173,8 @@
             <input type="text" id="attCari" class="form-control form-control-sm" style="width: 210px;" placeholder="Cari NIK atau nama..." autocomplete="off">
             <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" id="btnAturKolom"><i class="fa-solid fa-table-columns me-1"></i>Atur Kolom</button>
         </div>
+
+        <div class="att-info-grid" id="attInfoGrid"></div>
 
         <div class="att-scroll">
             <table class="att-tabel">
@@ -335,13 +361,13 @@
 
 
 <!-- ============================================================
-     MODAL EDIT ABSENSI (koreksi oleh admin; absen asli tetap tersimpan)
+     MODAL EDIT / KOREKSI: Jadwal, Time Off, Absensi, Overtime (disetujui otomatis; data lama dinonaktifkan, bukan dihapus)
      ============================================================ -->
 <div class="modal fade" id="modalEdit" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 460px;">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width: 540px;">
         <div class="modal-content border-0 shadow">
             <div class="modal-header border-bottom py-2">
-                <h6 class="modal-title fw-bold">Edit Absensi</h6>
+                <h6 class="modal-title fw-bold">Edit / Koreksi</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <form id="formEdit" novalidate>
@@ -352,20 +378,63 @@
                         <div class="small text-muted" id="editTanggal"></div>
                         <div class="small text-muted" id="editJadwal"></div>
                     </div>
-                    <div class="mb-3">
-                        <label class="ts-label" for="fEditMasuk">Check In</label>
-                        <input type="datetime-local" id="fEditMasuk" class="form-control form-control-sm">
+                    <div id="editMemuat" class="small text-muted mb-2 d-none"><i class="fa-solid fa-spinner fa-spin me-1"></i>Memuat data yang sudah ada...</div>
+
+                    <div class="ed-sec" id="editSecJadwal">
+                        <div class="ed-head">Jadwal</div>
+                        <label class="ts-label" for="fEditShift">Shift</label>
+                        <select id="fEditShift" class="form-select form-select-sm"></select>
+                        <div class="form-text" id="editInfoJadwal"></div>
                     </div>
-                    <div class="mb-3">
-                        <label class="ts-label" for="fEditPulang">Check Out</label>
-                        <input type="datetime-local" id="fEditPulang" class="form-control form-control-sm">
-                        <div class="form-text">Kosongkan bila memang tidak ada absen. Jam memakai zona waktu cabang karyawan.</div>
+
+                    <div class="ed-sec" id="editSecTimeOff">
+                        <div class="ed-head">Time Off</div>
+                        <label class="ts-label" for="fEditTimeOff">Jenis Time Off</label>
+                        <select id="fEditTimeOff" class="form-select form-select-sm"></select>
+                        <div class="form-text" id="editInfoTimeOff"></div>
                     </div>
+
+                    <div class="ed-sec" id="editSecAbsensi">
+                        <div class="ed-head">Absensi</div>
+                        <div class="mb-2">
+                            <label class="ts-label" for="fEditMasuk">Clock In</label>
+                            <input type="datetime-local" id="fEditMasuk" class="form-control form-control-sm">
+                            <div class="form-text">Hanya tanggal kemarin atau tanggal kerja.</div>
+                        </div>
+                        <div>
+                            <label class="ts-label" for="fEditPulang">Clock Out</label>
+                            <input type="datetime-local" id="fEditPulang" class="form-control form-control-sm">
+                            <div class="form-text">Hanya tanggal kerja atau besoknya. Kosongkan bila memang tidak ada absen. Jam memakai zona waktu cabang karyawan.</div>
+                        </div>
+                    </div>
+
+                    <div class="ed-sec" id="editSecLembur">
+                        <div class="ed-head">Overtime</div>
+                        <div class="mb-2">
+                            <label class="ts-label" for="fEditJenisOt">Jenis Lembur</label>
+                            <select id="fEditJenisOt" class="form-select form-select-sm">
+                                <option value="Overtime">Overtime</option><option value="Pengganti">Pengganti</option><option value="Casual">Casual</option>
+                            </select>
+                        </div>
+                        <div id="editTipeExtra"></div>
+                        <div class="row g-2">
+                            <div class="col-6"><label class="ts-label" for="fEditObOt">Lembur Sebelum Shift</label>
+                                <input type="time" step="900" id="fEditObOt" class="form-control form-control-sm" value="00:00"></div>
+                            <div class="col-6"><label class="ts-label" for="fEditObBrk">Istirahat</label>
+                                <input type="time" step="900" id="fEditObBrk" class="form-control form-control-sm" value="00:00"></div>
+                            <div class="col-6"><label class="ts-label" for="fEditOaOt">Lembur Setelah Shift</label>
+                                <input type="time" step="900" id="fEditOaOt" class="form-control form-control-sm" value="00:00"></div>
+                            <div class="col-6"><label class="ts-label" for="fEditOaBrk">Istirahat</label>
+                                <input type="time" step="900" id="fEditOaBrk" class="form-control form-control-sm" value="00:00"></div>
+                        </div>
+                        <div class="form-text" id="editInfoLembur"></div>
+                    </div>
+
                     <div class="mb-2">
-                        <label class="ts-label" for="fEditAlasan">Alasan koreksi <span class="text-danger">*</span></label>
-                        <textarea id="fEditAlasan" class="form-control form-control-sm" rows="3" maxlength="300" placeholder="Wajib diisi"></textarea>
+                        <label class="ts-label" for="fEditAlasan">Keterangan <span class="text-danger">*</span></label>
+                        <textarea id="fEditAlasan" class="form-control form-control-sm" rows="2" maxlength="300" placeholder="Wajib diisi. Dipakai untuk semua bagian yang diubah."></textarea>
                     </div>
-                    <div class="alert alert-secondary py-2 small mb-0">Absen asli tidak dihapus: koreksi dicatat sebagai absen admin berikut nama Anda dan alasannya, dan terlihat di View History Log.</div>
+                    <div class="alert alert-secondary py-2 small mb-0">Hanya bagian yang Anda ubah yang disimpan, sekaligus dalam satu proses (gagal satu = batal semua). Disetujui otomatis. Data lama tidak dihapus, hanya dinonaktifkan, dan terlihat di View History Log.</div>
                 </div>
                 <div class="modal-footer border-top py-2">
                     <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Batal</button>
@@ -395,6 +464,15 @@
                             <th>Keterangan</th><th>Petugas</th><th>Disetujui</th><th>Lokasi</th><th>Dicatat</th>
                         </tr></thead>
                         <tbody id="logBody"></tbody>
+                    </table>
+                </div>
+                <div class="px-3 pt-3 pb-1 fw-bold small border-top mt-2">Koreksi Jadwal, Time Off, dan Lembur <span class="text-muted fw-normal" id="logJumlah2"></span></div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" style="font-size:.8rem;">
+                        <thead class="table-light"><tr>
+                            <th>#</th><th>Jenis</th><th>Perubahan</th><th>Sumber</th><th>Status</th><th>Keterangan</th><th>Petugas</th><th>Disetujui</th><th>Dicatat</th>
+                        </tr></thead>
+                        <tbody id="logBody2"></tbody>
                     </table>
                 </div>
             </div>

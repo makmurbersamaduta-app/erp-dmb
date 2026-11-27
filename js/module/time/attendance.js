@@ -11,7 +11,7 @@
 
 // ===================================================
 // KELOMPOK 1: PENGATURAN
-// ATT_PER_HALAMAN       : jumlah KARYAWAN per halaman tabel (bukan jumlah baris)
+// ATT_BARIS_PER_HALAMAN : jumlah BARIS per halaman tabel; ATT_CHUNK_LAPORAN : karyawan per permintaan data
 // ATT_CHUNK_EXPORT      : jumlah karyawan per permintaan saat export (agar tidak kena batas waktu)
 // ATT_MAKS_HARI         : batas rentang tanggal (hari, termasuk kedua ujung)
 // ATT_ROLE_BOLEH_UBAH   : role yang boleh memakai tombol Edit (sama dengan Time Settings)
@@ -19,7 +19,9 @@
 //                         true  = baris biru bila device_berbeda = true (device BERBEDA).
 //                         false = kebalikannya (menandai device yang SAMA).
 // ===================================================
-const ATT_PER_HALAMAN = 25;
+const ATT_BARIS_PER_HALAMAN = 25;   // baris per halaman tabel
+const ATT_CHUNK_LAPORAN = 40;       // jumlah karyawan per permintaan laporan_absensi (kecilkan bila sering timeout)
+const ATT_PARALEL = 3;              // jumlah permintaan yang dijalankan bersamaan
 const ATT_PER_HALAMAN_PILIH = 15;
 const ATT_CHUNK_EXPORT = 20;
 const ATT_MAKS_HARI = 31;
@@ -46,7 +48,9 @@ const att = {
     page: 1,
     total: 0,
     token: 0,
-    baris: [],
+    semua: [],     // SELURUH baris laporan hasil filter (sudah diberi tanda dan diurutkan)
+    flag: null,    // kotak informasi yang sedang dipilih sebagai filter (invalid/cuti/suspect/telat/cepat/lupa)
+    baris: [],     // baris pada halaman yang sedang tampil
     kolom: new Set(),
     cal: { bulan: null, dari: null, sampai: null, tahap: "awal", onTerapkan: null, kembaliKe: null },
     exp: { ids: new Set(), info: new Map(), dari: null, sampai: null },
@@ -330,9 +334,11 @@ function attFilterReset() {
 function attBersihkanKata(q) { return String(q || "").replace(/[%_,()]/g, "").trim().toLowerCase(); }
 
 // ===================================================
-// KELOMPOK 6: TABEL LAPORAN
-// Alur: (1) ambil satu halaman KARYAWAN sesuai filter, (2) minta laporan absensi untuk
-// karyawan itu pada rentang tanggal, (3) gambar tabel.
+// KELOMPOK 6: TABEL LAPORAN + PANEL INFORMASI
+// Alur: (1) minta daftar id karyawan yang punya penempatan pada rentang tanggal (sesuai filter),
+// (2) minta laporan absensi per potongan karyawan, (3) filter ulang per baris, beri tanda, urutkan
+// Cabang -> Cost Center -> Nama -> Tanggal, (4) hitung panel informasi, (5) gambar halaman tabel.
+// Pindah halaman, klik kotak informasi, dan Atur Kolom TIDAK memuat ulang dari server.
 // ===================================================
 function attFilterUtama() {
     return {
@@ -343,44 +349,189 @@ function attFilterUtama() {
 
 function attGambarTanggal() { attEl("attTanggalTeks").textContent = attRentangTeks(att.dari, att.sampai); }
 
+// Panel informasi. uji(r) = apakah baris termasuk kategori. Klik = tabel hanya menampilkan baris itu.
+const ATT_INFO = [
+    { id: "invalid", label: "Absensi Tidak Valid", ikon: "fa-location-crosshairs", warna: "#ea580c", uji: r => r._invalid },
+    { id: "cuti", label: "Tidak Masuk (Time Off)", ikon: "fa-calendar-minus", warna: "#7c3aed", uji: r => r._cuti },
+    { id: "suspect", label: "Suspect Absensi", ikon: "fa-mobile-screen", warna: "#0d6efd", uji: r => r._suspect },
+    { id: "telat", label: "Terlambat", ikon: "fa-clock", warna: "#dc2626", uji: r => r._telat },
+    { id: "cepat", label: "Pulang Cepat", ikon: "fa-door-open", warna: "#dc2626", uji: r => r._cepat },
+    { id: "lupa", label: "Lupa Absen", ikon: "fa-circle-question", warna: "#64748b", uji: r => r._lupa }
+];
+
+// ---------------------------------------------------
+// PEMUATAN BERTAHAP. Server mengurutkan karyawan (status, cost center, nama). Tabel hanya memuat laporan
+// untuk potongan karyawan (ATT_CHUNK_LAPORAN) sampai halaman yang sedang dilihat terisi. Halaman berikutnya
+// dimuat saat tombol Berikutnya ditekan. Karena karyawan tanpa jadwal/absen pada tanggal itu tidak
+// menghasilkan baris, halaman dibentuk dari baris yang terkumpul (bukan dari jumlah karyawan).
+// ATT_HITUNG_OTOMATIS = true : sisa karyawan dimuat pelan-pelan di latar belakang agar angka panel informasi
+//                              lengkap. false = lebih ringan; angka hanya menghitung data yang sudah dimuat (tanda +).
+// ---------------------------------------------------
+const ATT_HITUNG_OTOMATIS = true;
+const ATT_JEDA_LATAR = 300;          // jeda (ms) antar potongan di latar belakang
+
+// Memberi tanda pada satu baris (dipakai panel informasi dan warna baris)
+function attBeriTanda(r) {
+    r._status = att.status.get(r.employee_id) || null;
+    r._telat = attLateMenit(r) != null;
+    r._cepat = r.early_menit != null && r.early_menit > 0;
+    r._invalid = r.lokasi_tidak_valid === true;
+    r._cuti = !!r.kode_time_off;
+    r._suspect = r.device_berbeda === true;
+    r._lupa = r.kode_absen === "nci" || r.kode_absen === "nco";
+    r._cabang = attNama("branch", r.branch_id) || "-";
+    r._cc = attNama("cc", r.costcenter_id) || "-";
+    return r;
+}
+
+function attLolosFilter(r, f) {
+    return (!f.branch.length || f.branch.includes(Number(r.branch_id)))
+        && (!f.cc.length || f.cc.includes(Number(r.costcenter_id)))
+        && (!f.area.length || f.area.includes(Number(r.area_id)))
+        && (!f.dept.length || f.dept.includes(Number(r.departemen_id)));
+}
+
+// Panel informasi: dibuat sekali, setelah itu hanya angkanya yang diperbarui (tombol tidak digambar ulang)
+function attRenderInfo() {
+    const grid = attEl("attInfoGrid");
+    if (grid.children.length !== ATT_INFO.length) {
+        grid.innerHTML = ATT_INFO.map(x => `<button type="button" class="att-info-box" data-flag="${x.id}" title="Klik untuk menampilkan hanya data ini">
+            <span class="att-info-ikon" style="background:${x.warna}1a;color:${x.warna};"><i class="fa-solid ${x.ikon}"></i></span>
+            <span><span class="att-info-angka">-</span><br><span class="att-info-label">${attEsc(x.label)}</span></span></button>`).join("");
+    }
+    const ada = att.semua.length > 0 || att.selesai;
+    ATT_INFO.forEach((x, n) => {
+        const kotak = grid.children[n];
+        kotak.classList.toggle("aktif", att.flag === x.id);
+        kotak.querySelector(".att-info-angka").textContent = ada ? att.semua.filter(x.uji).length + (att.selesai ? "" : "+") : "-";
+    });
+}
+
+// Jumlah baris yang cocok dengan kotak informasi yang dipilih (atau semua baris bila tidak ada yang dipilih)
+function attJumlahTerpilih() {
+    const kat = att.flag ? ATT_INFO.find(x => x.id === att.flag) : null;
+    return kat ? att.semua.filter(kat.uji).length : att.semua.length;
+}
+
+// Memuat SATU potongan karyawan berikutnya. Hanya satu potongan berjalan pada satu waktu.
+async function attMuatPotongan(token) {
+    while (att.sedangMuat) await att.sedangMuat;
+    if (token !== att.token || att.selesai) return;
+    const ids = att.urut.slice(att.sudah, att.sudah + ATT_CHUNK_LAPORAN);
+    const kerja = (async () => {
+        const r = await attDb().rpc("laporan_absensi", { p_dari: att.periode.dari, p_sampai: att.periode.sampai, p_employee_ids: ids });
+        if (r.error) throw r.error;
+        return r.data || [];
+    })();
+    att.sedangMuat = kerja.catch(() => {});
+    let rows;
+    try { rows = await kerja; } finally { att.sedangMuat = null; }
+    if (token !== att.token) return;
+    const baru = rows.filter(r => attLolosFilter(r, att.fm)).map(attBeriTanda);
+    baru.sort((a, b) => (att.indeks.get(a.employee_id) - att.indeks.get(b.employee_id)) || (a.tanggal < b.tanggal ? -1 : a.tanggal > b.tanggal ? 1 : 0));
+    att.semua.push(...baru);
+    att.sudah += ids.length;
+    if (att.sudah >= att.urut.length) att.selesai = true;
+}
+
+// Memuat potongan demi potongan sampai terkumpul sedikitnya `target` baris (atau semua karyawan sudah dimuat)
+async function attIsiSampai(token, target) {
+    while (token === att.token && !att.selesai && attJumlahTerpilih() < target) await attMuatPotongan(token);
+}
+
+// Memuat sisa karyawan di latar belakang (angka panel informasi menjadi lengkap)
+async function attLanjutLatar(token) {
+    if (att.latar) return;
+    att.latar = true;
+    try {
+        while (token === att.token && !att.selesai) {
+            await attMuatPotongan(token);
+            if (token !== att.token) return;
+            attRenderInfo(); attPerbaruiFooter();
+            await new Promise(ok => setTimeout(ok, ATT_JEDA_LATAR));
+        }
+    } catch (err) {
+        console.warn("Pemuatan latar belakang berhenti:", err);
+        if (token === att.token) { att.galat = attPesanError(err); attPerbaruiFooter(); }
+    } finally {
+        if (token === att.token) att.latar = false;
+    }
+}
+
 async function attMuat() {
     const token = ++att.token;
+    Object.assign(att, { semua: [], baris: [], urut: [], indeks: new Map(), status: new Map(), sudah: 0, selesai: false, sedangMuat: null, latar: false, galat: null, page: 1 });
+    att.periode = { dari: att.dari, sampai: att.sampai };
+    att.fm = attFilterUtama();
+    attRenderInfo();
     attEl("attBody").innerHTML = `<tr><td colspan="30" class="text-center text-muted py-4">Memuat data...</td></tr>`;
+    attEl("attInfo").textContent = "";
+    attEl("attPrev").disabled = true; attEl("attNext").disabled = true;
     try {
-        const dari = (att.page - 1) * ATT_PER_HALAMAN;
-        let q = attDb().from("v_karyawan_laporan").select("*", { count: "exact" })
-            .order("nama").order("employee_id").range(dari, dari + ATT_PER_HALAMAN - 1);
-        q = attTerapkanFilter(q, attFilterUtama());
-        const k = await q;
-        if (k.error) throw k.error;
-        const ids = (k.data || []).map(x => x.employee_id);
-
-        let rows = [];
-        if (ids.length) {
-            const r = await attDb().rpc("laporan_absensi", { p_dari: att.dari, p_sampai: att.sampai, p_employee_ids: ids });
-            if (r.error) throw r.error;
-            rows = r.data || [];
-        }
-        if (token !== att.token) return;   // ada permintaan yang lebih baru
-
-        att.total = k.count || 0;
-        att.baris = rows.map(r => {
-            r._telat = attLateMenit(r) != null;
-            r._cepat = r.early_menit != null && r.early_menit > 0;
-            return r;
+        const f = att.fm;
+        const k = await attDb().rpc("karyawan_laporan_urut", {
+            p_dari: att.periode.dari, p_sampai: att.periode.sampai, p_branch: f.branch, p_cc: f.cc, p_area: f.area, p_dept: f.dept, p_cari: f.q
         });
-        attRender();
-
-        const awal = att.total === 0 ? 0 : dari + 1;
-        const akhir = Math.min(dari + ATT_PER_HALAMAN, att.total);
-        attEl("attInfo").textContent = `Karyawan ${awal}-${akhir} dari ${att.total} | ${att.baris.length} baris`;
-        attEl("attPrev").disabled = att.page <= 1;
-        attEl("attNext").disabled = att.page >= Math.ceil(att.total / ATT_PER_HALAMAN);
+        if (k.error) throw k.error;
+        if (token !== att.token) return;
+        const daftar = k.data || [];
+        att.urut = daftar.map(x => x.id);
+        att.indeks = new Map(att.urut.map((id, n) => [id, n]));
+        daftar.forEach(x => att.status.set(x.id, x.status));
+        if (!att.urut.length) att.selesai = true;
+        await attIsiSampai(token, ATT_BARIS_PER_HALAMAN);
+        if (token !== att.token) return;
+        attTampilkan();
+        if (ATT_HITUNG_OTOMATIS && !att.selesai) attLanjutLatar(token);
     } catch (err) {
         if (token !== att.token) return;
         console.error("Gagal memuat laporan:", err);
-        attEl("attBody").innerHTML = `<tr><td colspan="30" class="text-center text-danger py-4">Gagal memuat data: ${attEsc(attPesanError(err))}. Pastikan time_modul1n_laporan_absensi.sql sudah dijalankan.</td></tr>`;
+        attEl("attBody").innerHTML = `<tr><td colspan="30" class="text-center text-danger py-4">Gagal memuat data: ${attEsc(attPesanError(err))}. Pastikan time_modul1o dan time_modul1r sudah dijalankan.</td></tr>`;
     }
+}
+
+// Pindah ke halaman n: memuat potongan tambahan bila baris yang terkumpul belum cukup
+async function attKeHalaman(n) {
+    const token = att.token;
+    att.page = n;
+    attEl("attInfo").textContent = "Memuat halaman...";
+    attEl("attPrev").disabled = true; attEl("attNext").disabled = true;
+    try {
+        await attIsiSampai(token, n * ATT_BARIS_PER_HALAMAN);
+    } catch (err) {
+        console.error("Gagal memuat halaman:", err);
+        attToast("Gagal memuat halaman: " + attPesanError(err), "danger");
+    }
+    if (token !== att.token) return;
+    attTampilkan();
+}
+
+// Menggambar halaman saat ini dari data yang sudah dimuat (tanpa memanggil server)
+function attTampilkan() {
+    const kat = att.flag ? ATT_INFO.find(x => x.id === att.flag) : null;
+    const terpilih = kat ? att.semua.filter(kat.uji) : att.semua;
+    const maks = Math.max(1, Math.ceil(terpilih.length / ATT_BARIS_PER_HALAMAN));
+    if (att.page > maks) att.page = maks;
+    const dari = (att.page - 1) * ATT_BARIS_PER_HALAMAN;
+    att.baris = terpilih.slice(dari, dari + ATT_BARIS_PER_HALAMAN);
+    att.total = terpilih.length;
+    attRenderInfo();
+    attRender();
+    attPerbaruiFooter();
+}
+
+function attPerbaruiFooter() {
+    const kat = att.flag ? ATT_INFO.find(x => x.id === att.flag) : null;
+    const total = attJumlahTerpilih();
+    const dari = (att.page - 1) * ATT_BARIS_PER_HALAMAN;
+    let teks = att.baris.length === 0 ? (att.selesai ? "Tidak ada data" : "Memuat...")
+        : `Baris ${dari + 1}-${dari + att.baris.length}` + (att.selesai ? ` dari ${total}` : ` | ${total}+ baris dimuat`);
+    teks += att.selesai ? ` | ${att.urut.length} karyawan` : ` | ${att.sudah} dari ${att.urut.length} karyawan diperiksa`;
+    if (kat) teks += ` | kategori: ${kat.label}`;
+    if (att.galat) teks += ` | pemuatan berhenti: ${att.galat}`;
+    attEl("attInfo").textContent = teks;
+    attEl("attPrev").disabled = att.page <= 1;
+    attEl("attNext").disabled = att.selesai && dari + ATT_BARIS_PER_HALAMAN >= total;
 }
 
 function attRender() {
@@ -389,12 +540,12 @@ function attRender() {
         kolom.map(k => `<th>${attEsc(k.label)}</th>`).join("") + `<th class="att-kanan">Aksi</th></tr>`;
 
     if (att.baris.length === 0) {
-        attEl("attBody").innerHTML = `<tr><td colspan="${kolom.length + 2}" class="text-center text-muted py-4">Tidak ada data jadwal atau absensi pada rentang tanggal ini untuk karyawan di halaman ini.</td></tr>`;
+        attEl("attBody").innerHTML = `<tr><td colspan="${kolom.length + 2}" class="text-center text-muted py-4">${!att.selesai ? "Mencari data..." : att.flag ? "Tidak ada data pada kategori ini untuk periode dan filter yang dipilih." : "Tidak ada karyawan aktif atau data jadwal/absensi pada periode dan filter yang dipilih."}</td></tr>`;
         return;
     }
     attEl("attBody").innerHTML = att.baris.map((r, i) => {
         const kelas = [];
-        if (r.lokasi_tidak_valid) kelas.push("att-row-invalid");
+        if (r._invalid) kelas.push("att-row-invalid");
         if (r.device_berbeda === ATT_WARNA_DEVICE_JIKA) kelas.push("att-row-device");
         const aksi = (att.canEdit
             ? `<button type="button" class="btn btn-sm btn-light text-primary me-1" data-act="edit" data-i="${i}" title="Edit absensi"><i class="fa-solid fa-pen me-1"></i>Edit</button>` : "") +
@@ -413,13 +564,15 @@ function attRender() {
 // Dipakai kotak tanggal (filter) dan langkah "Select Date" pada export.
 // Klik tanggal awal lalu tanggal akhir (maksimal 31 hari); rentang ditandai garis warna.
 // ===================================================
-function attBukaKalender({ judul, dari, sampai, onTerapkan, kembaliKe }) {
+function attBukaKalender({ judul, dari, sampai, onTerapkan, kembaliKe, satu }) {
     const k = att.cal;
     k.dari = dari || null;
     k.sampai = sampai || dari || null;
     k.tahap = "awal";
     k.onTerapkan = onTerapkan;
     k.kembaliKe = kembaliKe || null;
+    k.satu = !!satu;     // true = pilih SATU tanggal: begitu diklik langsung diterapkan dan kalender menutup (tanpa tombol Terapkan)
+    attEl("btnKalTerapkan").classList.toggle("d-none", k.satu);
     k.bulan = attParse(dari || attHariIni());
     k.bulan.setDate(1);
     attEl("kalJudul").textContent = judul;
@@ -448,13 +601,28 @@ function attKalRender() {
     }
     attEl("kalGrid").innerHTML = judulHari + sel;
     const n = k.dari ? attSelisih(k.dari, k.sampai || k.dari) + 1 : 0;
-    attEl("kalRingkas").textContent = k.dari ? `${attRentangTeks(k.dari, k.sampai)} (${n} hari)` : "Belum ada tanggal dipilih";
+    attEl("kalRingkas").textContent = !k.dari ? (k.satu ? "Pilih satu tanggal" : "Belum ada tanggal dipilih")
+        : (k.satu ? attTgl(k.dari) : `${attRentangTeks(k.dari, k.sampai)} (${n} hari)`);
     attEl("btnKalTerapkan").disabled = !k.dari;
+}
+
+// Menerapkan tanggal yang dipilih di kalender lalu menutupnya
+function attKalTerapkan() {
+    const k = att.cal;
+    if (!k.dari) return;
+    if (typeof k.onTerapkan === "function") k.onTerapkan(k.dari, k.sampai || k.dari);
+    attModal("modalKalender").hide();
 }
 
 function attKalPilih(iso) {
     const k = att.cal;
     attEl("kalPesan").textContent = "";
+    if (k.satu) {        // mode satu tanggal: klik = langsung jalan
+        k.dari = iso; k.sampai = iso; k.tahap = "awal";
+        attKalRender();
+        attKalTerapkan();
+        return;
+    }
     if (k.tahap === "akhir") {
         let a = k.dari, b = iso;
         if (b < a) [a, b] = [b, a];
@@ -518,8 +686,8 @@ function attPasangTombol() {
     // Kotak tanggal -> modal kalender
     attEl("attTanggalBox").addEventListener("click", () => {
         attBukaKalender({
-            judul: "Pilih Tanggal", dari: att.dari, sampai: att.sampai,
-            onTerapkan: (dari, sampai) => { att.dari = dari; att.sampai = sampai; att.page = 1; attGambarTanggal(); attMuat(); }
+            judul: "Pilih Tanggal", dari: att.dari, sampai: att.dari, satu: true,
+            onTerapkan: (dari) => { att.dari = dari; att.sampai = dari; att.page = 1; attGambarTanggal(); attMuat(); }
         });
         attModal("modalKalender").show();
     });
@@ -532,13 +700,9 @@ function attPasangTombol() {
         att.cal.bulan = attParse(h); att.cal.bulan.setDate(1);
         attEl("kalPesan").textContent = "";
         attKalRender();
+        if (att.cal.satu) attKalTerapkan();      // mode satu tanggal: "Hari Ini" langsung diterapkan
     });
-    attEl("btnKalTerapkan").addEventListener("click", () => {
-        const k = att.cal;
-        if (!k.dari) return;
-        if (typeof k.onTerapkan === "function") k.onTerapkan(k.dari, k.sampai || k.dari);
-        attModal("modalKalender").hide();
-    });
+    attEl("btnKalTerapkan").addEventListener("click", attKalTerapkan);
     // Bila kalender dibuka dari modal lain (export), kembali ke modal itu setelah kalender tertutup
     attEl("modalKalender").addEventListener("hidden.bs.modal", () => {
         const ke = att.cal.kembaliKe;
@@ -575,8 +739,16 @@ function attPasangTombol() {
     attEl("btnKolReset").addEventListener("click", attResetKolom);
 
     // Halaman
-    attEl("attPrev").addEventListener("click", () => { if (att.page > 1) { att.page--; attMuat(); } });
-    attEl("attNext").addEventListener("click", () => { att.page++; attMuat(); });
+    attEl("attPrev").addEventListener("click", () => { if (att.page > 1) { att.page--; attTampilkan(); } });   // halaman sebelumnya sudah ada di memori
+    attEl("attNext").addEventListener("click", () => attKeHalaman(att.page + 1));                            // halaman berikutnya dimuat bila perlu
+
+    // Kotak informasi: klik = tampilkan hanya data kategori itu; klik lagi = tampilkan semua
+    attEl("attInfoGrid").addEventListener("click", (e) => {
+        const kotak = e.target.closest("[data-flag]");
+        if (!kotak) return;
+        att.flag = att.flag === kotak.dataset.flag ? null : kotak.dataset.flag;
+        attKeHalaman(1);
+    });
 
     // Tabel: tombol Edit / History Log, atau klik baris untuk detail + peta
     attEl("attBody").addEventListener("click", (e) => {
@@ -650,7 +822,7 @@ function attBarisDetail(r) {
     return [
         ["Nama", r.nama], ["NIK", r.nik_karyawan], ["Jabatan", attNama("jabatan", r.jabatan_id)],
         ["Tanggal", attTgl(r.tanggal)], ["Cabang", attNama("branch", r.branch_id)], ["Cost Center", attNama("cc", r.costcenter_id)],
-        ["Departemen", attNama("dept", r.departemen_id)], ["Area", attNama("area", r.area_id)],
+        ["Departemen", attNama("dept", r.departemen_id)], ["Area", attNama("area", r.area_id)], ["Status Karyawan", r._status],
         ["Shift", r.kode_shift ? `${r.kode_shift}${r.nama_shift ? " - " + r.nama_shift : ""}` : ""],
         ["Schedule Check In", r.jadwal_masuk], ["Schedule Check Out", r.jadwal_pulang],
         ["Attendance Code", r.kode_absen], ["Time Off Code", r.kode_time_off],
@@ -744,6 +916,7 @@ async function attBukaLog(i) {
     attEl("logBody").innerHTML = `<tr><td colspan="11" class="text-center text-muted py-3">Memuat...</td></tr>`;
     attEl("logInfo").textContent = "";
     attModal("modalLog").show();
+    attIsiRiwayatKoreksi(r);
     try {
         const q = await attDb().from("absensi")
             .select("id, created_at, type_absen, waktu_absen, source, status, keterangan, petugas_id, disetujui_oleh, disetujui_pada, menggantikan_id, batal, is_active, titik_nama, jarak_meter, radius_meter, is_valid")
@@ -769,56 +942,313 @@ async function attBukaLog(i) {
 }
 ATT_AKSI.log = attBukaLog;
 
+// Riwayat koreksi jadwal, time off, dan lembur pada tanggal itu (tabel kedua di modal History Log)
+function attStatusKoreksi(x) {
+    const s = String(x.status || "").toLowerCase();
+    if (s === "approved" || s === "disetujui") return x.is_active ? "Berlaku" : "Diganti";
+    if (s === "pending" || s === "diajukan" || s === "koreksi") return "Menunggu";
+    if (s === "rejected" || s === "ditolak") return "Ditolak";
+    if (s === "dibatalkan") return "Dibatalkan";
+    return x.status || "-";
+}
+
+async function attIsiRiwayatKoreksi(r) {
+    attEl("logBody2").innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">Memuat...</td></tr>`;
+    attEl("logJumlah2").textContent = "";
+    try {
+        const q = await attDb().rpc("riwayat_koreksi", { p_employee_id: r.employee_id, p_tanggal: r.tanggal });
+        if (q.error) throw q.error;
+        const data = q.data || [];
+        attEl("logJumlah2").textContent = `(${data.length})`;
+        attEl("logBody2").innerHTML = data.length ? data.map(x => {
+            const st = attStatusKoreksi(x);
+            const redup = st === "Berlaku" || st === "Menunggu" ? "" : "text-muted";
+            const setuju = x.disetujui_nama ? `${attEsc(x.disetujui_nama)}${x.disetujui_pada ? `<br><span class="text-muted">${attEsc(attWaktuLokal(x.disetujui_pada, r.zona_waktu))}</span>` : ""}` : "";
+            return `<tr class="${redup}"><td>${x.id}</td><td>${attEsc(x.jenis)}</td><td>${attEsc(x.ringkas)}</td><td>${attEsc(x.source)}</td><td>${attEsc(st)}</td>
+                <td>${attEsc(x.keterangan)}</td><td>${attEsc(x.petugas)}</td><td>${setuju}</td><td>${attEsc(attWaktuLokal(x.dicatat, r.zona_waktu))}</td></tr>`;
+        }).join("") : `<tr><td colspan="9" class="text-center text-muted py-3">Belum ada koreksi jadwal, time off, atau lembur pada tanggal ini.</td></tr>`;
+    } catch (err) {
+        console.error("Gagal memuat riwayat koreksi:", err);
+        attEl("logBody2").innerHTML = `<tr><td colspan="9" class="text-center text-danger py-3">Gagal memuat: ${attEsc(attPesanError(err))}. Pastikan time_modul1p_koreksi_laporan.sql sudah dijalankan.</td></tr>`;
+    }
+}
+
 // ===================================================
-// KELOMPOK 13: MODAL EDIT ABSENSI
-// Koreksi jam masuk/pulang lewat rpc hrd.koreksi_absen_admin. Absen asli tidak dihapus;
-// koreksi tercatat sebagai absen admin (lihat History Log). Alasan wajib diisi.
-// Jam yang diisi adalah jam LOKAL karyawan (zona waktu cabang).
+// KELOMPOK 13: MODAL EDIT / KOREKSI (Jadwal, Time Off, Absensi, Overtime)
+// Alur: (1) modal dibuka, data yang SUDAH ada dipanggil dulu (koreksi_data_awal, daftar shift, daftar time off),
+// (2) admin mengubah bagian yang perlu, (3) Simpan mengirim HANYA bagian yang berubah ke
+// hrd.koreksi_laporan_admin dalam satu transaksi. Satu kolom Keterangan dipakai untuk semua bagian.
+// Disetujui otomatis; data lama dinonaktifkan (tidak dihapus) dan tampil di View History Log.
+// Role 1 dan 2: semua bagian. Role lain (mis. 3): hanya bagian Absensi.
 // ===================================================
-let attEditBaris = null;
+const ATT_ROLE_KOREKSI_PENUH = [1, 2];
+const ATT_OT_MAKS_MENIT = 12 * 60;      // durasi lembur maksimum (sama dengan halaman Lembur)
+const ATT_BREAK_MAKS_MENIT = 3 * 60;    // durasi istirahat maksimum
+
+const attEd = { r: null, awal: null, penuh: false, shiftAwal: "", toAwal: "", masukAwal: "", pulangAwal: "", otAwal: null, pengganti: null, menyimpan: false, ccStruct: [] };
+
+function attGeserTgl(s, n) { const d = new Date(`${s}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function attMenit(hhmm) { const [h, m] = String(hhmm || "00:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); }
+function attJam5(v) { return v ? String(v).slice(0, 5) : "00:00"; }
 
 function attUntukInput(iso, tz) {
     const t = attWaktuLokal(iso, tz);          // "YYYY-MM-DD HH:MM:SS"
     return t ? t.replace(" ", "T").slice(0, 16) : "";
 }
 
-function attBukaEdit(i) {
+function attEdPesan(teks) {
+    const m = attEl("editMsg");
+    m.textContent = teks || "";
+    m.classList.toggle("d-none", !teks);
+}
+
+// ----- Jadwal -----
+function attIsiJadwal(res) {
+    const awal = attEd.awal, sel = attEl("fEditShift"), info = attEl("editInfoJadwal");
+    const cur = (awal.jadwal && awal.jadwal.kode_shift) || "";
+    attEd.shiftAwal = cur;
+    if (res.error) { sel.innerHTML = `<option value="">Gagal memuat daftar shift</option>`; sel.disabled = true; info.textContent = attPesanError(res.error); return; }
+    const list = res.data || [];
+    const opsi = list.map(s => `<option value="${attEsc(s.kode)}">${attEsc(s.kode)} - ${attEsc(s.nama)} (${attEsc(s.jam_masuk || "-")} - ${attEsc(s.jam_pulang || "-")})</option>`);
+    if (cur && !list.some(s => s.kode === cur)) opsi.unshift(`<option value="${attEsc(cur)}">${attEsc(cur)} (shift saat ini)</option>`);
+    sel.innerHTML = (cur ? "" : `<option value="">- Belum ada jadwal -</option>`) + opsi.join("");
+    sel.value = cur;
+    sel.disabled = !!(awal.pending && awal.pending.jadwal);
+    info.textContent = awal.pending && awal.pending.jadwal
+        ? "Ada pengajuan perubahan shift yang menunggu persetujuan. Selesaikan atau tolak dulu."
+        : (awal.jadwal ? `Shift saat ini: ${awal.jadwal.kode_shift} (sumber: ${awal.jadwal.sumber}).` : "Belum ada jadwal pada tanggal ini.");
+}
+
+// ----- Time Off -----
+function attIsiTimeOff(res) {
+    const awal = attEd.awal, sel = attEl("fEditTimeOff"), info = attEl("editInfoTimeOff");
+    const ada = awal.time_off;
+    attEd.toAwal = ada ? String(ada.time_off_id) : "";
+    if (res.error) {
+        sel.innerHTML = `<option value="">${ada ? attEsc(ada.nama) : "-"}</option>`; sel.disabled = true;
+        info.textContent = "Daftar time off tidak dapat dimuat: " + attPesanError(res.error);
+        return;
+    }
+    const list = res.data || [];
+    const opsi = list.map(m => `<option value="${m.id}">${attEsc(m.nama)}</option>`);
+    if (ada && !list.some(m => String(m.id) === attEd.toAwal)) opsi.unshift(`<option value="${ada.time_off_id}">${attEsc(ada.nama)}</option>`);
+    sel.innerHTML = `<option value="">- Tidak ada time off -</option>` + opsi.join("");
+    sel.value = attEd.toAwal;
+    const banyakHari = ada && ada.start_date !== ada.end_date;
+    const menunggu = !!(awal.pending && awal.pending.time_off);
+    sel.disabled = banyakHari || menunggu;
+    info.textContent = menunggu ? "Ada pengajuan time off yang menunggu persetujuan. Selesaikan atau tolak dulu."
+        : banyakHari ? `Time off ini berlaku ${attTgl(ada.start_date)} s/d ${attTgl(ada.end_date)}. Ubah lewat halaman Cuti.`
+        : (ada ? `Time off saat ini: ${ada.nama}. Pilih "Tidak ada" untuk menghapusnya.` : "Belum ada time off pada tanggal ini.");
+}
+
+// ----- Overtime -----
+function attIsiLembur() {
+    const o = attEd.awal.lembur;
+    attEd.otAwal = o;
+    attEd.pengganti = o && o.type_ot === "Pengganti" && o.karyawan_absen_id ? { id: o.karyawan_absen_id, nama: o.karyawan_absen_nama, nik: o.karyawan_absen_nik } : null;
+    attEl("fEditJenisOt").value = (o && o.type_ot) || "Overtime";
+    attEl("fEditObOt").value = attJam5(o && o.ot_before); attEl("fEditObBrk").value = attJam5(o && o.break_before);
+    attEl("fEditOaOt").value = attJam5(o && o.ot_after);  attEl("fEditOaBrk").value = attJam5(o && o.break_after);
+    attRenderTipeExtra();
+    const menunggu = !!(attEd.awal.pending && attEd.awal.pending.lembur);
+    ["fEditJenisOt", "fEditObOt", "fEditObBrk", "fEditOaOt", "fEditOaBrk"].forEach(id => { attEl(id).disabled = menunggu; });
+    attEl("editTipeExtra").querySelectorAll("input,select").forEach(x => { x.disabled = menunggu; });
+    attEl("editInfoLembur").textContent = menunggu ? "Ada pengajuan lembur yang menunggu persetujuan. Selesaikan atau tolak dulu."
+        : (o ? `Lembur saat ini: ${o.type_ot || "Overtime"}. Perubahan akan membuat lembur baru dan menonaktifkan yang lama.` : "Belum ada lembur pada tanggal ini.");
+}
+
+// Isian tambahan sesuai Jenis Lembur (aturan sama dengan Lembur oleh admin)
+function attRenderTipeExtra() {
+    const tipe = attEl("fEditJenisOt").value, box = attEl("editTipeExtra"), r = attEd.r, o = attEd.otAwal;
+    if (tipe === "Pengganti") {
+        box.innerHTML = `<div class="mb-2"><label class="ts-label">Menggantikan <span class="text-danger">*</span></label>
+            <div class="att-combo"><input type="text" id="fEditGanti" class="form-control form-control-sm" autocomplete="off" placeholder="Ketik nama atau NIK..."><div class="att-combo-list d-none" id="fEditGantiList"></div></div>
+            <div class="form-text">Karyawan PKWT/PKWTT yang aktif pada tanggal kerja (semua departemen dan cost center).</div></div>`;
+        const input = attEl("fEditGanti"), list = attEl("fEditGantiList");
+        if (attEd.pengganti) input.value = `${attEd.pengganti.nama} (${attEd.pengganti.nik})`;
+        let tunda = null, req = 0;
+        const cari = () => {
+            clearTimeout(tunda);
+            tunda = setTimeout(async () => {
+                const my = ++req;
+                list.classList.remove("d-none");
+                list.innerHTML = `<div class="att-combo-kosong">Mencari...</div>`;
+                const res = await attDb().rpc("overtime_cari_karyawan", { p: { tanggal: r.tanggal, q: input.value, exclude_id: r.employee_id } });
+                if (my !== req) return;
+                if (res.error) { list.innerHTML = `<div class="att-combo-kosong">${attEsc(attPesanError(res.error))}</div>`; return; }
+                const data = res.data || [];
+                list.innerHTML = data.length ? data.map((k, n) => `<div class="att-combo-item" data-n="${n}"><div class="fw-semibold">${attEsc(k.nama)}</div><div class="text-muted">${attEsc(k.nik)} | ${attEsc(k.area || "-")}</div></div>`).join("")
+                    : `<div class="att-combo-kosong">Tidak ada karyawan yang sesuai.</div>`;
+                list._data = data;
+            }, 250);
+        };
+        input.addEventListener("focus", cari);
+        input.addEventListener("input", () => { attEd.pengganti = null; cari(); });          // mengetik ulang = batalkan pilihan
+        list.addEventListener("mousedown", (e) => {
+            const it = e.target.closest(".att-combo-item");
+            if (!it || !list._data) return;
+            const k = list._data[Number(it.dataset.n)];
+            attEd.pengganti = { id: k.id, nama: k.nama, nik: k.nik };
+            input.value = `${k.nama} (${k.nik})`;
+            list.classList.add("d-none");
+        });
+        input.addEventListener("blur", () => setTimeout(() => list.classList.add("d-none"), 150));
+    } else if (tipe === "Casual") {
+        const mitra = att.master.cc.filter(c => Number(c.branch_id) === Number(r.branch_id));     // Mitra harus satu cabang dengan karyawan
+        box.innerHTML = `<div class="mb-2"><label class="ts-label" for="fEditMitra">Mitra <span class="text-danger">*</span></label>
+                <select id="fEditMitra" class="form-select form-select-sm"><option value="">Pilih Mitra</option>${mitra.map(c => `<option value="${c.id}">${attEsc(c.nama)}</option>`).join("")}</select></div>
+            <div class="row g-2 mb-2">
+                <div class="col-6"><label class="ts-label" for="fEditArea">Area <span class="text-danger">*</span></label><select id="fEditArea" class="form-select form-select-sm" disabled><option value="">Pilih Mitra dulu</option></select></div>
+                <div class="col-6"><label class="ts-label" for="fEditDept">Departemen <span class="text-danger">*</span></label><select id="fEditDept" class="form-select form-select-sm" disabled><option value="">Pilih Area dulu</option></select></div>
+            </div>
+            <div class="form-text mb-2">Area dan Departemen mengikuti struktur cost center Mitra yang dipilih.</div>`;
+        const isiArea = (ccId, pilih) => {
+            const struktur = att.struct.filter(s => String(s.cost_center_id) === String(ccId));
+            const ids = new Set(struktur.map(s => String(s.area_id)));
+            const areas = att.master.area.filter(a => ids.has(String(a.id)));
+            attEl("fEditArea").innerHTML = areas.length ? `<option value="">Pilih Area</option>` + areas.map(a => `<option value="${a.id}">${attEsc(a.nama)}</option>`).join("") : `<option value="">Mitra ini belum punya struktur area</option>`;
+            attEl("fEditArea").disabled = !areas.length;
+            attEl("fEditDept").innerHTML = `<option value="">Pilih Area dulu</option>`; attEl("fEditDept").disabled = true;
+            if (pilih) attEl("fEditArea").value = String(pilih);
+        };
+        const isiDept = (ccId, areaId, pilih) => {
+            const ids = new Set(att.struct.filter(s => String(s.cost_center_id) === String(ccId) && String(s.area_id) === String(areaId)).map(s => String(s.dept_id)));
+            const depts = att.master.dept.filter(d => ids.has(String(d.id)));
+            attEl("fEditDept").innerHTML = depts.length ? `<option value="">Pilih Departemen</option>` + depts.map(d => `<option value="${d.id}">${attEsc(d.nama)}</option>`).join("") : `<option value="">Area ini belum punya departemen</option>`;
+            attEl("fEditDept").disabled = !depts.length;
+            if (pilih) attEl("fEditDept").value = String(pilih);
+        };
+        attEl("fEditMitra").addEventListener("change", () => { const v = attEl("fEditMitra").value; if (v) isiArea(v); else { attEl("fEditArea").innerHTML = `<option value="">Pilih Mitra dulu</option>`; attEl("fEditArea").disabled = true; attEl("fEditDept").innerHTML = `<option value="">Pilih Area dulu</option>`; attEl("fEditDept").disabled = true; } });
+        attEl("fEditArea").addEventListener("change", () => { const v = attEl("fEditArea").value; if (v) isiDept(attEl("fEditMitra").value, v); else { attEl("fEditDept").innerHTML = `<option value="">Pilih Area dulu</option>`; attEl("fEditDept").disabled = true; } });
+        if (o && o.type_ot === "Casual" && o.absen_costcenter_id) {
+            attEl("fEditMitra").value = String(o.absen_costcenter_id);
+            isiArea(o.absen_costcenter_id, o.absen_area_id);
+            if (o.absen_area_id) isiDept(o.absen_costcenter_id, o.absen_area_id, o.absen_dept_id);
+        }
+    } else {
+        box.innerHTML = "";
+    }
+}
+
+// Mengumpulkan isian Overtime. Hasil null = tidak berubah. Melempar Error bila isian salah.
+function attKumpulLembur() {
+    const o = attEd.otAwal;
+    const tipe = attEl("fEditJenisOt").value;
+    const ob = attEl("fEditObOt").value || "00:00", bb = attEl("fEditObBrk").value || "00:00";
+    const oa = attEl("fEditOaOt").value || "00:00", ba = attEl("fEditOaBrk").value || "00:00";
+    const mitra = attEl("fEditMitra") ? attEl("fEditMitra").value : "", area = attEl("fEditArea") ? attEl("fEditArea").value : "", dept = attEl("fEditDept") ? attEl("fEditDept").value : "";
+    const gantiId = attEd.pengganti ? attEd.pengganti.id : "";
+    let berubah;
+    if (!o) berubah = tipe !== "Overtime" || attMenit(ob) > 0 || attMenit(oa) > 0;
+    else berubah = tipe !== (o.type_ot || "Overtime") || ob !== attJam5(o.ot_before) || bb !== attJam5(o.break_before) || oa !== attJam5(o.ot_after) || ba !== attJam5(o.break_after)
+        || (tipe === "Pengganti" && String(gantiId) !== String(o.karyawan_absen_id || ""))
+        || (tipe === "Casual" && (mitra !== String(o.absen_costcenter_id || "") || area !== String(o.absen_area_id || "") || dept !== String(o.absen_dept_id || "")));
+    if (!berubah) return null;
+
+    if (attMenit(ob) === 0 && attMenit(oa) === 0) throw new Error("Isi durasi lembur sebelum atau setelah shift.");
+    if (attMenit(ob) > ATT_OT_MAKS_MENIT || attMenit(oa) > ATT_OT_MAKS_MENIT) throw new Error(`Durasi lembur maksimal ${ATT_OT_MAKS_MENIT / 60} jam.`);
+    if (attMenit(bb) > ATT_BREAK_MAKS_MENIT || attMenit(ba) > ATT_BREAK_MAKS_MENIT) throw new Error(`Durasi istirahat maksimal ${ATT_BREAK_MAKS_MENIT / 60} jam.`);
+    if (attMenit(ob) === 0 && attMenit(bb) > 0) throw new Error("Istirahat sebelum shift tidak boleh diisi tanpa durasi lembur.");
+    if (attMenit(oa) === 0 && attMenit(ba) > 0) throw new Error("Istirahat setelah shift tidak boleh diisi tanpa durasi lembur.");
+    if (attMenit(bb) > 0 && attMenit(bb) >= attMenit(ob)) throw new Error("Istirahat sebelum shift harus lebih kecil dari durasi lembur.");
+    if (attMenit(ba) > 0 && attMenit(ba) >= attMenit(oa)) throw new Error("Istirahat setelah shift harus lebih kecil dari durasi lembur.");
+    const payload = { type_ot: tipe, ot_before: ob, break_before: bb, ot_after: oa, break_after: ba };
+    if (tipe === "Pengganti") {
+        if (!gantiId) throw new Error("Pilih karyawan yang digantikan dari daftar.");
+        payload.karyawan_absen_id = gantiId;
+    } else if (tipe === "Casual") {
+        if (!mitra) throw new Error("Pilih Mitra.");
+        if (!area) throw new Error("Pilih Area.");
+        if (!dept) throw new Error("Pilih Departemen.");
+        payload.absen_costcenter_id = Number(mitra); payload.absen_area_id = Number(area); payload.absen_dept_id = Number(dept);
+    }
+    return payload;
+}
+
+async function attBukaEdit(i) {
     const r = att.baris[i];
     if (!r || !att.canEdit) return;
-    attEditBaris = r;
+    attEd.r = r; attEd.awal = null; attEd.pengganti = null; attEd.otAwal = null;
+    attEd.penuh = ATT_ROLE_KOREKSI_PENUH.includes(Number(att.session && att.session.roleId));
     attEl("editKaryawan").textContent = `${r.nama} (${r.nik_karyawan})`;
     attEl("editTanggal").textContent = `Tanggal kerja: ${attTgl(r.tanggal)}`;
     attEl("editJadwal").textContent = r.kode_shift ? `Shift ${r.kode_shift} | ${r.jadwal_masuk || "-"} - ${r.jadwal_pulang || "-"}` : "Tidak ada jadwal";
-    attEl("fEditMasuk").value = attUntukInput(r.waktu_masuk, r.zona_waktu);
-    attEl("fEditPulang").value = attUntukInput(r.waktu_keluar, r.zona_waktu);
+    attEdPesan("");
     attEl("fEditAlasan").value = "";
-    attEl("editMsg").classList.add("d-none");
+    ["editSecJadwal", "editSecTimeOff", "editSecLembur"].forEach(id => attEl(id).classList.toggle("d-none", !attEd.penuh));
+    // Absensi: tanggal dikunci. Clock In = kemarin atau tanggal kerja. Clock Out = tanggal kerja atau besok.
+    attEd.masukAwal = attUntukInput(r.waktu_masuk, r.zona_waktu);
+    attEd.pulangAwal = attUntukInput(r.waktu_keluar, r.zona_waktu);
+    attEl("fEditMasuk").min = `${attGeserTgl(r.tanggal, -1)}T00:00`; attEl("fEditMasuk").max = `${r.tanggal}T23:59`;
+    attEl("fEditPulang").min = `${r.tanggal}T00:00`; attEl("fEditPulang").max = `${attGeserTgl(r.tanggal, 1)}T23:59`;
+    attEl("fEditMasuk").value = attEd.masukAwal; attEl("fEditPulang").value = attEd.pulangAwal;
+    attEl("editMemuat").classList.remove("d-none");
+    attEl("btnSimpanEdit").disabled = true;
     attModal("modalEdit").show();
+    try {
+        const [awal, shifts, jenis] = await Promise.all([
+            attDb().rpc("koreksi_data_awal", { p_employee_id: r.employee_id, p_tanggal: r.tanggal }),
+            attEd.penuh ? attDb().rpc("pengajuan_daftar_shift") : Promise.resolve(null),
+            attEd.penuh ? attDb().rpc("cuti_jenis", { p_emp: r.employee_id, p_mulai: r.tanggal, p_akhir: r.tanggal }) : Promise.resolve(null)
+        ]);
+        if (attEd.r !== r) return;
+        if (awal.error) throw awal.error;
+        attEd.awal = awal.data || { pending: {} };
+        if (!attEd.awal.pending) attEd.awal.pending = {};
+        if (attEd.penuh) { attIsiJadwal(shifts); attIsiTimeOff(jenis); attIsiLembur(); }
+        attEl("btnSimpanEdit").disabled = false;
+    } catch (err) {
+        console.error("Gagal memuat data koreksi:", err);
+        attEdPesan("Gagal memuat data yang sudah ada: " + attPesanError(err) + ". Pastikan time_modul1p_koreksi_laporan.sql sudah dijalankan.");
+    } finally {
+        attEl("editMemuat").classList.add("d-none");
+    }
 }
+
+attEl("fEditJenisOt").addEventListener("change", () => { attEd.pengganti = null; attRenderTipeExtra(); });
 
 attEl("formEdit").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const r = attEditBaris;
-    const msg = attEl("editMsg");
-    msg.classList.add("d-none");
-    const alasan = attEl("fEditAlasan").value.trim();
-    if (!r) return;
-    if (!alasan) { msg.textContent = "Alasan koreksi wajib diisi."; msg.classList.remove("d-none"); return; }
+    const r = attEd.r;
+    if (!r || attEd.menyimpan || !attEd.awal) return;
+    attEdPesan("");
+    const p = { employee_id: r.employee_id, tanggal: r.tanggal, keterangan: attEl("fEditAlasan").value.trim() };
+    try {
+        if (attEd.penuh) {
+            const sh = attEl("fEditShift");
+            if (!sh.disabled && sh.value && sh.value !== attEd.shiftAwal) p.jadwal = { kode_shift: sh.value };
+            const to = attEl("fEditTimeOff");
+            if (!to.disabled && to.value !== attEd.toAwal) p.time_off = { time_off_id: to.value ? Number(to.value) : null };
+        }
+        const masuk = attEl("fEditMasuk").value, pulang = attEl("fEditPulang").value;
+        if (masuk !== attEd.masukAwal || pulang !== attEd.pulangAwal) {
+            if (masuk && (masuk.slice(0, 10) < attGeserTgl(r.tanggal, -1) || masuk.slice(0, 10) > r.tanggal)) throw new Error("Clock In hanya boleh tanggal kemarin atau tanggal kerja.");
+            if (pulang && (pulang.slice(0, 10) < r.tanggal || pulang.slice(0, 10) > attGeserTgl(r.tanggal, 1))) throw new Error("Clock Out hanya boleh tanggal kerja atau besoknya.");
+            p.absensi = { clock_in: masuk, clock_out: pulang };
+        }
+        if (attEd.penuh && !attEl("fEditJenisOt").disabled) {
+            const l = attKumpulLembur();
+            if (l) p.lembur = l;
+        }
+        if (!p.jadwal && !p.time_off && !p.absensi && !p.lembur) throw new Error("Belum ada yang diubah.");
+        if (!p.keterangan) throw new Error("Keterangan wajib diisi.");
+    } catch (err) { attEdPesan(err.message); return; }
+
+    attEd.menyimpan = true;
     const tombol = attEl("btnSimpanEdit");
     tombol.disabled = true;
     try {
-        const res = await attDb().rpc("koreksi_absen_admin", { p_data: {
-            employee_id: r.employee_id, tanggal_kerja: r.tanggal,
-            clock_in: attEl("fEditMasuk").value || "", clock_out: attEl("fEditPulang").value || "", alasan
-        } });
+        const res = await attDb().rpc("koreksi_laporan_admin", { p });
         if (res.error) throw res.error;
         attModal("modalEdit").hide();
-        attToast("Koreksi absensi disimpan.");
+        const bagian = (res.data && res.data.bagian) || [];
+        attToast(`Koreksi disimpan${bagian.length ? " (" + bagian.join(", ").replace("time_off", "time off") + ")" : ""}.`);
         attMuat();
     } catch (err) {
-        msg.textContent = attPesanError(err);
-        msg.classList.remove("d-none");
+        attEdPesan(attPesanError(err));
     } finally {
+        attEd.menyimpan = false;
         tombol.disabled = false;
     }
 });
@@ -915,19 +1345,25 @@ function attEpResetFilter() {
 
 function attEpJumlah() { attEl("epJumlah").textContent = att.exp.ids.size; }
 
+// Rentang yang dipakai modal: periode export bila sudah dipilih, kalau belum mengikuti tanggal tabel
+function attEpRentang() {
+    return { p_dari: att.exp.dari || att.dari, p_sampai: att.exp.sampai || att.exp.dari || att.sampai };
+}
+
 async function attEpMuat() {
     const token = ++att.ep.token;
     attEl("epBody").innerHTML = `<tr><td colspan="5" class="text-center text-muted py-3">Memuat...</td></tr>`;
     try {
         const dari = (att.ep.page - 1) * ATT_PER_HALAMAN_PILIH;
-        let q = attDb().from("v_karyawan_laporan").select("employee_id, nik_karyawan, nama, costcenter_id, area_id", { count: "exact" })
-            .order("nama").order("employee_id").range(dari, dari + ATT_PER_HALAMAN_PILIH - 1);
-        q = attTerapkanFilter(q, attEpFilter());
-        const k = await q;
+        const f = attEpFilter();
+        const k = await attDb().rpc("karyawan_laporan_daftar", {
+            ...attEpRentang(), p_branch: f.branch, p_cc: f.cc, p_area: f.area, p_dept: f.dept, p_cari: f.q,
+            p_limit: ATT_PER_HALAMAN_PILIH, p_offset: dari
+        });
         if (k.error) throw k.error;
         if (token !== att.ep.token) return;
-        att.ep.total = k.count || 0;
         att.ep.baris = k.data || [];
+        att.ep.total = att.ep.baris.length ? Number(att.ep.baris[0].total) : 0;
         att.ep.baris.forEach(x => att.exp.info.set(x.employee_id, x));
         attEpGambar();
         const awal = att.ep.total === 0 ? 0 : dari + 1;
@@ -961,22 +1397,17 @@ function attEpTutup() {
     attGanti("modalPilihKaryawan", "modalExport");
 }
 
-// Memilih SEMUA karyawan hasil filter (bukan hanya halaman ini), diambil per 1000 baris
+// Memilih SEMUA karyawan hasil filter (bukan hanya halaman ini) lewat satu array id
 async function attEpPilihSemua() {
     const tombol = attEl("btnEpSemua");
     tombol.disabled = true;
     try {
-        let dari = 0;
-        while (true) {
-            let q = attDb().from("v_karyawan_laporan").select("employee_id, nik_karyawan, nama, costcenter_id, area_id")
-                .order("nama").order("employee_id").range(dari, dari + 999);
-            q = attTerapkanFilter(q, attEpFilter());
-            const r = await q;
-            if (r.error) throw r.error;
-            (r.data || []).forEach(x => { att.exp.ids.add(x.employee_id); att.exp.info.set(x.employee_id, x); });
-            if (!r.data || r.data.length < 1000) break;
-            dari += 1000;
-        }
+        const f = attEpFilter();
+        const r = await attDb().rpc("karyawan_laporan_ids", {
+            ...attEpRentang(), p_branch: f.branch, p_cc: f.cc, p_area: f.area, p_dept: f.dept, p_cari: f.q
+        });
+        if (r.error) throw r.error;
+        (r.data || []).forEach(id => att.exp.ids.add(id));
         attEpGambar();
     } catch (err) {
         attToast("Gagal memilih semua: " + attPesanError(err), "danger");
