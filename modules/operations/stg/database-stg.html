@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database STG - DMB ERP SYSTEM</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../../../css/style.css">
+
+    <style>
+        .filter-dropdown-menu { width: 320px; max-width: 90vw; }
+    </style>
+</head>
+<body>
+
+<div id="wrapper">
+
+    <div id="main-wrapper">
+
+        <header id="header">
+            <div class="d-flex align-items-center gap-2">
+                <a href="../../operations/stg/dashboard_stg.html" class="btn btn-outline-secondary btn-sm fw-semibold d-flex align-items-center gap-2">
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Kembali</span>
+                </a>
+                <div class="vr"></div>
+                <div>
+                    <h5 class="fw-bold mb-0 text-dark">Database STG</h5>
+                    <p class="text-muted small mb-0">Database karyawan STG.</p>
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center py-1 px-2">
+                <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2" style="width: 34px; height: 34px; font-weight: 600;">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+                <div class="text-start d-none d-sm-block">
+                    <div class="fw-bold small lh-1" id="headerUserName">Pengguna ERP</div>
+                    <div class="text-muted" style="font-size: 0.72rem;" id="headerUserRole">User</div>
+                </div>
+            </div>
+        </header>
+
+        <main class="content-body">
+
+            <!-- KARTU STATISTIK: tidak terpengaruh filter / pencarian -->
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-4">
+                    <div class="stat-card d-flex align-items-center">
+                        <div class="stat-icon bg-primary-subtle text-primary me-3"><i class="fa-solid fa-users"></i></div>
+                        <div>
+                            <div class="text-muted small fw-medium">Total Karyawan Aktif</div>
+                            <h5 class="fw-bold mb-0 text-dark" id="cardTotalEmp">0</h5>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="stat-card d-flex align-items-center">
+                        <div class="stat-icon bg-success-subtle text-success me-3"><i class="fa-solid fa-user-check"></i></div>
+                        <div>
+                            <div class="text-muted small fw-medium">Masuk Bulan Ini</div>
+                            <h5 class="fw-bold mb-0 text-success" id="cardEmpIn">0</h5>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="stat-card d-flex align-items-center">
+                        <div class="stat-icon bg-danger-subtle text-danger me-3"><i class="fa-solid fa-user-minus"></i></div>
+                        <div>
+                            <div class="text-muted small fw-medium">Keluar Bulan Ini</div>
+                            <h5 class="fw-bold mb-0 text-danger" id="cardEmpOut">0</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="filter-card p-3 mb-3">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                    <div class="flex-grow-1" style="max-width: 320px;">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text bg-light"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                            <input type="text" id="searchInput" class="form-control" placeholder="Cari NIK / Nama Karyawan...">
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary btn-sm fw-medium dropdown-toggle d-flex align-items-center gap-1" type="button" id="dropdownFilterBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside">
+                                <i class="fa-solid fa-filter text-primary"></i>
+                                <span>Filter Data</span>
+                                <span class="badge bg-primary rounded-pill ms-1 d-none" id="filterBadge">0</span>
+                            </button>
+
+                            <div class="dropdown-menu dropdown-menu-end p-3 shadow-lg border-0 filter-dropdown-menu mt-1">
+                                <div class="d-flex justify-content-between align-items-center pb-2 mb-2 border-bottom">
+                                    <h6 class="fw-bold mb-0 small text-dark"><i class="fa-solid fa-sliders me-1 text-primary"></i> Filter Karyawan</h6>
+                                    <button type="button" class="btn-close btn-sm" onclick="bootstrap.Dropdown.getInstance(document.getElementById('dropdownFilterBtn')).hide()"></button>
+                                </div>
+
+                                <div class="row g-2">
+                                    <div class="col-12">
+                                        <label class="form-label mb-1 style-sub-label fw-bold">Status Data</label>
+                                        <select id="filterStatusData" data-all-text="Semua (tanpa filter)">
+                                            <option value="active" selected>Aktif</option>
+                                            <option value="inactive">Non-Aktif</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label mb-1 style-sub-label">Cost Center</label>
+                                        <select id="filterCostCenter" class="form-select form-select-sm"><option value="">-- Semua Cost Center --</option></select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label mb-1 style-sub-label">Bagian</label>
+                                        <select id="filterBagian" class="form-select form-select-sm"><option value="">-- Semua Bagian --</option></select>
+                                    </div>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-center pt-3 mt-2 border-top">
+                                    <button class="btn btn-link btn-sm text-decoration-none text-muted p-0 small" id="btnResetFilter">
+                                        <i class="fa-solid fa-rotate-left me-1"></i>Reset
+                                    </button>
+                                    <button class="btn btn-primary btn-sm fw-medium px-3" onclick="bootstrap.Dropdown.getInstance(document.getElementById('dropdownFilterBtn')).hide()">Terapkan</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-outline-primary btn-sm fw-medium d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#modalManageColumns">
+                            <i class="fa-solid fa-table-columns"></i><span>Atur Kolom</span>
+                        </button>
+
+                        <button class="btn btn-success btn-sm fw-medium d-flex align-items-center gap-1" id="btnExport">
+                            <i class="fa-solid fa-file-excel"></i><span>Export</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-3 overflow-hidden">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-directory mb-0" id="employeeTable">
+                            <thead><tr id="tableHeaderRow"></tr></thead>
+                            <tbody id="tableBody">
+                                <tr>
+                                    <td colspan="100%" class="text-center py-4 text-muted">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2"></div>
+                                        <span>Memuat data karyawan...</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white border-top p-2 d-flex justify-content-between align-items-center">
+                    <span class="small text-muted" id="recordInfo">Menampilkan 0 data</span>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+</div>
+
+<div class="modal fade" id="modalManageColumns" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2">
+                <h6 class="modal-title fw-bold"><i class="fa-solid fa-sliders me-2 text-primary"></i>Pengaturan Kolom</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2" id="columnChecklistContainer"></div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-light btn-sm fw-medium" data-bs-dismiss="modal">Batal</button>
+                <button type="button" class="btn btn-primary btn-sm fw-medium" id="btnSaveColumns">Simpan</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="../../../js/supabase.js"></script>
+<script src="../../../js/auth.js"></script>
+<script src="../../../js/module/operations/stg/database-stg.js"></script>
+
+</body>
+</html>

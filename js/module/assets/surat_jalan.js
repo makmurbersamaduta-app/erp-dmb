@@ -389,7 +389,7 @@ function renderTable() {
     tbody.innerHTML = state.rows.map((r, i) => `
         <tr>
             <td class="col-no">${start + i + 1}</td>
-            <td class="col-dl"><button type="button" class="btn-dl" data-batch="${esc(r.batch_id)}" title="Download surat jalan (PDF)"><i class="fa-solid fa-file-pdf"></i> PDF</button></td>
+            <td class="col-dl"><button type="button" class="btn-dl" data-batch="${esc(r.batch_id)}" title="Buka surat jalan (PDF)"><i class="fa-solid fa-file-pdf"></i> PDF</button></td>
             <td>${esc(formatTanggal(r.tanggal))}</td>
             <td>${esc(r.kode_batch)}</td>
             <td>${r.nama_pemohon || r.pemohon ? esc(r.nama_pemohon || r.pemohon) : dash}</td>
@@ -426,9 +426,9 @@ function renderPagination() {
 }
 
 // ===================================================
-// KELOMPOK 9: DOWNLOAD SURAT JALAN (PDF)
+// KELOMPOK 9: BUKA SURAT JALAN (PDF)
 // Fungsi: klik tombol PDF -> ambil isi barang batch itu -> buat PDF A4
-// di browser -> terunduh sebagai file. Tidak ada data yang dikirim ke
+// di browser -> terbuka di tab baru; tombol Download ada di tab tersebut. Tidak ada data yang dikirim ke
 // server lain. Isi barang dibaca dari stock_out_detail_view.
 // ===================================================
 function onTableClick(e) {
@@ -444,6 +444,15 @@ async function downloadSuratJalan(batchId, btn) {
         return;
     }
 
+    // PENTING: tab baru harus dibuka SEKARANG (sebelum proses await di bawah),
+    // karena browser hanya mengizinkan tab baru yang langsung dipicu klik user.
+    const win = window.open("", "_blank");
+    if (!win) {
+        showToast("Tab baru diblokir browser. Izinkan pop-up untuk situs ini, lalu coba lagi.");
+        return;
+    }
+    win.document.write('<!DOCTYPE html><title>Memuat...</title><body style="font-family:Arial,sans-serif;color:#475569;padding:24px">Memuat surat jalan...</body>');
+
     setBusy(btn, true, "...");
     try {
         const { data, error } = await ga().from(VIEW_DETAIL)
@@ -454,13 +463,44 @@ async function downloadSuratJalan(batchId, btn) {
 
         const logo = await loadLogo();
         const doc = buildSuratJalanPdf(row, data || [], logo);
-        doc.save(buildFileName(row));
+        const blob = new Blob([doc.output("arraybuffer")], { type: "application/pdf" });
+        showPdfViewer(win, URL.createObjectURL(blob), buildFileName(row));
     } catch (err) {
         console.error("Gagal membuat PDF:", err);
+        win.close();
         showToast("Gagal membuat PDF: " + err.message);
     } finally {
         setBusy(btn, false);
     }
+}
+
+// Mengisi tab baru: bilah atas (judul + tombol Download) dan PDF di bawahnya.
+// Tombol Download memakai atribut "download" sehingga file baru terunduh saat tombol diklik.
+function showPdfViewer(win, url, fileName) {
+    const name = esc(fileName);
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${name}</title>
+<style>
+    html, body { height: 100%; margin: 0; font-family: Arial, Helvetica, sans-serif; background: #e5e7eb; }
+    .bar { height: 52px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+           gap: 12px; padding: 0 16px; background: #ffffff; border-bottom: 1px solid #d1d5db; }
+    .bar .title { font-size: 14px; font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar a.btn { flex-shrink: 0; padding: 8px 16px; background: #1f4e79; color: #ffffff; text-decoration: none;
+                 font-size: 13px; font-weight: 600; border-radius: 6px; }
+    .bar a.btn:hover { background: #163a5a; }
+    iframe { display: block; width: 100%; height: calc(100% - 52px); border: 0; }
+</style></head>
+<body>
+    <div class="bar">
+        <span class="title">${name}</span>
+        <a class="btn" href="${url}" download="${name}">Download PDF</a>
+    </div>
+    <iframe src="${url}" title="${name}"></iframe>
+</body></html>`);
+    win.document.close();
 }
 
 function buildFileName(row) {

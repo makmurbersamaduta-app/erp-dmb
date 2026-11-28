@@ -338,7 +338,7 @@ function renderLaporanTable() {
 }
 
 // ===================================================
-// GENERATE LABEL PDF + QR CODE
+// GENERATE LABEL PDF + QR CODE (dibuka di tab baru, download dari tab tsb)
 // QR Code berisi id baris (kolom "id" di sisa_wrapping),
 // dipakai nanti untuk scan-cari record saat barang dikeluarkan.
 // ===================================================
@@ -348,6 +348,15 @@ async function downloadLabelWrapping(id) {
         alert("Data tidak ditemukan pada halaman saat ini.");
         return;
     }
+
+    // PENTING: tab baru dibuka SEKARANG (sebelum proses await di bawah),
+    // karena browser hanya mengizinkan tab baru yang langsung dipicu klik user.
+    const win = window.open("", "_blank");
+    if (!win) {
+        alert("Tab baru diblokir browser. Izinkan pop-up untuk situs ini, lalu coba lagi.");
+        return;
+    }
+    win.document.write('<!DOCTYPE html><title>Memuat...</title><body style="font-family:Arial,sans-serif;color:#475569;padding:24px">Memuat label...</body>');
 
     try {
         // 1. Generate QR Code sebagai gambar (data URL base64)
@@ -420,14 +429,47 @@ async function downloadLabelWrapping(id) {
         const qrImageY = qrBoxTopY + (qrBoxHeight - qrImageSize) / 2;
         doc.addImage(qrDataUrl, "PNG", qrImageX, qrImageY, qrImageSize, qrImageSize);
 
-        // 8. Simpan file, nama berdasarkan Kode Artikel + id
+        // 8. Tampilkan di tab baru (tidak langsung diunduh).
+        //    Nama file dipakai untuk tombol Download di tab tersebut.
         const fileName = `Label_${row.kode_artikel || "artikel"}_${row.id}.pdf`;
-        doc.save(fileName);
+        const blob = new Blob([doc.output("arraybuffer")], { type: "application/pdf" });
+        showPdfViewer(win, URL.createObjectURL(blob), fileName);
 
     } catch (err) {
         console.error("Gagal membuat label PDF:", err);
+        win.close();
         alert("Gagal membuat label PDF: " + err.message);
     }
+}
+
+// Mengisi tab baru: bilah atas (judul + tombol Download) dan PDF di bawahnya.
+// File baru terunduh saat tombol Download diklik (atribut "download").
+function showPdfViewer(win, url, fileName) {
+    const name = String(fileName).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    win.document.open();
+    win.document.write(`<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${name}</title>
+<style>
+    html, body { height: 100%; margin: 0; font-family: Arial, Helvetica, sans-serif; background: #e5e7eb; }
+    .bar { height: 52px; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between;
+           gap: 12px; padding: 0 16px; background: #ffffff; border-bottom: 1px solid #d1d5db; }
+    .bar .title { font-size: 14px; font-weight: 600; color: #1f2937; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bar a.btn { flex-shrink: 0; padding: 8px 16px; background: #1f4e79; color: #ffffff; text-decoration: none;
+                 font-size: 13px; font-weight: 600; border-radius: 6px; }
+    .bar a.btn:hover { background: #163a5a; }
+    iframe { display: block; width: 100%; height: calc(100% - 52px); border: 0; }
+</style></head>
+<body>
+    <div class="bar">
+        <span class="title">${name}</span>
+        <a class="btn" href="${url}" download="${name}">Download PDF</a>
+    </div>
+    <iframe src="${url}" title="${name}"></iframe>
+</body></html>`);
+    win.document.close();
 }
 
 // ===================================================
